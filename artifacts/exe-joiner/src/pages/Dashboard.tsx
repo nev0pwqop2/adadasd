@@ -156,7 +156,7 @@ export default function Dashboard() {
 
         <footer className="border-t border-primary/10 bg-background/50 py-6 mt-auto">
           <div className="max-w-7xl mx-auto px-4 text-center text-xs font-mono text-muted-foreground">
-            <p className="uppercase tracking-widest">[ Exe Joiner Core System v1.0.0 // Encrypted Connection ]</p>
+            <p className="uppercase tracking-widest">[ Exe Joiner Core System v1.0.0 ]</p>
           </div>
         </footer>
       </div>

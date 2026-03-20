@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
-import { Terminal, Shield, Cpu, Lock } from 'lucide-react';
+import { Terminal, Shield, Lock } from 'lucide-react';
 import { useGetMe } from '@workspace/api-client-react';
 import { motion } from 'framer-motion';
 
@@ -51,9 +51,6 @@ export default function Landing() {
           <h1 className="text-5xl md:text-7xl font-display font-bold tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white to-primary glow-text mb-4 uppercase">
             Exe Joiner
           </h1>
-          <p className="text-lg md:text-xl text-muted-foreground font-mono max-w-2xl mx-auto uppercase tracking-wide border-y border-primary/20 py-4">
-            [ Encrypted Private Network // Authorized Access Only ]
-          </p>
         </motion.div>
 
         <motion.div
@@ -86,24 +83,6 @@ export default function Landing() {
           </div>
         </motion.div>
 
-        <motion.div 
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.8 }}
-          className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-4xl"
-        >
-          {[
-            { icon: Shield, title: "Anti-Spoof", desc: "Server-side cryptographic verification" },
-            { icon: Cpu, title: "6-Slot Array", desc: "Dedicated resources per node" },
-            { icon: Lock, title: "Zero Bypass", desc: "Impenetrable access control" }
-          ].map((feature, i) => (
-            <div key={i} className="flex flex-col items-center p-6 border border-primary/10 bg-background/50 backdrop-blur-sm chamfered">
-              <feature.icon className="w-8 h-8 text-primary mb-4" />
-              <h3 className="font-display uppercase text-primary font-bold tracking-wider mb-2">{feature.title}</h3>
-              <p className="text-xs text-muted-foreground font-mono text-center">{feature.desc}</p>
-            </div>
-          ))}
-        </motion.div>
 
       </div>
     </div>
