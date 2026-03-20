@@ -9,8 +9,17 @@ const router = Router();
 
 const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID!;
 const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET!;
-const BASE_URL = process.env.BASE_URL || "http://localhost:80";
-const REDIRECT_URI = `${BASE_URL}/api/auth/discord/callback`;
+
+function getBaseUrl(): string {
+  if (process.env.REPLIT_DEV_DOMAIN) {
+    return `https://${process.env.REPLIT_DEV_DOMAIN}`;
+  }
+  return process.env.BASE_URL || "http://localhost:80";
+}
+
+function getRedirectUri(): string {
+  return `${getBaseUrl()}/api/auth/discord/callback`;
+}
 
 router.get("/discord", (req, res) => {
   const state = crypto.randomBytes(16).toString("hex");
@@ -18,7 +27,7 @@ router.get("/discord", (req, res) => {
 
   const params = new URLSearchParams({
     client_id: DISCORD_CLIENT_ID,
-    redirect_uri: REDIRECT_URI,
+    redirect_uri: getRedirectUri(),
     response_type: "code",
     scope: "identify email",
     state,
@@ -59,7 +68,7 @@ router.get("/discord/callback", async (req, res) => {
         client_secret: DISCORD_CLIENT_SECRET,
         grant_type: "authorization_code",
         code,
-        redirect_uri: REDIRECT_URI,
+        redirect_uri: getRedirectUri(),
       }),
     });
 
