@@ -9,20 +9,25 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@workspace/db": "workspace:*",
+    "@types/express-session": "^1.18.2",
     "@workspace/api-zod": "workspace:*",
-    "drizzle-orm": "catalog:",
-    "express": "^5",
+    "@workspace/db": "workspace:*",
     "cookie-parser": "^1.4.7",
     "cors": "^2",
+    "crypto-js": "^4.2.0",
+    "drizzle-orm": "catalog:",
+    "express": "^5",
+    "express-session": "^1.19.0",
     "pino": "^9",
-    "pino-http": "^10"
+    "pino-http": "^10",
+    "stripe": "^20.4.1",
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
-    "@types/node": "catalog:",
-    "@types/express": "^5.0.6",
-    "@types/cors": "^2.8.19",
     "@types/cookie-parser": "^1.4.10",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "catalog:",
     "esbuild": "^0.27.3",
     "pino-pretty": "^13",
     "tsx": "catalog:"
