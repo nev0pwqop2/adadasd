@@ -1,19 +1,23 @@
 import { Router, Request, Response } from "express";
 import { db, slotsTable, paymentsTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, max } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { getSettings } from "../lib/settings.js";
+import { deriveAddress, getXpubForCurrency } from "../lib/crypto-wallet.js";
 import crypto from "crypto";
 
 const router = Router();
 
-const CRYPTO_ADDRESSES: Record<string, string> = {
-  BTC: process.env.CRYPTO_BTC_ADDRESS || "",
-  LTC: process.env.CRYPTO_LTC_ADDRESS || "",
-  USDT: process.env.CRYPTO_USDT_TRC20_ADDRESS || "",
-};
-
 const VALID_CURRENCIES = ["BTC", "LTC", "USDT"];
+
+async function getNextDerivationIndex(currency: string): Promise<number> {
+  const result = await db
+    .select({ maxIndex: max(paymentsTable.derivationIndex) })
+    .from(paymentsTable)
+    .where(eq(paymentsTable.currency, currency));
+  const current = result[0]?.maxIndex ?? -1;
+  return (current ?? -1) + 1;
+}
 
 function getCryptoAmounts(usdPrice: number): Record<string, string> {
   return {
@@ -259,9 +263,9 @@ router.post("/create-crypto-session", requireAuth, async (req: Request, res: Res
     return;
   }
 
-  const address = CRYPTO_ADDRESSES[currency];
-  if (!address) {
-    res.status(503).json({ error: "payment_unavailable", message: `${currency} address not configured` });
+  const xpub = getXpubForCurrency(currency);
+  if (!xpub) {
+    res.status(503).json({ error: "payment_unavailable", message: `${currency} wallet not configured` });
     return;
   }
 
@@ -275,6 +279,9 @@ router.post("/create-crypto-session", requireAuth, async (req: Request, res: Res
   }
 
   try {
+    const derivationIndex = await getNextDerivationIndex(currency);
+    const address = deriveAddress(currency, xpub, derivationIndex);
+
     const paymentId = crypto.randomUUID();
     const cryptoAmounts = getCryptoAmounts(pricePerDay);
     const amount = cryptoAmounts[currency];
@@ -289,6 +296,7 @@ router.post("/create-crypto-session", requireAuth, async (req: Request, res: Res
       currency,
       amount,
       address,
+      derivationIndex,
       expiresAt,
     });
 

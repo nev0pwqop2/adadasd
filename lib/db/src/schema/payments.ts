@@ -13,6 +13,7 @@ export const paymentsTable = pgTable("payments", {
   amount: text("amount"),
   address: text("address"),
   txHash: text("tx_hash"),
+  derivationIndex: integer("derivation_index"),
   stripeSessionId: text("stripe_session_id"),
   expiresAt: timestamp("expires_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
