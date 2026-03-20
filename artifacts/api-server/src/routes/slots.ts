@@ -22,6 +22,36 @@ async function ensureUserSlots(userId: string, totalSlots: number) {
   }
 }
 
+router.patch("/:id/label", requireAuth, async (req, res) => {
+  const slotId = parseInt(req.params.id, 10);
+  const { label } = req.body as { label?: string };
+
+  if (isNaN(slotId)) {
+    res.status(400).json({ error: "invalid_slot", message: "Invalid slot ID" });
+    return;
+  }
+
+  try {
+    const existing = await db.select().from(slotsTable).where(
+      eq(slotsTable.id, slotId)
+    ).limit(1);
+
+    if (!existing.length || existing[0].userId !== req.session.userId) {
+      res.status(404).json({ error: "not_found", message: "Slot not found" });
+      return;
+    }
+
+    await db.update(slotsTable)
+      .set({ label: label?.trim() || null })
+      .where(eq(slotsTable.id, slotId));
+
+    res.json({ success: true });
+  } catch (err) {
+    req.log.error({ err }, "Failed to update slot label");
+    res.status(500).json({ error: "server_error", message: "Failed to update slot" });
+  }
+});
+
 router.get("/", requireAuth, async (req, res) => {
   try {
     const { slotCount, pricePerDay } = await getSettings();

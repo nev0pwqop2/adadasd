@@ -4,6 +4,7 @@ import { LogOut, LayoutGrid, Settings } from 'lucide-react';
 import { useGetMe, useGetSlots, useLogout, Slot } from '@workspace/api-client-react';
 import { SlotCard } from '@/components/SlotCard';
 import { PaymentModal } from '@/components/PaymentModal';
+import { ManageSlotModal } from '@/components/ManageSlotModal';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { motion } from 'framer-motion';
@@ -22,6 +23,7 @@ export default function Dashboard() {
 
   const { mutate: logoutMutate } = useLogout();
   const [purchasingSlot, setPurchasingSlot] = useState<number | null>(null);
+  const [managingSlot, setManagingSlot] = useState<Slot | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -145,6 +147,7 @@ export default function Dashboard() {
                   slotNumber={slot.slotNumber}
                   slotData={slot.id > 0 ? slot : undefined}
                   onPurchase={setPurchasingSlot}
+                  onManage={setManagingSlot}
                 />
               </motion.div>
             ))}
@@ -163,6 +166,12 @@ export default function Dashboard() {
         onClose={() => setPurchasingSlot(null)}
         slotNumber={purchasingSlot || 1}
         pricePerDay={pricePerDay}
+        onSuccess={() => { refetchSlots(); }}
+      />
+
+      <ManageSlotModal
+        slot={managingSlot}
+        onClose={() => setManagingSlot(null)}
         onSuccess={() => { refetchSlots(); }}
       />
     </div>

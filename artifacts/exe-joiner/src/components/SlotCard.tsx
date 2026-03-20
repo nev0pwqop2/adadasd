@@ -10,9 +10,10 @@ interface SlotCardProps {
   slotNumber: number;
   slotData?: Slot;
   onPurchase: (slotNumber: number) => void;
+  onManage: (slot: Slot) => void;
 }
 
-export function SlotCard({ slotNumber, slotData, onPurchase }: SlotCardProps) {
+export function SlotCard({ slotNumber, slotData, onPurchase, onManage }: SlotCardProps) {
   const isActive = slotData?.isActive || false;
 
   return (
@@ -57,7 +58,7 @@ export function SlotCard({ slotNumber, slotData, onPurchase }: SlotCardProps) {
               )}
             </div>
             
-            <Button variant="outline" className="w-full mt-auto" onClick={() => {}}>
+            <Button variant="outline" className="w-full mt-auto" onClick={() => slotData && onManage(slotData)}>
               Manage Configuration
             </Button>
           </>
