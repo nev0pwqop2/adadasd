@@ -28,7 +28,7 @@ timeoutMs = 20000
 [userenv]
 
 [userenv.shared]
-BASE_URL = "https://1fd7aba6-6703-4662-9cbd-41b2dd47ee53-00-pfacz2q16pnw.worf.replit.dev"
+BASE_URL = "https://9fd613f5-c7fc-4061-be2d-2c7c83baadf0-00-2drjre7wam8pw.picard.replit.dev"
 STRIPE_PUBLISHABLE_KEY = "pk_test_51O70QCD74yFL9JfuC2DgIdlnvwESf8DIhZCIwhV8c9DWhbo58aCGWocSHjxBvNyJWOe90ecLalXzyLQj4LhTHsyQNW00L72PPhBr"
 
 [nix]
