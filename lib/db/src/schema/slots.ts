@@ -11,6 +11,7 @@ export const slotsTable = pgTable("slots", {
   purchasedAt: timestamp("purchased_at"),
   expiresAt: timestamp("expires_at"),
   label: text("label"),
+  luarmorUserId: text("luarmor_user_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

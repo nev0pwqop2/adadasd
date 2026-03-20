@@ -1,8 +1,9 @@
 import { Router, Request, Response } from "express";
-import { db, slotsTable, paymentsTable } from "@workspace/db";
+import { db, slotsTable, paymentsTable, usersTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { getSettings } from "../lib/settings.js";
+import { isLuarmorConfigured, createLuarmorUser } from "../lib/luarmor.js";
 import crypto from "crypto";
 
 const router = Router();
@@ -74,22 +75,36 @@ async function activateSlot(userId: string, slotNumber: number, paymentId: strin
     .set({ status: "completed", updatedAt: new Date() })
     .where(eq(paymentsTable.id, paymentId));
 
+  let luarmorUserId: string | null = null;
+  if (isLuarmorConfigured()) {
+    try {
+      const users = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+      if (users.length) {
+        const user = users[0];
+        const luarmorUser = await createLuarmorUser(user.discordId, user.username);
+        luarmorUserId = luarmorUser.id;
+      }
+    } catch {
+      // Luarmor failure should not block slot activation
+    }
+  }
+
   const existing = await db.select().from(slotsTable).where(
     and(eq(slotsTable.userId, userId), eq(slotsTable.slotNumber, slotNumber))
   ).limit(1);
 
+  const slotData = {
+    isActive: true,
+    purchasedAt: new Date(),
+    expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+    ...(luarmorUserId ? { luarmorUserId } : {}),
+  };
+
   if (existing.length > 0) {
-    await db.update(slotsTable)
-      .set({ isActive: true, purchasedAt: new Date(), expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) })
+    await db.update(slotsTable).set(slotData)
       .where(and(eq(slotsTable.userId, userId), eq(slotsTable.slotNumber, slotNumber)));
   } else {
-    await db.insert(slotsTable).values({
-      userId,
-      slotNumber,
-      isActive: true,
-      purchasedAt: new Date(),
-      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-    });
+    await db.insert(slotsTable).values({ userId, slotNumber, ...slotData });
   }
 }
 

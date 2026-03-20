@@ -3,6 +3,7 @@ import { db, slotsTable, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { requireAdmin } from "../middlewares/requireAdmin.js";
 import { getSettings, setSetting } from "../lib/settings.js";
+import { isLuarmorConfigured, deleteLuarmorUser } from "../lib/luarmor.js";
 
 const router = Router();
 
