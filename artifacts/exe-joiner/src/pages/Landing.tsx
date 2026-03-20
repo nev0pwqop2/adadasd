@@ -13,7 +13,7 @@ export default function Landing() {
     if (user) {
       setLocation('/dashboard');
     }
-  }, [user, setLocation]);
+  }, [user]);
 
   const handleLogin = () => {
     window.location.href = '/api/auth/discord';
