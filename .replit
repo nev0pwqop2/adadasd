@@ -29,6 +29,7 @@ timeoutMs = 20000
 
 [userenv.shared]
 BASE_URL = "https://1fd7aba6-6703-4662-9cbd-41b2dd47ee53-00-pfacz2q16pnw.worf.replit.dev"
+STRIPE_PUBLISHABLE_KEY = "pk_test_51O70QCD74yFL9JfuC2DgIdlnvwESf8DIhZCIwhV8c9DWhbo58aCGWocSHjxBvNyJWOe90ecLalXzyLQj4LhTHsyQNW00L72PPhBr"
 
 [nix]
 channel = "stable-25_05"
