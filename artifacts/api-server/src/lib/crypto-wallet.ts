@@ -1,7 +1,7 @@
 import { HDKey } from "@scure/bip32";
-import { sha256 } from "@noble/hashes/sha256";
-import { ripemd160 } from "@noble/hashes/ripemd160";
-import { keccak_256 } from "@noble/hashes/sha3";
+import { sha256 } from "@noble/hashes/sha2.js";
+import { ripemd160 } from "@noble/hashes/legacy.js";
+import { keccak_256 } from "@noble/hashes/sha3.js";
 import { base58check } from "@scure/base";
 import { base58 } from "@scure/base";
 
