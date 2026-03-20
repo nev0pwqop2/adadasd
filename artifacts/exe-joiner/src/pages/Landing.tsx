@@ -10,10 +10,10 @@ export default function Landing() {
   const { data: user, isLoading } = useGetMe({ query: { retry: false } });
 
   useEffect(() => {
-    if (user) {
+    if (!isLoading && user) {
       setLocation('/dashboard');
     }
-  }, [user]);
+  }, [user, isLoading]);
 
   const handleLogin = () => {
     window.location.href = '/api/auth/discord';

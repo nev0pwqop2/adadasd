@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useLocation } from 'wouter';
 import { LogOut, LayoutGrid, Settings } from 'lucide-react';
 import { useGetMe, useGetSlots, useLogout, Slot } from '@workspace/api-client-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { SlotCard } from '@/components/SlotCard';
 import { PaymentModal } from '@/components/PaymentModal';
 import { ManageSlotModal } from '@/components/ManageSlotModal';
@@ -22,6 +23,7 @@ export default function Dashboard() {
   });
 
   const { mutate: logoutMutate } = useLogout();
+  const queryClient = useQueryClient();
   const [purchasingSlot, setPurchasingSlot] = useState<number | null>(null);
   const [managingSlot, setManagingSlot] = useState<Slot | null>(null);
 
@@ -43,8 +45,8 @@ export default function Dashboard() {
 
   const handleLogout = () => {
     logoutMutate(undefined, {
-      onSuccess: () => setLocation('/'),
-      onError: () => setLocation('/'),
+      onSuccess: () => { queryClient.clear(); setLocation('/'); },
+      onError: () => { queryClient.clear(); setLocation('/'); },
     });
   };
 
