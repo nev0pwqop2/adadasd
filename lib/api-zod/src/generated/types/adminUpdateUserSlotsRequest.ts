@@ -5,10 +5,11 @@
  * Exe Joiner API specification
  * OpenAPI spec version: 0.1.0
  */
-import type { Slot } from "./slot";
 
-export interface SlotsResponse {
-  slots: Slot[];
-  totalSlots: number;
-  pricePerDay: number;
+export interface AdminUpdateUserSlotsRequest {
+  /**
+   * @minimum 0
+   * @maximum 100
+   */
+  activeSlotCount: number;
 }

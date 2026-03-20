@@ -6,10 +6,12 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface CreateStripeSessionRequest {
+export interface AdminSettingsUpdate {
   /**
    * @minimum 1
    * @maximum 100
    */
-  slotNumber: number;
+  slotCount?: number;
+  /** @minimum 0 */
+  pricePerDay?: number;
 }

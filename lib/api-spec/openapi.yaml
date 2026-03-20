@@ -15,13 +15,14 @@ tags:
     description: Slot management
   - name: payments
     description: Payment operations
+  - name: admin
+    description: Admin operations
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -35,7 +36,6 @@ paths:
       operationId: discordLogin
       tags: [auth]
       summary: Initiate Discord OAuth2
-      description: Redirects user to Discord OAuth2 login
       responses:
         "302":
           description: Redirect to Discord
@@ -45,7 +45,6 @@ paths:
       operationId: discordCallback
       tags: [auth]
       summary: Discord OAuth2 callback
-      description: Handles Discord OAuth2 callback and creates session
       parameters:
         - name: code
           in: query
@@ -71,7 +70,6 @@ paths:
       operationId: getMe
       tags: [auth]
       summary: Get current user
-      description: Returns the currently authenticated user
       responses:
         "200":
           description: Authenticated user
@@ -91,7 +89,6 @@ paths:
       operationId: logout
       tags: [auth]
       summary: Logout
-      description: Logs out the current user
       responses:
         "200":
           description: Logged out
@@ -105,7 +102,6 @@ paths:
       operationId: getSlots
       tags: [slots]
       summary: Get user slots
-      description: Returns all 6 slots for the authenticated user
       responses:
         "200":
           description: User slots
@@ -125,7 +121,6 @@ paths:
       operationId: createStripeSession
       tags: [payments]
       summary: Create Stripe checkout session
-      description: Creates a Stripe checkout session for purchasing a slot
       requestBody:
         required: true
         content:
@@ -151,7 +146,6 @@ paths:
       operationId: createCryptoSession
       tags: [payments]
       summary: Create crypto payment session
-      description: Creates a crypto payment session for purchasing a slot
       requestBody:
         required: true
         content:
@@ -177,7 +171,6 @@ paths:
       operationId: stripeWebhook
       tags: [payments]
       summary: Stripe webhook handler
-      description: Handles Stripe payment webhook events
       responses:
         "200":
           description: Webhook processed
@@ -191,7 +184,6 @@ paths:
       operationId: verifyCryptoPayment
       tags: [payments]
       summary: Verify crypto payment
-      description: Verifies a crypto payment and activates a slot
       requestBody:
         required: true
         content:
@@ -207,6 +199,98 @@ paths:
                 $ref: "#/components/schemas/SuccessResponse"
         "400":
           description: Payment not found or failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/settings:
+    get:
+      operationId: getAdminSettings
+      tags: [admin]
+      summary: Get admin settings
+      responses:
+        "200":
+          description: Current settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminSettings"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: updateAdminSettings
+      tags: [admin]
+      summary: Update admin settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminSettingsUpdate"
+      responses:
+        "200":
+          description: Settings updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminSettings"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/users:
+    get:
+      operationId: getAdminUsers
+      tags: [admin]
+      summary: Get all users with their slots
+      responses:
+        "200":
+          description: All users
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminUsersResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/users/{discordId}/slots:
+    post:
+      operationId: adminUpdateUserSlots
+      tags: [admin]
+      summary: Update a user's slot count or activate/deactivate slots
+      parameters:
+        - name: discordId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminUpdateUserSlotsRequest"
+      responses:
+        "200":
+          description: User slots updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "403":
+          description: Forbidden
           content:
             application/json:
               schema:
@@ -237,10 +321,13 @@ components:
         email:
           type: string
           nullable: true
+        isAdmin:
+          type: boolean
       required:
         - id
         - discordId
         - username
+        - isAdmin
 
     Slot:
       type: object
@@ -272,8 +359,76 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Slot"
+        totalSlots:
+          type: integer
+        pricePerDay:
+          type: number
       required:
         - slots
+        - totalSlots
+        - pricePerDay
+
+    AdminSettings:
+      type: object
+      properties:
+        slotCount:
+          type: integer
+        pricePerDay:
+          type: number
+      required:
+        - slotCount
+        - pricePerDay
+
+    AdminSettingsUpdate:
+      type: object
+      properties:
+        slotCount:
+          type: integer
+          minimum: 1
+          maximum: 100
+        pricePerDay:
+          type: number
+          minimum: 0
+
+    AdminUserEntry:
+      type: object
+      properties:
+        discordId:
+          type: string
+        username:
+          type: string
+        avatar:
+          type: string
+          nullable: true
+        activeSlots:
+          type: integer
+        totalSlots:
+          type: integer
+      required:
+        - discordId
+        - username
+        - activeSlots
+        - totalSlots
+
+    AdminUsersResponse:
+      type: object
+      properties:
+        users:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminUserEntry"
+      required:
+        - users
+
+    AdminUpdateUserSlotsRequest:
+      type: object
+      properties:
+        activeSlotCount:
+          type: integer
+          minimum: 0
+          maximum: 100
+      required:
+        - activeSlotCount
 
     CreateStripeSessionRequest:
       type: object
@@ -281,7 +436,7 @@ components:
         slotNumber:
           type: integer
           minimum: 1
-          maximum: 6
+          maximum: 100
       required:
         - slotNumber
 
@@ -302,7 +457,7 @@ components:
         slotNumber:
           type: integer
           minimum: 1
-          maximum: 6
+          maximum: 100
         currency:
           type: string
           enum: [BTC, ETH, LTC, USDT, USDC, SOL]

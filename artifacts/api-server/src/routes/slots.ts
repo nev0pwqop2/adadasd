@@ -1,24 +1,19 @@
 import { Router } from "express";
 import { db, slotsTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
+import { getSettings } from "../lib/settings.js";
 
 const router = Router();
 
-const TOTAL_SLOTS = 6;
-
-async function ensureUserSlots(userId: string) {
+async function ensureUserSlots(userId: string, totalSlots: number) {
   const existing = await db.select().from(slotsTable).where(eq(slotsTable.userId, userId));
   const existingNumbers = new Set(existing.map((s) => s.slotNumber));
 
   const toCreate = [];
-  for (let i = 1; i <= TOTAL_SLOTS; i++) {
+  for (let i = 1; i <= totalSlots; i++) {
     if (!existingNumbers.has(i)) {
-      toCreate.push({
-        userId,
-        slotNumber: i,
-        isActive: false,
-      });
+      toCreate.push({ userId, slotNumber: i, isActive: false });
     }
   }
 
@@ -29,15 +24,19 @@ async function ensureUserSlots(userId: string) {
 
 router.get("/", requireAuth, async (req, res) => {
   try {
-    await ensureUserSlots(req.session.userId!);
+    const { slotCount, pricePerDay } = await getSettings();
+    await ensureUserSlots(req.session.userId!, slotCount);
+
     const slots = await db
       .select()
       .from(slotsTable)
       .where(eq(slotsTable.userId, req.session.userId!))
       .orderBy(slotsTable.slotNumber);
 
+    const filtered = slots.filter((s) => s.slotNumber <= slotCount);
+
     res.json({
-      slots: slots.map((s) => ({
+      slots: filtered.map((s) => ({
         id: s.id,
         slotNumber: s.slotNumber,
         isActive: s.isActive,
@@ -45,6 +44,8 @@ router.get("/", requireAuth, async (req, res) => {
         expiresAt: s.expiresAt?.toISOString() ?? null,
         label: s.label,
       })),
+      totalSlots: slotCount,
+      pricePerDay,
     });
   } catch (err) {
     req.log.error({ err }, "Failed to fetch slots");

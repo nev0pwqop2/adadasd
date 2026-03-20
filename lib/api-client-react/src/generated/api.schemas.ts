@@ -15,6 +15,7 @@ export interface User {
   username: string;
   avatar?: string | null;
   email?: string | null;
+  isAdmin: boolean;
 }
 
 export interface Slot {
@@ -28,12 +29,49 @@ export interface Slot {
 
 export interface SlotsResponse {
   slots: Slot[];
+  totalSlots: number;
+  pricePerDay: number;
+}
+
+export interface AdminSettings {
+  slotCount: number;
+  pricePerDay: number;
+}
+
+export interface AdminSettingsUpdate {
+  /**
+   * @minimum 1
+   * @maximum 100
+   */
+  slotCount?: number;
+  /** @minimum 0 */
+  pricePerDay?: number;
+}
+
+export interface AdminUserEntry {
+  discordId: string;
+  username: string;
+  avatar?: string | null;
+  activeSlots: number;
+  totalSlots: number;
+}
+
+export interface AdminUsersResponse {
+  users: AdminUserEntry[];
+}
+
+export interface AdminUpdateUserSlotsRequest {
+  /**
+   * @minimum 0
+   * @maximum 100
+   */
+  activeSlotCount: number;
 }
 
 export interface CreateStripeSessionRequest {
   /**
    * @minimum 1
-   * @maximum 6
+   * @maximum 100
    */
   slotNumber: number;
 }
@@ -58,7 +96,7 @@ export const CreateCryptoSessionRequestCurrency = {
 export interface CreateCryptoSessionRequest {
   /**
    * @minimum 1
-   * @maximum 6
+   * @maximum 100
    */
   slotNumber: number;
   currency: CreateCryptoSessionRequestCurrency;

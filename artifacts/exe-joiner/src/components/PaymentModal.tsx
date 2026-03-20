@@ -17,12 +17,13 @@ interface PaymentModalProps {
   isOpen: boolean;
   onClose: () => void;
   slotNumber: number;
+  pricePerDay?: number;
   onSuccess: () => void;
 }
 
 type Tab = 'crypto' | 'stripe';
 
-export function PaymentModal({ isOpen, onClose, slotNumber, onSuccess }: PaymentModalProps) {
+export function PaymentModal({ isOpen, onClose, slotNumber, pricePerDay = 20, onSuccess }: PaymentModalProps) {
   const [tab, setTab] = useState<Tab>('crypto');
   const [currency, setCurrency] = useState<CreateCryptoSessionRequestCurrency>('LTC');
   const { toast } = useToast();
@@ -132,8 +133,8 @@ export function PaymentModal({ isOpen, onClose, slotNumber, onSuccess }: Payment
                 <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
                   <div className="bg-secondary/50 p-4 border border-primary/20 text-center space-y-2">
                     <p className="text-muted-foreground font-mono text-sm uppercase">Total Amount</p>
-                    <p className="text-4xl font-display font-bold text-primary glow-text">$4.99</p>
-                    <p className="text-xs text-muted-foreground font-mono">/ month</p>
+                    <p className="text-4xl font-display font-bold text-primary glow-text">${pricePerDay.toFixed(2)}</p>
+                    <p className="text-xs text-muted-foreground font-mono">/ day</p>
                   </div>
                   <Button 
                     className="w-full h-14 text-lg" 
@@ -169,7 +170,7 @@ export function PaymentModal({ isOpen, onClose, slotNumber, onSuccess }: Payment
                   
                   <div className="bg-secondary/50 p-4 border border-primary/20 text-center flex justify-between items-center">
                     <span className="text-muted-foreground font-mono text-sm uppercase">Price</span>
-                    <span className="text-xl font-display font-bold text-primary">$4.99</span>
+                    <span className="text-xl font-display font-bold text-primary">${pricePerDay.toFixed(2)}</span>
                   </div>
 
                   <Button 

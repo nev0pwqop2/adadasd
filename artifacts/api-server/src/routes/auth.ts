@@ -3,6 +3,7 @@ import { db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import crypto from "crypto";
 import { requireAuth } from "../middlewares/requireAuth.js";
+import { isAdminDiscordId } from "../middlewares/requireAdmin.js";
 
 const router = Router();
 
@@ -139,6 +140,7 @@ router.get("/me", requireAuth, async (req, res) => {
       username: user.username,
       avatar: user.avatar,
       email: user.email,
+      isAdmin: isAdminDiscordId(user.discordId),
     });
   } catch (err) {
     req.log.error({ err }, "Failed to fetch user");

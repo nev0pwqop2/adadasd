@@ -6,11 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface User {
-  id: string;
+export interface AdminUserEntry {
   discordId: string;
   username: string;
   avatar?: string | null;
-  email?: string | null;
-  isAdmin: boolean;
+  activeSlots: number;
+  totalSlots: number;
 }

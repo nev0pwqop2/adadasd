@@ -8,7 +8,6 @@
 import * as zod from "zod";
 
 /**
- * Returns server health status
  * @summary Health check
  */
 export const HealthCheckResponse = zod.object({
@@ -16,7 +15,6 @@ export const HealthCheckResponse = zod.object({
 });
 
 /**
- * Handles Discord OAuth2 callback and creates session
  * @summary Discord OAuth2 callback
  */
 export const DiscordCallbackQueryParams = zod.object({
@@ -26,7 +24,6 @@ export const DiscordCallbackQueryParams = zod.object({
 });
 
 /**
- * Returns the currently authenticated user
  * @summary Get current user
  */
 export const GetMeResponse = zod.object({
@@ -35,10 +32,10 @@ export const GetMeResponse = zod.object({
   username: zod.string(),
   avatar: zod.string().nullish(),
   email: zod.string().nullish(),
+  isAdmin: zod.boolean(),
 });
 
 /**
- * Logs out the current user
  * @summary Logout
  */
 export const LogoutResponse = zod.object({
@@ -47,7 +44,6 @@ export const LogoutResponse = zod.object({
 });
 
 /**
- * Returns all 6 slots for the authenticated user
  * @summary Get user slots
  */
 export const GetSlotsResponse = zod.object({
@@ -61,13 +57,14 @@ export const GetSlotsResponse = zod.object({
       label: zod.string().nullish(),
     }),
   ),
+  totalSlots: zod.number(),
+  pricePerDay: zod.number(),
 });
 
 /**
- * Creates a Stripe checkout session for purchasing a slot
  * @summary Create Stripe checkout session
  */
-export const createStripeSessionBodySlotNumberMax = 6;
+export const createStripeSessionBodySlotNumberMax = 100;
 
 export const CreateStripeSessionBody = zod.object({
   slotNumber: zod.number().min(1).max(createStripeSessionBodySlotNumberMax),
@@ -79,10 +76,9 @@ export const CreateStripeSessionResponse = zod.object({
 });
 
 /**
- * Creates a crypto payment session for purchasing a slot
  * @summary Create crypto payment session
  */
-export const createCryptoSessionBodySlotNumberMax = 6;
+export const createCryptoSessionBodySlotNumberMax = 100;
 
 export const CreateCryptoSessionBody = zod.object({
   slotNumber: zod.number().min(1).max(createCryptoSessionBodySlotNumberMax),
@@ -98,7 +94,6 @@ export const CreateCryptoSessionResponse = zod.object({
 });
 
 /**
- * Handles Stripe payment webhook events
  * @summary Stripe webhook handler
  */
 export const StripeWebhookResponse = zod.object({
@@ -107,7 +102,6 @@ export const StripeWebhookResponse = zod.object({
 });
 
 /**
- * Verifies a crypto payment and activates a slot
  * @summary Verify crypto payment
  */
 export const VerifyCryptoPaymentBody = zod.object({
@@ -115,6 +109,75 @@ export const VerifyCryptoPaymentBody = zod.object({
 });
 
 export const VerifyCryptoPaymentResponse = zod.object({
+  success: zod.boolean(),
+  message: zod.string().optional(),
+});
+
+/**
+ * @summary Get admin settings
+ */
+export const GetAdminSettingsResponse = zod.object({
+  slotCount: zod.number(),
+  pricePerDay: zod.number(),
+});
+
+/**
+ * @summary Update admin settings
+ */
+export const updateAdminSettingsBodySlotCountMax = 100;
+
+export const updateAdminSettingsBodyPricePerDayMin = 0;
+
+export const UpdateAdminSettingsBody = zod.object({
+  slotCount: zod
+    .number()
+    .min(1)
+    .max(updateAdminSettingsBodySlotCountMax)
+    .optional(),
+  pricePerDay: zod
+    .number()
+    .min(updateAdminSettingsBodyPricePerDayMin)
+    .optional(),
+});
+
+export const UpdateAdminSettingsResponse = zod.object({
+  slotCount: zod.number(),
+  pricePerDay: zod.number(),
+});
+
+/**
+ * @summary Get all users with their slots
+ */
+export const GetAdminUsersResponse = zod.object({
+  users: zod.array(
+    zod.object({
+      discordId: zod.string(),
+      username: zod.string(),
+      avatar: zod.string().nullish(),
+      activeSlots: zod.number(),
+      totalSlots: zod.number(),
+    }),
+  ),
+});
+
+/**
+ * @summary Update a user's slot count or activate/deactivate slots
+ */
+export const AdminUpdateUserSlotsParams = zod.object({
+  discordId: zod.coerce.string(),
+});
+
+export const adminUpdateUserSlotsBodyActiveSlotCountMin = 0;
+export const adminUpdateUserSlotsBodyActiveSlotCountMax = 100;
+
+export const AdminUpdateUserSlotsBody = zod.object({
+  activeSlotCount: zod
+    .number()
+    .min(adminUpdateUserSlotsBodyActiveSlotCountMin)
+    .max(adminUpdateUserSlotsBodyActiveSlotCountMax),
+});
+
+export const AdminUpdateUserSlotsResponse = zod.object({
   success: zod.boolean(),
   message: zod.string().optional(),
 });

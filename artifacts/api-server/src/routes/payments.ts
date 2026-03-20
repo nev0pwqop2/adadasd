@@ -2,11 +2,10 @@ import { Router, Request, Response } from "express";
 import { db, slotsTable, paymentsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
+import { getSettings } from "../lib/settings.js";
 import crypto from "crypto";
 
 const router = Router();
-
-const SLOT_PRICE_USD = "4.99";
 
 const CRYPTO_ADDRESSES: Record<string, string> = {
   BTC: process.env.CRYPTO_BTC_ADDRESS || "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
@@ -17,14 +16,16 @@ const CRYPTO_ADDRESSES: Record<string, string> = {
   SOL: process.env.CRYPTO_SOL_ADDRESS || "DYw8jCTfwHNRJhhmFcbXvVDTqWMEVFBX6ZKUmG5CNSKH",
 };
 
-const CRYPTO_AMOUNTS: Record<string, string> = {
-  BTC: "0.000075",
-  ETH: "0.0021",
-  LTC: "0.075",
-  USDT: "4.99",
-  USDC: "4.99",
-  SOL: "0.032",
-};
+function getCryptoAmounts(usdPrice: number): Record<string, string> {
+  return {
+    BTC: (usdPrice / 96000).toFixed(6),
+    ETH: (usdPrice / 3500).toFixed(4),
+    LTC: (usdPrice / 90).toFixed(4),
+    USDT: usdPrice.toFixed(2),
+    USDC: usdPrice.toFixed(2),
+    SOL: (usdPrice / 145).toFixed(4),
+  };
+}
 
 router.post("/create-stripe-session", requireAuth, async (req: Request, res: Response) => {
   const stripeKey = process.env.STRIPE_SECRET_KEY;
@@ -34,7 +35,8 @@ router.post("/create-stripe-session", requireAuth, async (req: Request, res: Res
   }
 
   const { slotNumber } = req.body;
-  if (!slotNumber || slotNumber < 1 || slotNumber > 6) {
+  const { slotCount, pricePerDay } = await getSettings();
+  if (!slotNumber || slotNumber < 1 || slotNumber > slotCount) {
     res.status(400).json({ error: "invalid_slot", message: "Invalid slot number" });
     return;
   }
@@ -53,6 +55,7 @@ router.post("/create-stripe-session", requireAuth, async (req: Request, res: Res
     const stripe = new Stripe(stripeKey);
 
     const baseUrl = process.env.BASE_URL || "http://localhost:80";
+    const unitAmount = Math.round(pricePerDay * 100);
 
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
@@ -61,10 +64,10 @@ router.post("/create-stripe-session", requireAuth, async (req: Request, res: Res
         {
           price_data: {
             currency: "usd",
-            unit_amount: 499,
+            unit_amount: unitAmount,
             product_data: {
               name: `Exe Joiner — Slot #${slotNumber}`,
-              description: "1 month activation for Exe Joiner slot",
+              description: `1-day activation for Exe Joiner slot at $${pricePerDay.toFixed(2)}/day`,
             },
           },
           quantity: 1,
@@ -149,8 +152,9 @@ router.post("/stripe-webhook", async (req: Request, res: Response) => {
 
 router.post("/create-crypto-session", requireAuth, async (req: Request, res: Response) => {
   const { slotNumber, currency } = req.body;
+  const { slotCount, pricePerDay } = await getSettings();
 
-  if (!slotNumber || slotNumber < 1 || slotNumber > 6) {
+  if (!slotNumber || slotNumber < 1 || slotNumber > slotCount) {
     res.status(400).json({ error: "invalid_slot", message: "Invalid slot number" });
     return;
   }
@@ -173,7 +177,8 @@ router.post("/create-crypto-session", requireAuth, async (req: Request, res: Res
   try {
     const paymentId = crypto.randomUUID();
     const address = CRYPTO_ADDRESSES[currency];
-    const amount = CRYPTO_AMOUNTS[currency];
+    const cryptoAmounts = getCryptoAmounts(pricePerDay);
+    const amount = cryptoAmounts[currency];
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
 
     await db.insert(paymentsTable).values({

@@ -17,6 +17,10 @@ import type {
 } from "@tanstack/react-query";
 
 import type {
+  AdminSettings,
+  AdminSettingsUpdate,
+  AdminUpdateUserSlotsRequest,
+  AdminUsersResponse,
   CreateCryptoSessionRequest,
   CreateStripeSessionRequest,
   CryptoSessionResponse,
@@ -40,7 +44,6 @@ type Awaited<O> = O extends AwaitedInput<infer T> ? T : never;
 type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
 
 /**
- * Returns server health status
  * @summary Health check
  */
 export const getHealthCheckUrl = () => {
@@ -116,7 +119,6 @@ export function useHealthCheck<
 }
 
 /**
- * Redirects user to Discord OAuth2 login
  * @summary Initiate Discord OAuth2
  */
 export const getDiscordLoginUrl = () => {
@@ -190,7 +192,6 @@ export function useDiscordLogin<
 }
 
 /**
- * Handles Discord OAuth2 callback and creates session
  * @summary Discord OAuth2 callback
  */
 export const getDiscordCallbackUrl = (params?: DiscordCallbackParams) => {
@@ -285,7 +286,6 @@ export function useDiscordCallback<
 }
 
 /**
- * Returns the currently authenticated user
  * @summary Get current user
  */
 export const getGetMeUrl = () => {
@@ -349,7 +349,6 @@ export function useGetMe<
 }
 
 /**
- * Logs out the current user
  * @summary Logout
  */
 export const getLogoutUrl = () => {
@@ -431,7 +430,6 @@ export const useLogout = <
 };
 
 /**
- * Returns all 6 slots for the authenticated user
  * @summary Get user slots
  */
 export const getGetSlotsUrl = () => {
@@ -499,7 +497,6 @@ export function useGetSlots<
 }
 
 /**
- * Creates a Stripe checkout session for purchasing a slot
  * @summary Create Stripe checkout session
  */
 export const getCreateStripeSessionUrl = () => {
@@ -587,7 +584,6 @@ export const useCreateStripeSession = <
 };
 
 /**
- * Creates a crypto payment session for purchasing a slot
  * @summary Create crypto payment session
  */
 export const getCreateCryptoSessionUrl = () => {
@@ -675,7 +671,6 @@ export const useCreateCryptoSession = <
 };
 
 /**
- * Handles Stripe payment webhook events
  * @summary Stripe webhook handler
  */
 export const getStripeWebhookUrl = () => {
@@ -757,7 +752,6 @@ export const useStripeWebhook = <
 };
 
 /**
- * Verifies a crypto payment and activates a slot
  * @summary Verify crypto payment
  */
 export const getVerifyCryptoPaymentUrl = () => {
@@ -841,4 +835,328 @@ export const useVerifyCryptoPayment = <
   TContext
 > => {
   return useMutation(getVerifyCryptoPaymentMutationOptions(options));
+};
+
+/**
+ * @summary Get admin settings
+ */
+export const getGetAdminSettingsUrl = () => {
+  return `/api/admin/settings`;
+};
+
+export const getAdminSettings = async (
+  options?: RequestInit,
+): Promise<AdminSettings> => {
+  return customFetch<AdminSettings>(getGetAdminSettingsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetAdminSettingsQueryKey = () => {
+  return [`/api/admin/settings`] as const;
+};
+
+export const getGetAdminSettingsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAdminSettings>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAdminSettings>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetAdminSettingsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getAdminSettings>>
+  > = ({ signal }) => getAdminSettings({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAdminSettings>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetAdminSettingsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAdminSettings>>
+>;
+export type GetAdminSettingsQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Get admin settings
+ */
+
+export function useGetAdminSettings<
+  TData = Awaited<ReturnType<typeof getAdminSettings>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAdminSettings>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAdminSettingsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Update admin settings
+ */
+export const getUpdateAdminSettingsUrl = () => {
+  return `/api/admin/settings`;
+};
+
+export const updateAdminSettings = async (
+  adminSettingsUpdate: AdminSettingsUpdate,
+  options?: RequestInit,
+): Promise<AdminSettings> => {
+  return customFetch<AdminSettings>(getUpdateAdminSettingsUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(adminSettingsUpdate),
+  });
+};
+
+export const getUpdateAdminSettingsMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateAdminSettings>>,
+    TError,
+    { data: BodyType<AdminSettingsUpdate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateAdminSettings>>,
+  TError,
+  { data: BodyType<AdminSettingsUpdate> },
+  TContext
+> => {
+  const mutationKey = ["updateAdminSettings"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateAdminSettings>>,
+    { data: BodyType<AdminSettingsUpdate> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return updateAdminSettings(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateAdminSettingsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateAdminSettings>>
+>;
+export type UpdateAdminSettingsMutationBody = BodyType<AdminSettingsUpdate>;
+export type UpdateAdminSettingsMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Update admin settings
+ */
+export const useUpdateAdminSettings = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateAdminSettings>>,
+    TError,
+    { data: BodyType<AdminSettingsUpdate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateAdminSettings>>,
+  TError,
+  { data: BodyType<AdminSettingsUpdate> },
+  TContext
+> => {
+  return useMutation(getUpdateAdminSettingsMutationOptions(options));
+};
+
+/**
+ * @summary Get all users with their slots
+ */
+export const getGetAdminUsersUrl = () => {
+  return `/api/admin/users`;
+};
+
+export const getAdminUsers = async (
+  options?: RequestInit,
+): Promise<AdminUsersResponse> => {
+  return customFetch<AdminUsersResponse>(getGetAdminUsersUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetAdminUsersQueryKey = () => {
+  return [`/api/admin/users`] as const;
+};
+
+export const getGetAdminUsersQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAdminUsers>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAdminUsers>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetAdminUsersQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getAdminUsers>>> = ({
+    signal,
+  }) => getAdminUsers({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAdminUsers>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetAdminUsersQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAdminUsers>>
+>;
+export type GetAdminUsersQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Get all users with their slots
+ */
+
+export function useGetAdminUsers<
+  TData = Awaited<ReturnType<typeof getAdminUsers>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAdminUsers>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAdminUsersQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Update a user's slot count or activate/deactivate slots
+ */
+export const getAdminUpdateUserSlotsUrl = (discordId: string) => {
+  return `/api/admin/users/${discordId}/slots`;
+};
+
+export const adminUpdateUserSlots = async (
+  discordId: string,
+  adminUpdateUserSlotsRequest: AdminUpdateUserSlotsRequest,
+  options?: RequestInit,
+): Promise<SuccessResponse> => {
+  return customFetch<SuccessResponse>(getAdminUpdateUserSlotsUrl(discordId), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(adminUpdateUserSlotsRequest),
+  });
+};
+
+export const getAdminUpdateUserSlotsMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof adminUpdateUserSlots>>,
+    TError,
+    { discordId: string; data: BodyType<AdminUpdateUserSlotsRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof adminUpdateUserSlots>>,
+  TError,
+  { discordId: string; data: BodyType<AdminUpdateUserSlotsRequest> },
+  TContext
+> => {
+  const mutationKey = ["adminUpdateUserSlots"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof adminUpdateUserSlots>>,
+    { discordId: string; data: BodyType<AdminUpdateUserSlotsRequest> }
+  > = (props) => {
+    const { discordId, data } = props ?? {};
+
+    return adminUpdateUserSlots(discordId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AdminUpdateUserSlotsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof adminUpdateUserSlots>>
+>;
+export type AdminUpdateUserSlotsMutationBody =
+  BodyType<AdminUpdateUserSlotsRequest>;
+export type AdminUpdateUserSlotsMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Update a user's slot count or activate/deactivate slots
+ */
+export const useAdminUpdateUserSlots = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof adminUpdateUserSlots>>,
+    TError,
+    { discordId: string; data: BodyType<AdminUpdateUserSlotsRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof adminUpdateUserSlots>>,
+  TError,
+  { discordId: string; data: BodyType<AdminUpdateUserSlotsRequest> },
+  TContext
+> => {
+  return useMutation(getAdminUpdateUserSlotsMutationOptions(options));
 };

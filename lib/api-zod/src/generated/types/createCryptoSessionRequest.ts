@@ -10,7 +10,7 @@ import type { CreateCryptoSessionRequestCurrency } from "./createCryptoSessionRe
 export interface CreateCryptoSessionRequest {
   /**
    * @minimum 1
-   * @maximum 6
+   * @maximum 100
    */
   slotNumber: number;
   currency: CreateCryptoSessionRequestCurrency;
