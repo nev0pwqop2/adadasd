@@ -1,127 +1,96 @@
 import { Router, Request, Response } from "express";
 import { db, slotsTable, paymentsTable } from "@workspace/db";
-import { eq, and, max } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { getSettings } from "../lib/settings.js";
-import { deriveAddress, getXpubForCurrency } from "../lib/crypto-wallet.js";
 import crypto from "crypto";
 
 const router = Router();
 
 const VALID_CURRENCIES = ["BTC", "LTC", "USDT"];
 
-async function getNextDerivationIndex(currency: string): Promise<number> {
-  const result = await db
-    .select({ maxIndex: max(paymentsTable.derivationIndex) })
-    .from(paymentsTable)
-    .where(eq(paymentsTable.currency, currency));
-  const current = result[0]?.maxIndex ?? -1;
-  return (current ?? -1) + 1;
-}
+const NOWPAYMENTS_CURRENCY_MAP: Record<string, string> = {
+  BTC: "btc",
+  LTC: "ltc",
+  USDT: "usdttrc20",
+};
 
-function getCryptoAmounts(usdPrice: number): Record<string, string> {
-  return {
-    BTC: (usdPrice / 96000).toFixed(6),
-    LTC: (usdPrice / 90).toFixed(4),
-    USDT: usdPrice.toFixed(2),
-  };
-}
+const NOWPAYMENTS_BASE = "https://api.nowpayments.io/v1";
 
-async function verifyBTCPayment(address: string, requiredBTC: number, createdAt: Date): Promise<boolean> {
-  try {
-    const res = await fetch(`https://blockstream.info/api/address/${address}/txs`);
-    if (!res.ok) return false;
-    const txs = await res.json() as Array<{
-      status: { confirmed: boolean; block_time?: number };
-      vout: Array<{ scriptpubkey_address?: string; value: number }>;
-    }>;
-
-    const createdAtSec = Math.floor(createdAt.getTime() / 1000);
-    const requiredSatoshis = Math.round(requiredBTC * 1e8);
-
-    for (const tx of txs) {
-      if (!tx.status.confirmed || !tx.status.block_time) continue;
-      if (tx.status.block_time < createdAtSec) continue;
-
-      const received = tx.vout
-        .filter(o => o.scriptpubkey_address === address)
-        .reduce((sum, o) => sum + o.value, 0);
-
-      if (received >= requiredSatoshis) return true;
-    }
-    return false;
-  } catch {
-    return false;
+async function nowpaymentsRequest(path: string, options: RequestInit = {}) {
+  const apiKey = process.env.NOWPAYMENTS_API_KEY;
+  if (!apiKey) throw new Error("NOWPAYMENTS_API_KEY not configured");
+  const res = await fetch(`${NOWPAYMENTS_BASE}${path}`, {
+    ...options,
+    headers: {
+      "x-api-key": apiKey,
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`NOWPayments error ${res.status}: ${text}`);
   }
+  return res.json();
 }
 
-async function verifyLTCPayment(address: string, requiredLTC: number, createdAt: Date): Promise<boolean> {
-  try {
-    const res = await fetch(`https://api.blockcypher.com/v1/ltc/main/addrs/${address}/full?limit=20`);
-    if (!res.ok) return false;
-    const data = await res.json() as {
-      txs?: Array<{
-        confirmed?: string;
-        outputs: Array<{ addresses?: string[]; value: number }>;
-      }>;
-    };
+async function createNowPaymentsPayment(
+  orderId: string,
+  usdAmount: number,
+  currency: string,
+  ipnCallbackUrl: string
+): Promise<{ payment_id: string; pay_address: string; pay_amount: number; pay_currency: string }> {
+  return nowpaymentsRequest("/payment", {
+    method: "POST",
+    body: JSON.stringify({
+      price_amount: usdAmount,
+      price_currency: "usd",
+      pay_currency: NOWPAYMENTS_CURRENCY_MAP[currency],
+      ipn_callback_url: ipnCallbackUrl,
+      order_id: orderId,
+      order_description: `Exe Joiner slot activation`,
+    }),
+  });
+}
 
-    const requiredLitoshi = Math.round(requiredLTC * 1e8);
+async function getNowPaymentsStatus(nowpaymentsPaymentId: string): Promise<{ payment_status: string }> {
+  return nowpaymentsRequest(`/payment/${nowpaymentsPaymentId}`);
+}
 
-    for (const tx of data.txs || []) {
-      if (!tx.confirmed) continue;
-      const txTime = new Date(tx.confirmed).getTime();
-      if (txTime < createdAt.getTime()) continue;
+function isPaymentSuccessful(status: string): boolean {
+  return status === "finished" || status === "confirmed";
+}
 
-      const received = tx.outputs
-        .filter(o => o.addresses?.includes(address))
-        .reduce((sum, o) => sum + o.value, 0);
+function verifyNowPaymentsIpn(body: string, signature: string): boolean {
+  const secret = process.env.NOWPAYMENTS_IPN_SECRET;
+  if (!secret) return false;
+  const expected = crypto.createHmac("sha512", secret).update(body).digest("hex");
+  return expected === signature;
+}
 
-      if (received >= requiredLitoshi) return true;
-    }
-    return false;
-  } catch {
-    return false;
+async function activateSlot(userId: string, slotNumber: number, paymentId: string) {
+  await db.update(paymentsTable)
+    .set({ status: "completed", updatedAt: new Date() })
+    .where(eq(paymentsTable.id, paymentId));
+
+  const existing = await db.select().from(slotsTable).where(
+    and(eq(slotsTable.userId, userId), eq(slotsTable.slotNumber, slotNumber))
+  ).limit(1);
+
+  if (existing.length > 0) {
+    await db.update(slotsTable)
+      .set({ isActive: true, purchasedAt: new Date(), expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) })
+      .where(and(eq(slotsTable.userId, userId), eq(slotsTable.slotNumber, slotNumber)));
+  } else {
+    await db.insert(slotsTable).values({
+      userId,
+      slotNumber,
+      isActive: true,
+      purchasedAt: new Date(),
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+    });
   }
-}
-
-async function verifyUSDTTRC20Payment(address: string, requiredUSDT: number, createdAt: Date): Promise<boolean> {
-  try {
-    const USDT_CONTRACT = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
-    const res = await fetch(
-      `https://api.trongrid.io/v1/accounts/${address}/transactions/trc20?contract_address=${USDT_CONTRACT}&limit=20`
-    );
-    if (!res.ok) return false;
-    const data = await res.json() as {
-      data?: Array<{
-        to: string;
-        value: string;
-        block_timestamp: number;
-      }>;
-    };
-
-    const createdAtMs = createdAt.getTime();
-    const requiredMicroUSDT = Math.round(requiredUSDT * 1e6);
-
-    for (const tx of data.data || []) {
-      if (tx.to !== address) continue;
-      if (tx.block_timestamp < createdAtMs) continue;
-      if (parseInt(tx.value) >= requiredMicroUSDT) return true;
-    }
-    return false;
-  } catch {
-    return false;
-  }
-}
-
-async function verifyOnChain(currency: string, address: string, amount: string, createdAt: Date): Promise<boolean> {
-  const parsed = parseFloat(amount);
-  if (isNaN(parsed)) return false;
-
-  if (currency === "BTC") return verifyBTCPayment(address, parsed, createdAt);
-  if (currency === "LTC") return verifyLTCPayment(address, parsed, createdAt);
-  if (currency === "USDT") return verifyUSDTTRC20Payment(address, parsed, createdAt);
-  return false;
 }
 
 router.post("/create-stripe-session", requireAuth, async (req: Request, res: Response) => {
@@ -263,9 +232,8 @@ router.post("/create-crypto-session", requireAuth, async (req: Request, res: Res
     return;
   }
 
-  const xpub = getXpubForCurrency(currency);
-  if (!xpub) {
-    res.status(503).json({ error: "payment_unavailable", message: `${currency} wallet not configured` });
+  if (!process.env.NOWPAYMENTS_API_KEY) {
+    res.status(503).json({ error: "payment_unavailable", message: "Crypto payments not configured" });
     return;
   }
 
@@ -279,13 +247,17 @@ router.post("/create-crypto-session", requireAuth, async (req: Request, res: Res
   }
 
   try {
-    const derivationIndex = await getNextDerivationIndex(currency);
-    const address = deriveAddress(currency, xpub, derivationIndex);
-
     const paymentId = crypto.randomUUID();
-    const cryptoAmounts = getCryptoAmounts(pricePerDay);
-    const amount = cryptoAmounts[currency];
+
+    const baseUrl = process.env.REPLIT_DEV_DOMAIN
+      ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+      : process.env.BASE_URL || "http://localhost:80";
+    const ipnCallbackUrl = `${baseUrl}/api/payments/nowpayments-ipn`;
+
+    const nowPayment = await createNowPaymentsPayment(paymentId, pricePerDay, currency, ipnCallbackUrl);
+
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+    const amount = String(nowPayment.pay_amount);
 
     await db.insert(paymentsTable).values({
       id: paymentId,
@@ -295,15 +267,58 @@ router.post("/create-crypto-session", requireAuth, async (req: Request, res: Res
       status: "pending",
       currency,
       amount,
-      address,
-      derivationIndex,
+      address: nowPayment.pay_address,
+      txHash: nowPayment.payment_id,
       expiresAt,
     });
 
-    res.json({ paymentId, address, amount, currency, expiresAt: expiresAt.toISOString() });
+    res.json({
+      paymentId,
+      address: nowPayment.pay_address,
+      amount,
+      currency,
+      expiresAt: expiresAt.toISOString(),
+    });
   } catch (err) {
     req.log.error({ err }, "Crypto session creation failed");
     res.status(500).json({ error: "server_error", message: "Failed to create crypto payment" });
+  }
+});
+
+router.post("/nowpayments-ipn", async (req: Request, res: Response) => {
+  const signature = req.headers["x-nowpayments-sig"] as string;
+  const rawBody = JSON.stringify(req.body);
+
+  if (!verifyNowPaymentsIpn(rawBody, signature)) {
+    req.log.warn("NOWPayments IPN signature verification failed");
+    res.status(400).json({ error: "invalid_signature" });
+    return;
+  }
+
+  try {
+    const { order_id, payment_status } = req.body as { order_id: string; payment_status: string };
+
+    if (!isPaymentSuccessful(payment_status)) {
+      res.json({ received: true });
+      return;
+    }
+
+    const payments = await db.select().from(paymentsTable)
+      .where(and(eq(paymentsTable.id, order_id), eq(paymentsTable.status, "pending")))
+      .limit(1);
+
+    if (!payments.length) {
+      res.json({ received: true });
+      return;
+    }
+
+    const payment = payments[0];
+    await activateSlot(payment.userId, payment.slotNumber, payment.id);
+    req.log.info({ paymentId: payment.id }, "NOWPayments IPN: slot activated");
+    res.json({ received: true });
+  } catch (err) {
+    req.log.error({ err }, "NOWPayments IPN processing failed");
+    res.status(500).json({ error: "server_error" });
   }
 });
 
@@ -337,33 +352,22 @@ router.post("/verify-crypto", requireAuth, async (req: Request, res: Response) =
       return;
     }
 
-    if (!payment.currency || !payment.address || !payment.amount) {
-      res.status(400).json({ error: "invalid_payment", message: "Incomplete payment data" });
+    if (!payment.txHash) {
+      res.status(400).json({ error: "invalid_payment", message: "No NOWPayments reference found" });
       return;
     }
 
-    const confirmed = await verifyOnChain(payment.currency, payment.address, payment.amount, payment.createdAt);
+    const nowStatus = await getNowPaymentsStatus(payment.txHash);
 
-    if (!confirmed) {
+    if (!isPaymentSuccessful(nowStatus.payment_status)) {
       res.status(402).json({
         error: "not_confirmed",
-        message: "Payment not detected on the blockchain yet. Please wait a few minutes and try again.",
+        message: `Payment status: ${nowStatus.payment_status}. Please wait and try again.`,
       });
       return;
     }
 
-    await db.update(paymentsTable)
-      .set({ status: "completed", updatedAt: new Date() })
-      .where(eq(paymentsTable.id, paymentId));
-
-    await db.update(slotsTable)
-      .set({
-        isActive: true,
-        purchasedAt: new Date(),
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-      })
-      .where(and(eq(slotsTable.userId, req.session.userId!), eq(slotsTable.slotNumber, payment.slotNumber)));
-
+    await activateSlot(payment.userId, payment.slotNumber, payment.id);
     res.json({ success: true, message: "Payment verified and slot activated" });
   } catch (err) {
     req.log.error({ err }, "Crypto payment verification failed");
