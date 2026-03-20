@@ -42,7 +42,10 @@ export default function Dashboard() {
   }, [isUserError, setLocation]);
 
   const handleLogout = () => {
-    logoutMutate(undefined, { onSuccess: () => setLocation('/') });
+    logoutMutate(undefined, {
+      onSuccess: () => setLocation('/'),
+      onError: () => setLocation('/'),
+    });
   };
 
   if (isUserLoading || isSlotsLoading) {

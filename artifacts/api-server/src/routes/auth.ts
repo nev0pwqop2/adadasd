@@ -157,12 +157,10 @@ router.get("/me", requireAuth, async (req, res) => {
   }
 });
 
-router.post("/logout", requireAuth, (req, res) => {
+router.post("/logout", (req, res) => {
   req.session.destroy((err) => {
     if (err) {
       req.log.error({ err }, "Session destroy failed");
-      res.status(500).json({ error: "server_error", message: "Logout failed" });
-      return;
     }
     res.clearCookie("connect.sid");
     res.json({ success: true, message: "Logged out" });
