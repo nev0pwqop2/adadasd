@@ -122,4 +122,19 @@ router.post("/users/:discordId/slots", async (req, res) => {
   }
 });
 
+router.post("/reset-all-slots", async (req, res) => {
+  try {
+    await db.update(slotsTable).set({
+      isActive: false,
+      purchasedAt: null,
+      expiresAt: null,
+    });
+    req.log.info({ adminId: req.session.userId }, "All slots reset by admin");
+    res.json({ success: true, message: "All slots have been reset" });
+  } catch (err) {
+    req.log.error({ err }, "Failed to reset all slots");
+    res.status(500).json({ error: "server_error", message: "Failed to reset slots" });
+  }
+});
+
 export default router;

@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { useLocation } from 'wouter';
 import { useGetMe, useGetAdminSettings, useUpdateAdminSettings, useGetAdminUsers, useAdminUpdateUserSlots } from '@workspace/api-client-react';
+import { useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Save, Users, Settings, Shield, Loader2 } from 'lucide-react';
+import { ArrowLeft, Save, Users, Settings, Shield, Loader2, RotateCcw, AlertTriangle } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export default function Admin() {
@@ -18,10 +19,25 @@ export default function Admin() {
   const { mutate: updateSettings, isPending: isSaving } = useUpdateAdminSettings();
   const { mutate: updateUserSlots, isPending: isUpdatingSlots } = useAdminUpdateUserSlots();
 
+  const { mutate: resetAllSlots, isPending: isResetting } = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`${import.meta.env.BASE_URL}api/admin/reset-all-slots`, { method: 'POST', credentials: 'include' });
+      if (!res.ok) throw new Error('Failed to reset slots');
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "All slots reset", description: "Every slot has been deactivated.", className: "bg-red-600 text-white border-none" });
+      setConfirmReset(false);
+      refetchUsers();
+    },
+    onError: () => toast({ title: "Error", description: "Failed to reset slots.", variant: "destructive" }),
+  });
+
   const [slotCount, setSlotCount] = useState<string>('');
   const [pricePerDay, setPricePerDay] = useState<string>('');
   const [editingUser, setEditingUser] = useState<string | null>(null);
   const [userSlotCount, setUserSlotCount] = useState<string>('');
+  const [confirmReset, setConfirmReset] = useState(false);
 
   React.useEffect(() => {
     if (isUserError) setLocation('/');
@@ -218,6 +234,48 @@ export default function Admin() {
               </div>
             </Card>
           </motion.div>
+          {/* Danger Zone */}
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+            <Card className="border-red-500/30 bg-red-500/5">
+              <div className="p-6 border-b border-red-500/20 flex items-center gap-3">
+                <AlertTriangle className="w-5 h-5 text-red-400" />
+                <h2 className="font-display font-bold uppercase tracking-wider text-red-400">Danger Zone</h2>
+              </div>
+              <div className="p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <p className="font-mono text-sm text-foreground font-bold">Reset All Slots</p>
+                  <p className="text-xs text-muted-foreground font-mono mt-1">Deactivates every slot for every user. This cannot be undone.</p>
+                </div>
+                {confirmReset ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-mono text-red-400 uppercase">Are you sure?</span>
+                    <Button
+                      size="sm"
+                      className="bg-red-600 hover:bg-red-700 text-white border-none"
+                      onClick={() => resetAllSlots()}
+                      disabled={isResetting}
+                    >
+                      {isResetting ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Yes, Reset All'}
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => setConfirmReset(false)} className="border-primary/20">
+                      Cancel
+                    </Button>
+                  </div>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-red-500/40 text-red-400 hover:bg-red-500/10 hover:border-red-500 font-mono shrink-0"
+                    onClick={() => setConfirmReset(true)}
+                  >
+                    <RotateCcw className="w-4 h-4 mr-2" />
+                    Reset All Slots
+                  </Button>
+                )}
+              </div>
+            </Card>
+          </motion.div>
+
         </main>
 
         <footer className="border-t border-primary/10 py-4">
