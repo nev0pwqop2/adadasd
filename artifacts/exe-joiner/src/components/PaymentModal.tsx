@@ -25,7 +25,7 @@ type Tab = 'crypto' | 'stripe';
 
 export function PaymentModal({ isOpen, onClose, slotNumber, pricePerDay = 20, onSuccess }: PaymentModalProps) {
   const [tab, setTab] = useState<Tab>('crypto');
-  const [currency, setCurrency] = useState<CreateCryptoSessionRequestCurrency>('LTC');
+  const [currency, setCurrency] = useState<CreateCryptoSessionRequestCurrency>('BTC');
   const { toast } = useToast();
 
   // Mutations
@@ -156,13 +156,13 @@ export function PaymentModal({ isOpen, onClose, slotNumber, pricePerDay = 20, on
                           key={c}
                           onClick={() => setCurrency(c)}
                           className={cn(
-                            "py-3 border font-mono font-bold transition-all chamfered-btn",
+                            "py-3 border font-mono font-bold transition-all chamfered-btn text-xs",
                             currency === c 
                               ? "border-primary bg-primary/10 text-primary glow-box" 
                               : "border-primary/20 bg-transparent text-muted-foreground hover:border-primary/50"
                           )}
                         >
-                          {c}
+                          {c === 'USDT' ? 'USDT TRC20' : c}
                         </button>
                       ))}
                     </div>

@@ -8,23 +8,116 @@ import crypto from "crypto";
 const router = Router();
 
 const CRYPTO_ADDRESSES: Record<string, string> = {
-  BTC: process.env.CRYPTO_BTC_ADDRESS || "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
-  ETH: process.env.CRYPTO_ETH_ADDRESS || "0x742d35Cc6634C0532925a3b8D4C9C3C3Cd153De",
-  LTC: process.env.CRYPTO_LTC_ADDRESS || "LQfTFgCxmGPxGoGQGh8mZm7BmjBJMcbhAQ",
-  USDT: process.env.CRYPTO_USDT_ADDRESS || "0x742d35Cc6634C0532925a3b8D4C9C3C3Cd153De",
-  USDC: process.env.CRYPTO_USDC_ADDRESS || "0x742d35Cc6634C0532925a3b8D4C9C3C3Cd153De",
-  SOL: process.env.CRYPTO_SOL_ADDRESS || "DYw8jCTfwHNRJhhmFcbXvVDTqWMEVFBX6ZKUmG5CNSKH",
+  BTC: process.env.CRYPTO_BTC_ADDRESS || "",
+  LTC: process.env.CRYPTO_LTC_ADDRESS || "",
+  USDT: process.env.CRYPTO_USDT_TRC20_ADDRESS || "",
 };
+
+const VALID_CURRENCIES = ["BTC", "LTC", "USDT"];
 
 function getCryptoAmounts(usdPrice: number): Record<string, string> {
   return {
     BTC: (usdPrice / 96000).toFixed(6),
-    ETH: (usdPrice / 3500).toFixed(4),
     LTC: (usdPrice / 90).toFixed(4),
     USDT: usdPrice.toFixed(2),
-    USDC: usdPrice.toFixed(2),
-    SOL: (usdPrice / 145).toFixed(4),
   };
+}
+
+async function verifyBTCPayment(address: string, requiredBTC: number, createdAt: Date): Promise<boolean> {
+  try {
+    const res = await fetch(`https://blockstream.info/api/address/${address}/txs`);
+    if (!res.ok) return false;
+    const txs = await res.json() as Array<{
+      status: { confirmed: boolean; block_time?: number };
+      vout: Array<{ scriptpubkey_address?: string; value: number }>;
+    }>;
+
+    const createdAtSec = Math.floor(createdAt.getTime() / 1000);
+    const requiredSatoshis = Math.round(requiredBTC * 1e8);
+
+    for (const tx of txs) {
+      if (!tx.status.confirmed || !tx.status.block_time) continue;
+      if (tx.status.block_time < createdAtSec) continue;
+
+      const received = tx.vout
+        .filter(o => o.scriptpubkey_address === address)
+        .reduce((sum, o) => sum + o.value, 0);
+
+      if (received >= requiredSatoshis) return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+async function verifyLTCPayment(address: string, requiredLTC: number, createdAt: Date): Promise<boolean> {
+  try {
+    const res = await fetch(`https://api.blockcypher.com/v1/ltc/main/addrs/${address}/full?limit=20`);
+    if (!res.ok) return false;
+    const data = await res.json() as {
+      txs?: Array<{
+        confirmed?: string;
+        outputs: Array<{ addresses?: string[]; value: number }>;
+      }>;
+    };
+
+    const requiredLitoshi = Math.round(requiredLTC * 1e8);
+
+    for (const tx of data.txs || []) {
+      if (!tx.confirmed) continue;
+      const txTime = new Date(tx.confirmed).getTime();
+      if (txTime < createdAt.getTime()) continue;
+
+      const received = tx.outputs
+        .filter(o => o.addresses?.includes(address))
+        .reduce((sum, o) => sum + o.value, 0);
+
+      if (received >= requiredLitoshi) return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+async function verifyUSDTTRC20Payment(address: string, requiredUSDT: number, createdAt: Date): Promise<boolean> {
+  try {
+    const USDT_CONTRACT = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
+    const res = await fetch(
+      `https://api.trongrid.io/v1/accounts/${address}/transactions/trc20?contract_address=${USDT_CONTRACT}&limit=20`
+    );
+    if (!res.ok) return false;
+    const data = await res.json() as {
+      data?: Array<{
+        to: string;
+        value: string;
+        block_timestamp: number;
+      }>;
+    };
+
+    const createdAtMs = createdAt.getTime();
+    const requiredMicroUSDT = Math.round(requiredUSDT * 1e6);
+
+    for (const tx of data.data || []) {
+      if (tx.to !== address) continue;
+      if (tx.block_timestamp < createdAtMs) continue;
+      if (parseInt(tx.value) >= requiredMicroUSDT) return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+async function verifyOnChain(currency: string, address: string, amount: string, createdAt: Date): Promise<boolean> {
+  const parsed = parseFloat(amount);
+  if (isNaN(parsed)) return false;
+
+  if (currency === "BTC") return verifyBTCPayment(address, parsed, createdAt);
+  if (currency === "LTC") return verifyLTCPayment(address, parsed, createdAt);
+  if (currency === "USDT") return verifyUSDTTRC20Payment(address, parsed, createdAt);
+  return false;
 }
 
 router.post("/create-stripe-session", requireAuth, async (req: Request, res: Response) => {
@@ -54,7 +147,9 @@ router.post("/create-stripe-session", requireAuth, async (req: Request, res: Res
     const Stripe = (await import("stripe")).default;
     const stripe = new Stripe(stripeKey);
 
-    const baseUrl = process.env.BASE_URL || "http://localhost:80";
+    const baseUrl = process.env.REPLIT_DEV_DOMAIN
+      ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+      : process.env.BASE_URL || "http://localhost:80";
     const unitAmount = Math.round(pricePerDay * 100);
 
     const session = await stripe.checkout.sessions.create({
@@ -159,9 +254,14 @@ router.post("/create-crypto-session", requireAuth, async (req: Request, res: Res
     return;
   }
 
-  const validCurrencies = ["BTC", "ETH", "LTC", "USDT", "USDC", "SOL"];
-  if (!currency || !validCurrencies.includes(currency)) {
-    res.status(400).json({ error: "invalid_currency", message: "Invalid currency" });
+  if (!currency || !VALID_CURRENCIES.includes(currency)) {
+    res.status(400).json({ error: "invalid_currency", message: "Invalid currency. Supported: BTC, LTC, USDT (TRC20)" });
+    return;
+  }
+
+  const address = CRYPTO_ADDRESSES[currency];
+  if (!address) {
+    res.status(503).json({ error: "payment_unavailable", message: `${currency} address not configured` });
     return;
   }
 
@@ -176,10 +276,9 @@ router.post("/create-crypto-session", requireAuth, async (req: Request, res: Res
 
   try {
     const paymentId = crypto.randomUUID();
-    const address = CRYPTO_ADDRESSES[currency];
     const cryptoAmounts = getCryptoAmounts(pricePerDay);
     const amount = cryptoAmounts[currency];
-    const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
 
     await db.insert(paymentsTable).values({
       id: paymentId,
@@ -193,13 +292,7 @@ router.post("/create-crypto-session", requireAuth, async (req: Request, res: Res
       expiresAt,
     });
 
-    res.json({
-      paymentId,
-      address,
-      amount,
-      currency,
-      expiresAt: expiresAt.toISOString(),
-    });
+    res.json({ paymentId, address, amount, currency, expiresAt: expiresAt.toISOString() });
   } catch (err) {
     req.log.error({ err }, "Crypto session creation failed");
     res.status(500).json({ error: "server_error", message: "Failed to create crypto payment" });
@@ -232,7 +325,22 @@ router.post("/verify-crypto", requireAuth, async (req: Request, res: Response) =
     }
 
     if (payment.expiresAt && payment.expiresAt < new Date()) {
-      res.status(400).json({ error: "expired", message: "Payment has expired" });
+      res.status(400).json({ error: "expired", message: "Payment session has expired" });
+      return;
+    }
+
+    if (!payment.currency || !payment.address || !payment.amount) {
+      res.status(400).json({ error: "invalid_payment", message: "Incomplete payment data" });
+      return;
+    }
+
+    const confirmed = await verifyOnChain(payment.currency, payment.address, payment.amount, payment.createdAt);
+
+    if (!confirmed) {
+      res.status(402).json({
+        error: "not_confirmed",
+        message: "Payment not detected on the blockchain yet. Please wait a few minutes and try again.",
+      });
       return;
     }
 
