@@ -29,7 +29,7 @@ timeoutMs = 20000
 
 [userenv.shared]
 BASE_URL = "https://e714634e-895d-4327-a1ca-782318ea9805-00-12szjvj1xbfd1.picard.replit.dev"
-STRIPE_PUBLISHABLE_KEY = "pk_test_51O70QCD74yFL9JfuC2DgIdlnvwESf8DIhZCIwhV8c9DWhbo58aCGWocSHjxBvNyJWOe90ecLalXzyLQj4LhTHsyQNW00L72PPhBr"
+STRIPE_PUBLISHABLE_KEY = "pk_live_51T3FxoJtkf3KMCtyiReqFIPoPvXbOBVpFgB2KVysGsAgEhLqgAq0qBy773nwB17Q5gS3OEcPAnPZsdhhWAn2sXD600Z86VlEuu"
 
 [nix]
 channel = "stable-25_05"
