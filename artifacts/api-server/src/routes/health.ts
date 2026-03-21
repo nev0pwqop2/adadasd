@@ -8,4 +8,10 @@ router.get("/healthz", (_req, res) => {
   res.json(data);
 });
 
+router.get("/ip", async (_req, res) => {
+  const response = await fetch("https://ifconfig.me/ip");
+  const ip = await response.text();
+  res.send(ip.trim());
+});
+
 export default router;
