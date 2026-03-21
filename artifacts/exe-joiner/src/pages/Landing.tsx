@@ -11,6 +11,7 @@ const DiscordIcon = () => (
 
 const ERROR_MESSAGES: Record<string, string> = {
   token_exchange_failed: 'Login failed — Discord rejected the token exchange.',
+  rate_limited: 'Discord is rate limiting the server right now. Wait 1–2 minutes and try again.',
   discord_denied: 'You cancelled the Discord login.',
   invalid_state: 'Login session expired or was tampered with. Please try again.',
   no_code: 'No authorisation code received from Discord.',

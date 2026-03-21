@@ -92,6 +92,10 @@ router.get("/discord/callback", async (req, res) => {
     if (!tokenResponse.ok) {
       const errBody = await tokenResponse.text();
       req.log.error({ status: tokenResponse.status, body: errBody, redirectUri: getRedirectUri() }, "Failed to exchange Discord token");
+      if (tokenResponse.status === 429) {
+        res.redirect("/?error=rate_limited");
+        return;
+      }
       const detail = encodeURIComponent(`status=${tokenResponse.status} body=${errBody} redirect_uri=${getRedirectUri()}`);
       res.redirect(`/?error=token_exchange_failed&detail=${detail}`);
       return;
