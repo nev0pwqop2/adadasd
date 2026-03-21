@@ -35,6 +35,7 @@ export default function Admin() {
 
   const [slotCount, setSlotCount] = useState<string>('');
   const [pricePerDay, setPricePerDay] = useState<string>('');
+  const [slotDurationHours, setSlotDurationHours] = useState<string>('');
   const [editingUser, setEditingUser] = useState<string | null>(null);
   const [userSlotCount, setUserSlotCount] = useState<string>('');
   const [confirmReset, setConfirmReset] = useState(false);
@@ -51,12 +52,14 @@ export default function Admin() {
     if (settings) {
       setSlotCount(String(settings.slotCount));
       setPricePerDay(String(settings.pricePerDay));
+      setSlotDurationHours(String((settings as any).slotDurationHours ?? 24));
     }
   }, [settings]);
 
   const handleSaveSettings = () => {
     const count = parseInt(slotCount, 10);
     const price = parseFloat(pricePerDay);
+    const hours = parseInt(slotDurationHours, 10);
     if (isNaN(count) || count < 1 || count > 100) {
       toast({ title: "Invalid slot count", description: "Must be between 1 and 100.", variant: "destructive" });
       return;
@@ -65,7 +68,11 @@ export default function Admin() {
       toast({ title: "Invalid price", description: "Must be >= 0.", variant: "destructive" });
       return;
     }
-    updateSettings({ data: { slotCount: count, pricePerDay: price } }, {
+    if (isNaN(hours) || hours < 1 || hours > 720) {
+      toast({ title: "Invalid duration", description: "Must be between 1 and 720 hours.", variant: "destructive" });
+      return;
+    }
+    updateSettings({ data: { slotCount: count, pricePerDay: price, slotDurationHours: hours } as any }, {
       onSuccess: () => {
         toast({ title: "Settings saved", description: "Slot count and price updated.", className: "bg-primary text-primary-foreground" });
         refetchSettings();
@@ -133,7 +140,7 @@ export default function Admin() {
                 <Settings className="w-5 h-5 text-yellow-400" />
                 <h2 className="font-display font-bold uppercase tracking-wider text-yellow-400">System Settings</h2>
               </div>
-              <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <div className="p-6 grid grid-cols-1 sm:grid-cols-3 gap-6">
                 <div className="space-y-2">
                   <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Total Slot Count</label>
                   <input
@@ -157,6 +164,18 @@ export default function Admin() {
                     className="w-full bg-background border border-primary/30 text-foreground font-mono px-4 py-3 focus:outline-none focus:border-primary text-lg"
                   />
                   <p className="text-xs text-muted-foreground font-mono">Shown in the payment modal</p>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Slot Duration (Hours)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={720}
+                    value={slotDurationHours}
+                    onChange={e => setSlotDurationHours(e.target.value)}
+                    className="w-full bg-background border border-primary/30 text-foreground font-mono px-4 py-3 focus:outline-none focus:border-primary text-lg"
+                  />
+                  <p className="text-xs text-muted-foreground font-mono">How long each slot stays active (e.g. 24 = 1 day)</p>
                 </div>
               </div>
               <div className="px-6 pb-6">

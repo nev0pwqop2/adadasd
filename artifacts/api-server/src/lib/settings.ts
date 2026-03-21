@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 const DEFAULTS = {
   slotCount: "10",
   pricePerDay: "20.00",
+  slotDurationHours: "24",
 };
 
 export async function getSetting(key: string): Promise<string> {
@@ -12,12 +13,13 @@ export async function getSetting(key: string): Promise<string> {
   return DEFAULTS[key as keyof typeof DEFAULTS] ?? "";
 }
 
-export async function getSettings(): Promise<{ slotCount: number; pricePerDay: number }> {
+export async function getSettings(): Promise<{ slotCount: number; pricePerDay: number; slotDurationHours: number }> {
   const rows = await db.select().from(settingsTable);
   const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
   return {
     slotCount: parseInt(map.slotCount ?? DEFAULTS.slotCount, 10),
     pricePerDay: parseFloat(map.pricePerDay ?? DEFAULTS.pricePerDay),
+    slotDurationHours: parseInt(map.slotDurationHours ?? DEFAULTS.slotDurationHours, 10),
   };
 }
 

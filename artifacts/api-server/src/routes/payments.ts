@@ -4,6 +4,7 @@ import { eq, and } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { getSettings } from "../lib/settings.js";
 import { isLuarmorConfigured, createLuarmorUser } from "../lib/luarmor.js";
+import { sendPaymentWebhook } from "../lib/discord.js";
 import crypto from "crypto";
 
 const router = Router();
@@ -71,19 +72,21 @@ function verifyNowPaymentsIpn(body: string, signature: string): boolean {
 }
 
 async function activateSlot(userId: string, slotNumber: number, paymentId: string) {
+  const { slotDurationHours } = await getSettings();
+  const expiryMs = slotDurationHours * 60 * 60 * 1000;
+
   await db.update(paymentsTable)
     .set({ status: "completed", updatedAt: new Date() })
     .where(eq(paymentsTable.id, paymentId));
 
+  const userRows = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+  const user = userRows[0];
+
   let luarmorUserId: string | null = null;
-  if (isLuarmorConfigured()) {
+  if (isLuarmorConfigured() && user) {
     try {
-      const users = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
-      if (users.length) {
-        const user = users[0];
-        const luarmorUser = await createLuarmorUser(user.discordId, user.username);
-        luarmorUserId = luarmorUser.id;
-      }
+      const luarmorUser = await createLuarmorUser(user.discordId, user.username);
+      luarmorUserId = luarmorUser.id;
     } catch {
       // Luarmor failure should not block slot activation
     }
@@ -96,7 +99,7 @@ async function activateSlot(userId: string, slotNumber: number, paymentId: strin
   const slotData = {
     isActive: true,
     purchasedAt: new Date(),
-    expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+    expiresAt: new Date(Date.now() + expiryMs),
     ...(luarmorUserId ? { luarmorUserId } : {}),
   };
 
@@ -105,6 +108,20 @@ async function activateSlot(userId: string, slotNumber: number, paymentId: strin
       .where(and(eq(slotsTable.userId, userId), eq(slotsTable.slotNumber, slotNumber)));
   } else {
     await db.insert(slotsTable).values({ userId, slotNumber, ...slotData });
+  }
+
+  // Get payment for webhook details
+  const paymentRows = await db.select().from(paymentsTable).where(eq(paymentsTable.id, paymentId)).limit(1);
+  if (user && paymentRows.length) {
+    const p = paymentRows[0];
+    await sendPaymentWebhook({
+      username: user.username,
+      discordId: user.discordId,
+      method: p.method,
+      currency: p.currency,
+      amount: p.amount,
+      slotNumber,
+    });
   }
 }
 
@@ -211,18 +228,12 @@ router.post("/stripe-webhook", async (req: Request, res: Response) => {
 
       if (userId && slotNumber && session.payment_status === "paid") {
         const slotNum = parseInt(slotNumber, 10);
-
-        await db.update(paymentsTable)
-          .set({ status: "completed", updatedAt: new Date() })
-          .where(and(eq(paymentsTable.userId, userId), eq(paymentsTable.slotNumber, slotNum), eq(paymentsTable.status, "pending")));
-
-        await db.update(slotsTable)
-          .set({
-            isActive: true,
-            purchasedAt: new Date(),
-            expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-          })
-          .where(and(eq(slotsTable.userId, userId), eq(slotsTable.slotNumber, slotNum)));
+        const pending = await db.select().from(paymentsTable)
+          .where(and(eq(paymentsTable.userId, userId), eq(paymentsTable.slotNumber, slotNum), eq(paymentsTable.status, "pending")))
+          .limit(1);
+        if (pending.length) {
+          await activateSlot(userId, slotNum, pending[0].id);
+        }
       }
     }
 
