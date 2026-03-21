@@ -125,7 +125,16 @@ router.get("/", requireAuth, async (req, res) => {
     });
 
     const { hourlyPricingEnabled, pricePerHour, minHours } = await getSettings();
-    res.json({ slots, totalSlots: slotCount, pricePerDay, slotDurationHours, hourlyPricingEnabled, pricePerHour, minHours });
+
+    // Find the earliest expiry among all active slots (for the countdown timer)
+    const activeExpiries = allActiveSlots
+      .map((s) => s.expiresAt)
+      .filter((e): e is Date => e instanceof Date && !isNaN(e.getTime()));
+    const nextExpiresAt = activeExpiries.length
+      ? new Date(Math.min(...activeExpiries.map((d) => d.getTime()))).toISOString()
+      : null;
+
+    res.json({ slots, totalSlots: slotCount, pricePerDay, slotDurationHours, hourlyPricingEnabled, pricePerHour, minHours, nextExpiresAt });
   } catch (err) {
     req.log.error({ err }, "Failed to fetch slots");
     res.status(500).json({ error: "server_error", message: "Failed to fetch slots" });

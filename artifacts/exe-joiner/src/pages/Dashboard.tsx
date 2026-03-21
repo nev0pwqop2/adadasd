@@ -1,9 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useLocation } from 'wouter';
-import { LogOut, LayoutGrid, Settings, Trophy, History } from 'lucide-react';
+import { LogOut, LayoutGrid, Settings, Trophy, History, Gavel, Clock, TrendingUp, X, Crown } from 'lucide-react';
 import { useGetMe, useLogout } from '@workspace/api-client-react';
-import { useQuery } from '@tanstack/react-query';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { SlotCard, type PublicSlot } from '@/components/SlotCard';
 import { PaymentModal } from '@/components/PaymentModal';
 import { ManageSlotModal } from '@/components/ManageSlotModal';
@@ -11,6 +10,25 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
+
+function useCountdown(target: string | null) {
+  const [timeLeft, setTimeLeft] = useState<{ h: number; m: number; s: number } | null>(null);
+  useEffect(() => {
+    if (!target) { setTimeLeft(null); return; }
+    const tick = () => {
+      const diff = new Date(target).getTime() - Date.now();
+      if (diff <= 0) { setTimeLeft({ h: 0, m: 0, s: 0 }); return; }
+      const s = Math.floor(diff / 1000) % 60;
+      const m = Math.floor(diff / 60000) % 60;
+      const h = Math.floor(diff / 3600000);
+      setTimeLeft({ h, m, s });
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [target]);
+  return timeLeft;
+}
 
 type Tab = 'slots' | 'leaderboard' | 'deposit';
 
@@ -30,12 +48,57 @@ export default function Dashboard() {
 
   const { data: user, isError: isUserError, isLoading: isUserLoading } = useGetMe({ query: { retry: false } });
 
+  const [bidAmount, setBidAmount] = useState('');
+  const [showBidForm, setShowBidForm] = useState(false);
+
   const { data: slotsRes, refetch: refetchSlots, isLoading: isSlotsLoading } = useQuery({
     queryKey: ['slots'],
-    queryFn: () => apiFetch<{ slots: PublicSlot[]; totalSlots: number; pricePerDay: number; slotDurationHours: number; hourlyPricingEnabled: boolean; pricePerHour: number; minHours: number }>('api/slots'),
+    queryFn: () => apiFetch<{ slots: PublicSlot[]; totalSlots: number; pricePerDay: number; slotDurationHours: number; hourlyPricingEnabled: boolean; pricePerHour: number; minHours: number; nextExpiresAt: string | null }>('api/slots'),
     enabled: !!user,
     refetchInterval: 5000,
     refetchIntervalInBackground: false,
+  });
+
+  type BidEntry = { id: number; amount: number; username: string; discordId: string; avatar: string | null; isOwn: boolean; createdAt: string };
+  const { data: bidsRes, refetch: refetchBids } = useQuery({
+    queryKey: ['bids'],
+    queryFn: () => apiFetch<{ bids: BidEntry[]; myBid: { id: number; amount: number; rank: number } | null }>('api/bids'),
+    enabled: !!user,
+    refetchInterval: 5000,
+    refetchIntervalInBackground: false,
+  });
+
+  const { mutate: placeBid, isPending: isPlacingBid } = useMutation({
+    mutationFn: async (amount: number) => {
+      const res = await fetch(`${import.meta.env.BASE_URL}api/bids`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount }),
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.message || 'Failed'); }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: 'Bid placed!', description: 'You are in the queue.', className: 'bg-primary text-primary-foreground border-none' });
+      setShowBidForm(false);
+      setBidAmount('');
+      refetchBids();
+    },
+    onError: (e: any) => toast({ title: 'Error', description: e.message, variant: 'destructive' }),
+  });
+
+  const { mutate: cancelBid, isPending: isCancellingBid } = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`${import.meta.env.BASE_URL}api/bids`, { method: 'DELETE', credentials: 'include' });
+      if (!res.ok) throw new Error('Failed');
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: 'Bid cancelled', description: 'You have left the queue.' });
+      refetchBids();
+    },
+    onError: () => toast({ title: 'Error', description: 'Could not cancel bid.', variant: 'destructive' }),
   });
 
   const { data: leaderboardRes, isLoading: isLeaderboardLoading } = useQuery({
@@ -51,6 +114,9 @@ export default function Dashboard() {
   });
 
   const { mutate: logoutMutate } = useLogout();
+
+  // Must be called before early returns (Rules of Hooks)
+  const countdown = useCountdown(slotsRes?.nextExpiresAt ?? null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -93,7 +159,11 @@ export default function Dashboard() {
   const hourlyPricingEnabled = slotsRes?.hourlyPricingEnabled ?? false;
   const pricePerHour = slotsRes?.pricePerHour ?? 5;
   const minHours = slotsRes?.minHours ?? 2;
+  const nextExpiresAt = slotsRes?.nextExpiresAt ?? null;
   const activeCount = slots.filter(s => s.isActive).length;
+  const allFull = activeCount >= totalSlots && totalSlots > 0;
+  const bids = bidsRes?.bids ?? [];
+  const myBid = bidsRes?.myBid ?? null;
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'slots', label: 'Slots', icon: <LayoutGrid className="w-4 h-4" /> },
@@ -207,6 +277,170 @@ export default function Dashboard() {
                   </motion.div>
                 ))}
               </motion.div>
+
+              {/* QUEUE / BID SECTION — visible when all slots are full */}
+              {allFull && (
+                <motion.div
+                  initial={{ opacity: 0, y: 30 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.2 }}
+                  className="mt-10"
+                >
+                  <div className="border border-primary/30 bg-primary/5 chamfered overflow-hidden">
+                    {/* Header */}
+                    <div className="border-b border-primary/20 p-5 flex flex-col sm:flex-row sm:items-center gap-4">
+                      <div className="flex-1">
+                        <h3 className="font-display font-bold uppercase tracking-widest text-primary flex items-center gap-2 text-lg">
+                          <Gavel className="w-5 h-5" /> Slot Queue
+                        </h3>
+                        <p className="font-mono text-xs text-muted-foreground mt-1">All slots are occupied. Place a bid to reserve your spot — highest bid wins the next free slot.</p>
+                      </div>
+                      {/* Countdown */}
+                      {countdown && (
+                        <div className="flex items-center gap-3 border border-primary/30 bg-background/60 px-5 py-3 chamfered shrink-0">
+                          <Clock className="w-4 h-4 text-primary" />
+                          <div className="text-center">
+                            <p className="font-mono text-xs text-muted-foreground uppercase tracking-wider mb-1">Next slot free in</p>
+                            <div className="flex items-center gap-1 font-display font-bold text-primary text-xl tabular-nums">
+                              <span>{String(countdown.h).padStart(2, '0')}</span>
+                              <span className="animate-pulse">:</span>
+                              <span>{String(countdown.m).padStart(2, '0')}</span>
+                              <span className="animate-pulse">:</span>
+                              <span>{String(countdown.s).padStart(2, '0')}</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      {!countdown && !nextExpiresAt && (
+                        <div className="flex items-center gap-2 border border-primary/20 px-4 py-2 chamfered text-muted-foreground font-mono text-xs">
+                          <Clock className="w-4 h-4" /> Expiry time unknown
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="p-5 grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      {/* Your bid panel */}
+                      <div>
+                        <h4 className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-2">
+                          <TrendingUp className="w-3.5 h-3.5" /> Your Bid
+                        </h4>
+
+                        {myBid ? (
+                          <div className="border border-primary/40 bg-primary/10 chamfered p-4">
+                            <div className="flex items-center justify-between mb-3">
+                              <div>
+                                <p className="font-display font-bold text-primary text-2xl">${myBid.amount.toFixed(2)}</p>
+                                <p className="font-mono text-xs text-muted-foreground mt-1">
+                                  {myBid.rank === 1
+                                    ? '🏆 You are the top bidder!'
+                                    : `You are #${myBid.rank} in queue — outbid by $${(bids[0]?.amount - myBid.amount).toFixed(2)}`}
+                                </p>
+                              </div>
+                              <span className={`font-mono text-xs px-3 py-1 border chamfered ${myBid.rank === 1 ? 'border-primary text-primary bg-primary/10' : 'border-orange-500/40 text-orange-400 bg-orange-500/10'}`}>
+                                #{myBid.rank}
+                              </span>
+                            </div>
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="border-primary/30 text-primary font-mono text-xs flex-1"
+                                onClick={() => { setBidAmount(String(myBid.amount)); setShowBidForm(true); }}
+                              >
+                                Raise Bid
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="border-red-500/30 text-red-400 font-mono text-xs"
+                                disabled={isCancellingBid}
+                                onClick={() => cancelBid()}
+                              >
+                                <X className="w-3 h-3 mr-1" /> Cancel
+                              </Button>
+                            </div>
+                          </div>
+                        ) : showBidForm ? (
+                          <div className="border border-primary/30 p-4 chamfered space-y-3">
+                            <p className="font-mono text-xs text-muted-foreground">Enter your max bid in USD. The top bidder wins the next available slot.</p>
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-muted-foreground text-sm">$</span>
+                              <input
+                                type="number"
+                                min={0.01}
+                                step={0.01}
+                                value={bidAmount}
+                                onChange={e => setBidAmount(e.target.value)}
+                                placeholder="0.00"
+                                className="flex-1 bg-background border border-primary/50 text-foreground font-mono px-3 py-2 text-sm focus:outline-none focus:border-primary"
+                                autoFocus
+                              />
+                            </div>
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                className="flex-1 font-mono text-xs"
+                                disabled={isPlacingBid || !bidAmount || parseFloat(bidAmount) <= 0}
+                                onClick={() => placeBid(parseFloat(bidAmount))}
+                              >
+                                {isPlacingBid ? 'Placing...' : 'Place Bid'}
+                              </Button>
+                              <Button size="sm" variant="outline" className="border-primary/20 font-mono text-xs" onClick={() => { setShowBidForm(false); setBidAmount(''); }}>
+                                Cancel
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="border border-primary/20 p-4 chamfered text-center">
+                            <p className="font-mono text-xs text-muted-foreground mb-3">No active bid. Place one to get in line.</p>
+                            <Button
+                              size="sm"
+                              onClick={() => setShowBidForm(true)}
+                              className="font-mono text-xs w-full"
+                            >
+                              <Gavel className="w-3 h-3 mr-2" /> Place a Bid
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Bid leaderboard */}
+                      <div>
+                        <h4 className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-2">
+                          <Crown className="w-3.5 h-3.5" /> Bid Queue ({bids.length})
+                        </h4>
+                        {bids.length === 0 ? (
+                          <div className="border border-primary/10 p-4 chamfered text-center font-mono text-xs text-muted-foreground">
+                            No bids yet — be the first!
+                          </div>
+                        ) : (
+                          <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                            {bids.map((b, i) => (
+                              <div
+                                key={b.id}
+                                className={`flex items-center gap-3 p-2.5 border chamfered ${b.isOwn ? 'border-primary/40 bg-primary/10' : 'border-primary/10 bg-card/30'}`}
+                              >
+                                <span className={`w-6 h-6 flex items-center justify-center font-display font-bold text-xs chamfered shrink-0 ${i === 0 ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground'}`}>
+                                  {i + 1}
+                                </span>
+                                {b.avatar ? (
+                                  <img src={`https://cdn.discordapp.com/avatars/${b.discordId}/${b.avatar}.png`} alt="" className="w-6 h-6 border border-primary/20 shrink-0" />
+                                ) : (
+                                  <div className="w-6 h-6 bg-secondary border border-primary/10 shrink-0" />
+                                )}
+                                <span className={`font-mono text-xs flex-1 truncate ${b.isOwn ? 'text-primary font-bold' : 'text-foreground'}`}>
+                                  {b.username}{b.isOwn ? ' (you)' : ''}
+                                </span>
+                                <span className="font-mono text-sm font-bold text-primary shrink-0">${b.amount.toFixed(2)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
             </>
           )}
 
