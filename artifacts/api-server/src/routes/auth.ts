@@ -10,15 +10,14 @@ const router = Router();
 const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID!;
 const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET!;
 
-function getBaseUrl(): string {
-  if (process.env.REPLIT_DEV_DOMAIN) {
-    return `https://${process.env.REPLIT_DEV_DOMAIN}`;
-  }
-  return process.env.BASE_URL || "http://localhost:80";
-}
-
 function getRedirectUri(): string {
-  return `${getBaseUrl()}/api/auth/discord/callback`;
+  if (process.env.DISCORD_REDIRECT_URI) {
+    return process.env.DISCORD_REDIRECT_URI;
+  }
+  if (process.env.REPLIT_DEV_DOMAIN) {
+    return `https://${process.env.REPLIT_DEV_DOMAIN}/api/auth/discord/callback`;
+  }
+  return "http://localhost:80/api/auth/discord/callback";
 }
 
 router.get("/discord", (req, res) => {
