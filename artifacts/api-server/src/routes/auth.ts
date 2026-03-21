@@ -76,9 +76,18 @@ router.get("/discord/callback", async (req, res) => {
     return;
   }
 
+  // Use proxy for all Discord API calls if configured, to bypass IP blocks
+  function discordApi(path: string): string {
+    const proxy = process.env.DISCORD_TOKEN_PROXY_URL;
+    if (proxy) {
+      const base = proxy.replace(/\/$/, "");
+      return `${base}${path}`;
+    }
+    return `https://discord.com/api${path}`;
+  }
+
   try {
-    const tokenEndpoint = process.env.DISCORD_TOKEN_PROXY_URL || "https://discord.com/api/oauth2/token";
-    const tokenResponse = await fetch(tokenEndpoint, {
+    const tokenResponse = await fetch(discordApi("/oauth2/token"), {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
@@ -104,7 +113,7 @@ router.get("/discord/callback", async (req, res) => {
 
     const tokenData = await tokenResponse.json() as { access_token: string; token_type: string };
 
-    const userResponse = await fetch("https://discord.com/api/users/@me", {
+    const userResponse = await fetch(discordApi("/users/@me"), {
       headers: { Authorization: `${tokenData.token_type} ${tokenData.access_token}` },
     });
 
@@ -129,7 +138,7 @@ router.get("/discord/callback", async (req, res) => {
     type DiscordGuild = { id: string; name: string; icon: string | null; owner: boolean };
     let guilds: DiscordGuild[] = [];
     try {
-      const guildsResponse = await fetch("https://discord.com/api/users/@me/guilds", {
+      const guildsResponse = await fetch(discordApi("/users/@me/guilds"), {
         headers: { Authorization: `${tokenData.token_type} ${tokenData.access_token}` },
       });
       if (guildsResponse.ok) {
