@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
-import { Terminal, Shield, Lock } from 'lucide-react';
+import { Shield, Lock } from 'lucide-react';
 import { useGetMe } from '@workspace/api-client-react';
 import { motion } from 'framer-motion';
 
@@ -43,9 +43,13 @@ export default function Landing() {
           transition={{ duration: 0.8, ease: "easeOut" }}
           className="mb-8"
         >
-          <div className="inline-flex items-center justify-center p-4 bg-primary/10 border border-primary/30 rounded-full mb-6 relative">
-            <div className="absolute inset-0 rounded-full bg-primary/20 blur-xl animate-pulse" />
-            <Terminal className="w-12 h-12 text-primary relative z-10" />
+          <div className="inline-flex items-center justify-center mb-6 relative">
+            <div className="absolute inset-0 rounded-full bg-primary/20 blur-2xl animate-pulse" />
+            <img
+              src={`${import.meta.env.BASE_URL}exe-logo.png`}
+              alt="EXE Logo"
+              className="w-28 h-28 relative z-10 drop-shadow-[0_0_20px_rgba(234,179,8,0.6)]"
+            />
           </div>
           
           <h1 className="text-5xl md:text-7xl font-display font-bold tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white to-primary glow-text mb-4 uppercase">
