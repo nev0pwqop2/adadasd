@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { db, usersTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { db, usersTable, oauthStatesTable } from "@workspace/db";
+import { eq, lt } from "drizzle-orm";
 import crypto from "crypto";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { isAdminDiscordId, isSuperAdmin } from "../middlewares/requireAdmin.js";
@@ -20,29 +20,29 @@ function getRedirectUri(): string {
   return "http://localhost:80/api/auth/discord/callback";
 }
 
-router.get("/discord", (req, res) => {
-  const state = crypto.randomBytes(16).toString("hex");
-  req.session.oauthState = state;
+router.get("/discord", async (req, res) => {
+  try {
+    const state = crypto.randomBytes(16).toString("hex");
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
-  const params = new URLSearchParams({
-    client_id: DISCORD_CLIENT_ID,
-    redirect_uri: getRedirectUri(),
-    response_type: "code",
-    scope: "identify email guilds",
-    state,
-    prompt: "consent",
-  });
+    // Clean up expired states and store new one in DB
+    await db.delete(oauthStatesTable).where(lt(oauthStatesTable.expiresAt, new Date()));
+    await db.insert(oauthStatesTable).values({ state, expiresAt });
 
-  const redirectUrl = `https://discord.com/api/oauth2/authorize?${params.toString()}`;
+    const params = new URLSearchParams({
+      client_id: DISCORD_CLIENT_ID,
+      redirect_uri: getRedirectUri(),
+      response_type: "code",
+      scope: "identify email guilds",
+      state,
+      prompt: "consent",
+    });
 
-  req.session.save((err) => {
-    if (err) {
-      req.log.error({ err }, "Failed to save session before Discord redirect");
-      res.redirect("/?error=session_error");
-      return;
-    }
-    res.redirect(redirectUrl);
-  });
+    res.redirect(`https://discord.com/api/oauth2/authorize?${params.toString()}`);
+  } catch (err) {
+    req.log.error({ err }, "Failed to initiate Discord OAuth");
+    res.redirect("/?error=server_error");
+  }
 });
 
 router.get("/discord/callback", async (req, res) => {
@@ -54,18 +54,27 @@ router.get("/discord/callback", async (req, res) => {
     return;
   }
 
-  if (!state || state !== req.session.oauthState) {
-    req.log.warn("Invalid OAuth state — possible CSRF");
+  if (!state) {
+    req.log.warn("Missing OAuth state");
     res.redirect("/?error=invalid_state");
     return;
   }
+
+  // Verify state from database
+  const storedStates = await db.select().from(oauthStatesTable).where(eq(oauthStatesTable.state, state)).limit(1);
+  if (!storedStates.length || storedStates[0].expiresAt < new Date()) {
+    req.log.warn("Invalid or expired OAuth state — possible CSRF");
+    res.redirect("/?error=invalid_state");
+    return;
+  }
+
+  // Consume the state (delete from DB)
+  await db.delete(oauthStatesTable).where(eq(oauthStatesTable.state, state));
 
   if (!code) {
     res.redirect("/?error=no_code");
     return;
   }
-
-  delete req.session.oauthState;
 
   try {
     const tokenResponse = await fetch("https://discord.com/api/oauth2/token", {
