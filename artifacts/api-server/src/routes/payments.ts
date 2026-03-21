@@ -144,6 +144,8 @@ async function activateSlot(userId: string, slotNumber: number, paymentId: strin
       amount: p.amount,
       slotNumber,
       purchaseType: "slot",
+      durationHours: hours,
+      expiresAt,
     });
   }
 }

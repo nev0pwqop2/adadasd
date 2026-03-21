@@ -396,6 +396,8 @@ router.post("/use", requireAuth, async (req: Request, res: Response) => {
           amount: chargeAmount.toFixed(2),
           slotNumber,
           purchaseType: "slot",
+          durationHours: purchasedHours,
+          expiresAt,
         });
       }
     } catch {}

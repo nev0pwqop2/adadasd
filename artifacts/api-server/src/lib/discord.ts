@@ -8,6 +8,8 @@ export async function sendPaymentWebhook(data: {
   amount?: string | null;
   slotNumber?: number | null;
   purchaseType?: PurchaseType;
+  durationHours?: number | null;
+  expiresAt?: Date | null;
 }): Promise<void> {
   const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
   if (!webhookUrl) return;
@@ -56,11 +58,24 @@ export async function sendPaymentWebhook(data: {
     { name: "Discord ID", value: data.discordId, inline: true },
     { name: "Type", value: typeLabel, inline: true },
     { name: "Method", value: methodLabel, inline: true },
-    { name: "Amount", value: amountLabel, inline: true },
+    { name: "Amount Paid", value: amountLabel, inline: true },
   ];
 
   if (purchaseType === "slot" && data.slotNumber != null) {
     fields.push({ name: "Slot #", value: String(data.slotNumber), inline: true });
+  }
+
+  if (purchaseType === "slot" && data.durationHours != null) {
+    const h = data.durationHours;
+    const durationLabel = h >= 24
+      ? `${Math.floor(h / 24)}d ${h % 24 > 0 ? `${h % 24}h` : ""}`.trim()
+      : `${h}h`;
+    fields.push({ name: "Duration", value: durationLabel, inline: true });
+  }
+
+  if (purchaseType === "slot" && data.expiresAt != null) {
+    const ts = Math.floor(data.expiresAt.getTime() / 1000);
+    fields.push({ name: "Expires", value: `<t:${ts}:F> (<t:${ts}:R>)`, inline: false });
   }
 
   const payload = {
