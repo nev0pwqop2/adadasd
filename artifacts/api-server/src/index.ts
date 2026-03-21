@@ -3,7 +3,6 @@ import { logger } from "./lib/logger";
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
 
-// Run any pending schema migrations safely before accepting traffic
 async function runMigrations() {
   try {
     await db.execute(sql`
@@ -18,9 +17,7 @@ async function runMigrations() {
 const rawPort = process.env["PORT"];
 
 if (!rawPort) {
-  throw new Error(
-    "PORT environment variable is required but was not provided.",
-  );
+  throw new Error("PORT environment variable is required but was not provided.");
 }
 
 const port = Number(rawPort);
@@ -29,6 +26,8 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-app.listen(port, () => {
-  logger.info({ port }, "Server listening");
+runMigrations().then(() => {
+  app.listen(port, () => {
+    logger.info({ port }, "Server listening");
+  });
 });
