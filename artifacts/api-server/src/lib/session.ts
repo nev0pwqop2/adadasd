@@ -1,10 +1,22 @@
 import session from "express-session";
+import ConnectPgSimple from "connect-pg-simple";
 
 if (!process.env.SESSION_SECRET) {
   throw new Error("SESSION_SECRET must be set");
 }
 
+if (!process.env.DATABASE_URL) {
+  throw new Error("DATABASE_URL must be set");
+}
+
+const PgSession = ConnectPgSimple(session);
+
 export const sessionMiddleware = session({
+  store: new PgSession({
+    conString: process.env.DATABASE_URL,
+    tableName: "session",
+    createTableIfMissing: true,
+  }),
   secret: process.env.SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
