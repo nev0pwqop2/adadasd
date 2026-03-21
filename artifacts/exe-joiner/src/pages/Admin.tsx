@@ -143,6 +143,7 @@ export default function Admin() {
   };
   const [confirmResetLeaderboard, setConfirmResetLeaderboard] = useState(false);
   const [confirmResetDeposits, setConfirmResetDeposits] = useState(false);
+  const [serverExplorerOpen, setServerExplorerOpen] = useState(false);
 
   React.useEffect(() => {
     if (isUserError) setLocation('/');
@@ -612,7 +613,10 @@ export default function Admin() {
           {/* SERVER EXPLORER */}
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
             <Card className="border-primary/20 bg-card/50">
-              <div className="p-6 border-b border-primary/20 flex flex-col sm:flex-row sm:items-center gap-4">
+              <div
+                className="p-6 flex flex-col sm:flex-row sm:items-center gap-4 cursor-pointer select-none"
+                onClick={() => setServerExplorerOpen(v => !v)}
+              >
                 <div className="flex items-center gap-3 flex-1">
                   <Server className="w-5 h-5 text-primary" />
                   <div>
@@ -620,19 +624,24 @@ export default function Admin() {
                     <p className="text-xs font-mono text-muted-foreground mt-0.5">All Discord servers your users belong to</p>
                   </div>
                 </div>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                  <input
-                    type="text"
-                    placeholder="Search by name or ID..."
-                    value={serverSearch}
-                    onChange={e => setServerSearch(e.target.value)}
-                    className="bg-background border border-border rounded-lg text-foreground font-mono pl-9 pr-3 py-2 text-xs w-64 focus:outline-none focus:border-primary/60 placeholder:text-muted-foreground/50"
-                  />
+                <div className="flex items-center gap-3">
+                  {serverExplorerOpen && (
+                    <div className="relative" onClick={e => e.stopPropagation()}>
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                      <input
+                        type="text"
+                        placeholder="Search by name or ID..."
+                        value={serverSearch}
+                        onChange={e => setServerSearch(e.target.value)}
+                        className="bg-background border border-border rounded-lg text-foreground font-mono pl-9 pr-3 py-2 text-xs w-64 focus:outline-none focus:border-primary/60 placeholder:text-muted-foreground/50"
+                      />
+                    </div>
+                  )}
+                  {serverExplorerOpen ? <ChevronUp className="w-4 h-4 text-muted-foreground shrink-0" /> : <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />}
                 </div>
               </div>
 
-              {isServersLoading ? (
+              {serverExplorerOpen && (isServersLoading ? (
                 <div className="p-8 flex justify-center">
                   <Loader2 className="w-6 h-6 text-primary animate-spin" />
                 </div>
@@ -684,7 +693,7 @@ export default function Admin() {
                       </div>
                     ))}
                   </div>
-              )}
+              ))}
             </Card>
           </motion.div>
 
