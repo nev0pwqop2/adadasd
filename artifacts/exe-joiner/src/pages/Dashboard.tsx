@@ -131,7 +131,7 @@ export default function Dashboard() {
                 <span className="font-mono text-sm hidden sm:block text-foreground">{user.username}</span>
               </div>
               {user.isAdmin && (
-                <Button variant="outline" size="sm" onClick={() => setLocation('/admin')} className="border-yellow-500/40 text-yellow-400 hover:text-yellow-300 hidden sm:flex">
+                <Button variant="outline" size="sm" onClick={() => setLocation('/admin')} className="border-yellow-500/40 text-yellow-400 hover:text-yellow-300">
                   <Settings className="w-4 h-4 sm:mr-2" />
                   <span className="hidden sm:inline">ADMIN</span>
                 </Button>
