@@ -600,7 +600,7 @@ export default function Admin() {
                     placeholder="Search by name or ID..."
                     value={serverSearch}
                     onChange={e => setServerSearch(e.target.value)}
-                    className="bg-background border border-primary/30 text-foreground font-mono pl-9 pr-3 py-2 text-xs w-64 focus:outline-none focus:border-primary"
+                    className="bg-background border border-border rounded-lg text-foreground font-mono pl-9 pr-3 py-2 text-xs w-64 focus:outline-none focus:border-primary/60 placeholder:text-muted-foreground/50"
                   />
                 </div>
               </div>
@@ -638,13 +638,13 @@ export default function Admin() {
                           )}
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
-                          <span className="font-mono text-xs px-2 py-1 border border-primary/20 text-muted-foreground">
+                          <span className="font-mono text-xs px-2 py-1 rounded border border-border text-muted-foreground">
                             {s.userCount} user{s.userCount !== 1 ? 's' : ''}
                           </span>
                           <Button
                             size="sm"
                             variant="outline"
-                            className="border-primary/20 text-muted-foreground hover:text-primary font-mono text-xs"
+                            className="border-border text-muted-foreground hover:text-primary hover:border-primary/50 font-mono text-xs"
                             onClick={() => copyServerId(s.id)}
                           >
                             {copiedServerId === s.id ? (
@@ -656,7 +656,7 @@ export default function Admin() {
                           <Button
                             size="sm"
                             variant="outline"
-                            className="border-primary/20 text-muted-foreground hover:text-primary font-mono text-xs"
+                            className="border-border text-muted-foreground hover:text-primary hover:border-primary/50 font-mono text-xs"
                             onClick={() => window.open(`https://discord.com/channels/${s.id}`, '_blank')}
                           >
                             <ExternalLink className="w-3 h-3 mr-1" /> Open
