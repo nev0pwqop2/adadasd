@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import { db, slotsTable, paymentsTable, usersTable, preordersTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, ne } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { getSettings } from "../lib/settings.js";
 import { isLuarmorConfigured, createLuarmorUser } from "../lib/luarmor.js";
@@ -443,7 +443,12 @@ router.post("/nowpayments-ipn", async (req: Request, res: Response) => {
 router.delete("/cancel-pending", requireAuth, async (req: Request, res: Response) => {
   try {
     await db.delete(paymentsTable).where(
-      and(eq(paymentsTable.userId, req.session.userId!), eq(paymentsTable.status, "pending"))
+      and(
+        eq(paymentsTable.userId, req.session.userId!),
+        eq(paymentsTable.status, "pending"),
+        ne(paymentsTable.method, "preorder-stripe"),
+        ne(paymentsTable.method, "preorder-crypto"),
+      )
     );
     res.json({ success: true });
   } catch (err) {

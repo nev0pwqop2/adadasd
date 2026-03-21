@@ -53,45 +53,55 @@ router.get("/", requireAuth, async (req, res) => {
     }
     if (toCreate.length) await db.insert(slotsTable).values(toCreate);
 
-    // Expire slots whose time is up and auto-assign to paid pre-orders
     const now = new Date();
-    const expiredSlots = await db.select().from(slotsTable)
+
+    // Step 1: Expire any slots whose time is up
+    await db.update(slotsTable)
+      .set({ isActive: false, expiresAt: null, purchasedAt: null, label: null })
       .where(and(eq(slotsTable.isActive, true), lte(slotsTable.expiresAt, now)));
 
-    if (expiredSlots.length > 0) {
-      for (const slot of expiredSlots) {
-        await db.update(slotsTable)
-          .set({ isActive: false, expiresAt: null, purchasedAt: null, label: null })
-          .where(eq(slotsTable.id, slot.id));
-      }
-
-      const paidPreorders = await db.select().from(preordersTable)
-        .where(eq(preordersTable.status, "paid"))
-        .orderBy(desc(preordersTable.amount), preordersTable.createdAt);
-
-      const { slotDurationHours } = await getSettings();
-      for (let i = 0; i < Math.min(expiredSlots.length, paidPreorders.length); i++) {
-        const slot = expiredSlots[i];
-        const preorder = paidPreorders[i];
-        const expiresAt = new Date(now.getTime() + slotDurationHours * 60 * 60 * 1000);
-        const existingRow = await db.select().from(slotsTable)
-          .where(and(eq(slotsTable.userId, preorder.userId), eq(slotsTable.slotNumber, slot.slotNumber)))
-          .limit(1);
-        if (existingRow.length) {
-          await db.update(slotsTable).set({ isActive: true, purchasedAt: now, expiresAt, label: null })
-            .where(and(eq(slotsTable.userId, preorder.userId), eq(slotsTable.slotNumber, slot.slotNumber)));
-        } else {
-          await db.insert(slotsTable).values({ userId: preorder.userId, slotNumber: slot.slotNumber, isActive: true, purchasedAt: now, expiresAt });
-        }
-        await db.update(preordersTable).set({ status: "fulfilled" }).where(eq(preordersTable.id, preorder.id));
-      }
-    }
-
-    // Get ALL active slots (any user) within range
-    const allActiveSlots = await db
+    // Step 2: Fetch all currently active slots
+    let allActiveSlots = await db
       .select()
       .from(slotsTable)
       .where(and(eq(slotsTable.isActive, true), lte(slotsTable.slotNumber, slotCount)));
+
+    // Step 3: Auto-assign paid pre-orders to any free slots
+    const freeSlotNums = Array.from({ length: slotCount }, (_, i) => i + 1)
+      .filter(n => !allActiveSlots.some(s => s.slotNumber === n));
+
+    if (freeSlotNums.length > 0) {
+      const paidPreorders = await db.select().from(preordersTable)
+        .where(eq(preordersTable.status, "paid"))
+        .orderBy(sql`CAST(${preordersTable.amount} AS NUMERIC) DESC`, preordersTable.createdAt);
+
+      if (paidPreorders.length > 0) {
+        const toAssign = Math.min(freeSlotNums.length, paidPreorders.length);
+        for (let i = 0; i < toAssign; i++) {
+          const preorder = paidPreorders[i];
+          const slotNum = freeSlotNums[i];
+          const expiresAt = new Date(now.getTime() + slotDurationHours * 60 * 60 * 1000);
+
+          const existingRow = await db.select().from(slotsTable)
+            .where(and(eq(slotsTable.userId, preorder.userId), eq(slotsTable.slotNumber, slotNum)))
+            .limit(1);
+          if (existingRow.length) {
+            await db.update(slotsTable)
+              .set({ isActive: true, purchasedAt: now, expiresAt, label: null })
+              .where(and(eq(slotsTable.userId, preorder.userId), eq(slotsTable.slotNumber, slotNum)));
+          } else {
+            await db.insert(slotsTable).values({ userId: preorder.userId, slotNumber: slotNum, isActive: true, purchasedAt: now, expiresAt });
+          }
+          await db.update(preordersTable).set({ status: "fulfilled" }).where(eq(preordersTable.id, preorder.id));
+        }
+
+        // Re-fetch active slots after assignment
+        allActiveSlots = await db
+          .select()
+          .from(slotsTable)
+          .where(and(eq(slotsTable.isActive, true), lte(slotsTable.slotNumber, slotCount)));
+      }
+    }
 
     // Get owners for active slots
     const ownerIds = [...new Set(allActiveSlots.map((s) => s.userId))];
