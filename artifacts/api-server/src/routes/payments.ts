@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { db, slotsTable, paymentsTable, usersTable } from "@workspace/db";
+import { db, slotsTable, paymentsTable, usersTable, preordersTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { getSettings } from "../lib/settings.js";
@@ -260,16 +260,33 @@ router.post("/stripe-webhook", async (req: Request, res: Response) => {
     }
 
     if (event.type === "checkout.session.completed") {
-      const session = event.data.object as { metadata?: { userId?: string; slotNumber?: string }; payment_status?: string };
-      const { userId, slotNumber } = session.metadata || {};
+      const session = event.data.object as { metadata?: { userId?: string; slotNumber?: string; isPreorder?: string }; payment_status?: string };
+      const { userId, slotNumber, isPreorder } = session.metadata || {};
 
-      if (userId && slotNumber && session.payment_status === "paid") {
-        const slotNum = parseInt(slotNumber, 10);
-        const pending = await db.select().from(paymentsTable)
-          .where(and(eq(paymentsTable.userId, userId), eq(paymentsTable.slotNumber, slotNum), eq(paymentsTable.status, "pending")))
-          .limit(1);
-        if (pending.length) {
-          await activateSlot(userId, slotNum, pending[0].id, pending[0].derivationIndex ?? undefined);
+      if (userId && session.payment_status === "paid") {
+        if (isPreorder === "true") {
+          // Pre-order payment — mark payment completed + create preorder record
+          const pending = await db.select().from(paymentsTable)
+            .where(and(eq(paymentsTable.userId, userId), eq(paymentsTable.slotNumber, 0), eq(paymentsTable.status, "pending"), eq(paymentsTable.method, "preorder-stripe")))
+            .limit(1);
+          if (pending.length) {
+            await db.update(paymentsTable).set({ status: "completed", updatedAt: new Date() }).where(eq(paymentsTable.id, pending[0].id));
+            await db.insert(preordersTable).values({
+              userId,
+              amount: pending[0].amount ?? "0",
+              currency: "USD",
+              paymentId: pending[0].id,
+              status: "paid",
+            });
+          }
+        } else if (slotNumber) {
+          const slotNum = parseInt(slotNumber, 10);
+          const pending = await db.select().from(paymentsTable)
+            .where(and(eq(paymentsTable.userId, userId), eq(paymentsTable.slotNumber, slotNum), eq(paymentsTable.status, "pending")))
+            .limit(1);
+          if (pending.length) {
+            await activateSlot(userId, slotNum, pending[0].id, pending[0].derivationIndex ?? undefined);
+          }
         }
       }
     }
@@ -399,8 +416,23 @@ router.post("/nowpayments-ipn", async (req: Request, res: Response) => {
     }
 
     const payment = payments[0];
-    await activateSlot(payment.userId, payment.slotNumber, payment.id, payment.derivationIndex ?? undefined);
-    req.log.info({ paymentId: payment.id }, "NOWPayments IPN: slot activated");
+
+    if (payment.method === "preorder-crypto") {
+      // Pre-order: mark payment completed + create preorder record
+      await db.update(paymentsTable).set({ status: "completed", updatedAt: new Date() }).where(eq(paymentsTable.id, payment.id));
+      await db.insert(preordersTable).values({
+        userId: payment.userId,
+        amount: payment.amount ?? "0",
+        currency: payment.currency,
+        paymentId: payment.id,
+        status: "paid",
+      });
+      req.log.info({ paymentId: payment.id }, "NOWPayments IPN: pre-order activated");
+    } else {
+      await activateSlot(payment.userId, payment.slotNumber, payment.id, payment.derivationIndex ?? undefined);
+      req.log.info({ paymentId: payment.id }, "NOWPayments IPN: slot activated");
+    }
+
     res.json({ received: true });
   } catch (err) {
     req.log.error({ err }, "NOWPayments IPN processing failed");

@@ -1,11 +1,12 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useLocation } from 'wouter';
-import { LogOut, LayoutGrid, Settings, Trophy, History, Gavel, Clock, TrendingUp, X, Crown } from 'lucide-react';
+import { LogOut, LayoutGrid, Settings, Trophy, History, Gavel, Clock, TrendingUp, X, Crown, CalendarClock } from 'lucide-react';
 import { useGetMe, useLogout } from '@workspace/api-client-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { SlotCard, type PublicSlot } from '@/components/SlotCard';
 import { PaymentModal } from '@/components/PaymentModal';
 import { ManageSlotModal } from '@/components/ManageSlotModal';
+import { PreorderModal } from '@/components/PreorderModal';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { motion } from 'framer-motion';
@@ -50,6 +51,7 @@ export default function Dashboard() {
 
   const [bidAmount, setBidAmount] = useState('');
   const [showBidForm, setShowBidForm] = useState(false);
+  const [showPreorderModal, setShowPreorderModal] = useState(false);
 
   const { data: slotsRes, refetch: refetchSlots, isLoading: isSlotsLoading } = useQuery({
     queryKey: ['slots'],
@@ -101,6 +103,28 @@ export default function Dashboard() {
     onError: () => toast({ title: 'Error', description: 'Could not cancel bid.', variant: 'destructive' }),
   });
 
+  type PreorderEntry = { id: number; rank: number; amount: number; currency: string | null; isOwn: boolean; username: string; discordId: string; avatar: string | null; createdAt: string };
+  const { data: preordersRes, refetch: refetchPreorders } = useQuery({
+    queryKey: ['preorders'],
+    queryFn: () => apiFetch<{ queue: PreorderEntry[]; myPreorder: PreorderEntry | null }>('api/preorders'),
+    enabled: !!user,
+    refetchInterval: 10000,
+    refetchIntervalInBackground: false,
+  });
+
+  const { mutate: cancelPreorder, isPending: isCancellingPreorder } = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await fetch(`${import.meta.env.BASE_URL}api/preorders/${id}`, { method: 'DELETE', credentials: 'include' });
+      if (!res.ok) throw new Error('Failed');
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: 'Pre-order cancelled', description: 'Your pre-order has been removed.' });
+      refetchPreorders();
+    },
+    onError: () => toast({ title: 'Error', description: 'Could not cancel pre-order.', variant: 'destructive' }),
+  });
+
   const { data: leaderboardRes, isLoading: isLeaderboardLoading } = useQuery({
     queryKey: ['leaderboard'],
     queryFn: () => apiFetch<{ leaderboard: { rank: number; username: string; discordId: string; avatar: string | null; totalSpent: number; totalHours: number }[] }>('api/slots/leaderboard'),
@@ -126,6 +150,13 @@ export default function Dashboard() {
       refetchSlots();
     } else if (params.get('payment') === 'cancelled') {
       toast({ title: "Payment Cancelled", description: "The transaction was aborted.", variant: "destructive" });
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (params.get('preorder') === 'success') {
+      toast({ title: "Pre-order Placed!", description: "You'll automatically get the next slot when one opens.", className: "bg-primary text-primary-foreground border-none" });
+      window.history.replaceState({}, document.title, window.location.pathname);
+      refetchPreorders();
+    } else if (params.get('preorder') === 'cancelled') {
+      toast({ title: "Pre-order Cancelled", description: "No charge was made.", variant: "destructive" });
       window.history.replaceState({}, document.title, window.location.pathname);
     }
   }, [toast, refetchSlots]);
@@ -164,6 +195,8 @@ export default function Dashboard() {
   const allFull = activeCount >= totalSlots && totalSlots > 0;
   const bids = bidsRes?.bids ?? [];
   const myBid = bidsRes?.myBid ?? null;
+  const preorderQueue = preordersRes?.queue ?? [];
+  const myPreorder = preordersRes?.myPreorder ?? null;
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'slots', label: 'Slots', icon: <LayoutGrid className="w-4 h-4" /> },
@@ -412,6 +445,114 @@ export default function Dashboard() {
                   </div>
                 </motion.div>
               )}
+
+              {/* PRE-ORDER SECTION — visible when all slots are full */}
+              {allFull && (
+                <motion.div
+                  initial={{ opacity: 0, y: 30 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.3 }}
+                  className="mt-5"
+                >
+                  <div className="border border-border rounded-xl overflow-hidden">
+                    <div className="border-b border-border/60 p-5 flex flex-col sm:flex-row sm:items-center gap-4">
+                      <div className="flex-1">
+                        <h3 className="font-display font-bold text-foreground flex items-center gap-2 text-base">
+                          <CalendarClock className="w-4 h-4 text-primary" /> Pre-order Next Slot
+                        </h3>
+                        <p className="font-mono text-xs text-muted-foreground mt-1">
+                          Pay now · get a full {slotDurationHours}h slot automatically when the next one opens
+                          {nextExpiresAt && countdown ? ` in ${String(countdown.h).padStart(2,'0')}:${String(countdown.m).padStart(2,'0')}:${String(countdown.s).padStart(2,'0')}` : ''}
+                        </p>
+                      </div>
+                      {!myPreorder && (
+                        <Button
+                          size="sm"
+                          className="text-xs shrink-0"
+                          onClick={() => setShowPreorderModal(true)}
+                        >
+                          <CalendarClock className="w-3.5 h-3.5 mr-1.5" />
+                          Pre-order — ${pricePerDay.toFixed(2)}
+                        </Button>
+                      )}
+                    </div>
+
+                    <div className="p-5 grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      {/* My pre-order status */}
+                      <div>
+                        <h4 className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-2">
+                          <CalendarClock className="w-3.5 h-3.5" /> Your Pre-order
+                        </h4>
+                        {myPreorder ? (
+                          <div className="border border-primary/30 bg-primary/8 rounded-xl p-4">
+                            <div className="flex items-center justify-between mb-3">
+                              <div>
+                                <p className="font-display font-bold text-primary text-2xl">${myPreorder.amount.toFixed(2)}</p>
+                                <p className="font-mono text-xs text-muted-foreground mt-1">
+                                  {myPreorder.rank === 1 ? '🏆 First in queue — you get the next slot!' : `Rank #${myPreorder.rank} in pre-order queue`}
+                                </p>
+                              </div>
+                              <span className="font-mono text-xs px-2.5 py-1 rounded-full border border-primary/40 text-primary bg-primary/10">
+                                #{myPreorder.rank}
+                              </span>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="border-red-500/25 text-red-400 text-xs w-full"
+                              disabled={isCancellingPreorder}
+                              onClick={() => cancelPreorder(myPreorder.id)}
+                            >
+                              <X className="w-3 h-3 mr-1" /> Cancel Pre-order
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="border border-border p-4 rounded-xl text-center">
+                            <p className="font-mono text-xs text-muted-foreground mb-3">No pre-order placed. Reserve your spot now.</p>
+                            <Button size="sm" className="text-xs w-full" onClick={() => setShowPreorderModal(true)}>
+                              <CalendarClock className="w-3 h-3 mr-2" /> Pre-order — ${pricePerDay.toFixed(2)}
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Pre-order queue */}
+                      <div>
+                        <h4 className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-2">
+                          <Crown className="w-3.5 h-3.5" /> Pre-order Queue ({preorderQueue.length})
+                        </h4>
+                        {preorderQueue.length === 0 ? (
+                          <div className="border border-border p-4 rounded-xl text-center font-mono text-xs text-muted-foreground">
+                            No pre-orders yet — be first in line!
+                          </div>
+                        ) : (
+                          <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                            {preorderQueue.map((p, i) => (
+                              <div
+                                key={p.id}
+                                className={`flex items-center gap-3 p-2.5 rounded-lg border ${p.isOwn ? 'border-primary/30 bg-primary/8' : 'border-border bg-card/40'}`}
+                              >
+                                <span className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${i === 0 ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground'}`}>
+                                  {i + 1}
+                                </span>
+                                {p.avatar ? (
+                                  <img src={`https://cdn.discordapp.com/avatars/${p.discordId}/${p.avatar}.png`} alt="" className="w-6 h-6 rounded-full border border-border shrink-0" />
+                                ) : (
+                                  <div className="w-6 h-6 rounded-full bg-secondary border border-border shrink-0" />
+                                )}
+                                <span className={`font-mono text-xs flex-1 truncate ${p.isOwn ? 'text-primary font-semibold' : 'text-foreground'}`}>
+                                  {p.username}{p.isOwn ? ' (you)' : ''}
+                                </span>
+                                <span className="font-mono text-sm font-bold text-primary shrink-0">${p.amount.toFixed(2)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
             </>
           )}
 
@@ -549,6 +690,15 @@ export default function Dashboard() {
         slot={managingSlot as any}
         onClose={() => setManagingSlot(null)}
         onSuccess={() => { refetchSlots(); }}
+      />
+
+      <PreorderModal
+        isOpen={showPreorderModal}
+        onClose={() => { setShowPreorderModal(false); refetchPreorders(); }}
+        pricePerDay={pricePerDay}
+        slotDurationHours={slotDurationHours}
+        nextExpiresAt={nextExpiresAt}
+        onSuccess={() => { refetchPreorders(); }}
       />
     </div>
   );

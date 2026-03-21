@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, slotsTable, usersTable, paymentsTable } from "@workspace/db";
+import { db, slotsTable, usersTable, paymentsTable, preordersTable } from "@workspace/db";
 import { eq, and, sql, inArray, lte, desc } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { getSettings } from "../lib/settings.js";
@@ -52,6 +52,40 @@ router.get("/", requireAuth, async (req, res) => {
       if (!existingNums.has(i)) toCreate.push({ userId: currentUserId, slotNumber: i, isActive: false });
     }
     if (toCreate.length) await db.insert(slotsTable).values(toCreate);
+
+    // Expire slots whose time is up and auto-assign to paid pre-orders
+    const now = new Date();
+    const expiredSlots = await db.select().from(slotsTable)
+      .where(and(eq(slotsTable.isActive, true), lte(slotsTable.expiresAt, now)));
+
+    if (expiredSlots.length > 0) {
+      for (const slot of expiredSlots) {
+        await db.update(slotsTable)
+          .set({ isActive: false, expiresAt: null, purchasedAt: null, label: null })
+          .where(eq(slotsTable.id, slot.id));
+      }
+
+      const paidPreorders = await db.select().from(preordersTable)
+        .where(eq(preordersTable.status, "paid"))
+        .orderBy(desc(preordersTable.amount), preordersTable.createdAt);
+
+      const { slotDurationHours } = await getSettings();
+      for (let i = 0; i < Math.min(expiredSlots.length, paidPreorders.length); i++) {
+        const slot = expiredSlots[i];
+        const preorder = paidPreorders[i];
+        const expiresAt = new Date(now.getTime() + slotDurationHours * 60 * 60 * 1000);
+        const existingRow = await db.select().from(slotsTable)
+          .where(and(eq(slotsTable.userId, preorder.userId), eq(slotsTable.slotNumber, slot.slotNumber)))
+          .limit(1);
+        if (existingRow.length) {
+          await db.update(slotsTable).set({ isActive: true, purchasedAt: now, expiresAt, label: null })
+            .where(and(eq(slotsTable.userId, preorder.userId), eq(slotsTable.slotNumber, slot.slotNumber)));
+        } else {
+          await db.insert(slotsTable).values({ userId: preorder.userId, slotNumber: slot.slotNumber, isActive: true, purchasedAt: now, expiresAt });
+        }
+        await db.update(preordersTable).set({ status: "fulfilled" }).where(eq(preordersTable.id, preorder.id));
+      }
+    }
 
     // Get ALL active slots (any user) within range
     const allActiveSlots = await db
