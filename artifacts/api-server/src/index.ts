@@ -1,5 +1,19 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { db } from "@workspace/db";
+import { sql } from "drizzle-orm";
+
+// Run any pending schema migrations safely before accepting traffic
+async function runMigrations() {
+  try {
+    await db.execute(sql`
+      ALTER TABLE bids ADD COLUMN IF NOT EXISTS paid_with_balance BOOLEAN NOT NULL DEFAULT FALSE
+    `);
+    logger.info("DB migrations applied");
+  } catch (err) {
+    logger.warn({ err }, "DB migration step skipped or failed");
+  }
+}
 
 const rawPort = process.env["PORT"];
 
