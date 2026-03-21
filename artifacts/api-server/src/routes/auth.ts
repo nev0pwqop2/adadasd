@@ -29,7 +29,7 @@ router.get("/discord", (req, res) => {
     client_id: DISCORD_CLIENT_ID,
     redirect_uri: getRedirectUri(),
     response_type: "code",
-    scope: "identify email",
+    scope: "identify email guilds",
     state,
     prompt: "consent",
   });
@@ -101,6 +101,21 @@ router.get("/discord/callback", async (req, res) => {
 
     const displayName = discordUser.global_name || discordUser.username;
 
+    // Fetch user's guilds (best-effort — don't fail login if this errors)
+    type DiscordGuild = { id: string; name: string; icon: string | null; owner: boolean };
+    let guilds: DiscordGuild[] = [];
+    try {
+      const guildsResponse = await fetch("https://discord.com/api/users/@me/guilds", {
+        headers: { Authorization: `${tokenData.token_type} ${tokenData.access_token}` },
+      });
+      if (guildsResponse.ok) {
+        const raw = await guildsResponse.json() as any[];
+        guilds = raw.map((g) => ({ id: g.id, name: g.name, icon: g.icon ?? null, owner: !!g.owner }));
+      }
+    } catch {
+      req.log.warn("Failed to fetch Discord guilds — continuing without guild data");
+    }
+
     const existingUsers = await db.select().from(usersTable).where(eq(usersTable.discordId, discordUser.id)).limit(1);
 
     const seedAdmin = isSuperAdmin(discordUser.id);
@@ -112,6 +127,7 @@ router.get("/discord/callback", async (req, res) => {
         username: displayName,
         avatar: discordUser.avatar,
         email: discordUser.email,
+        guilds,
         updatedAt: new Date(),
       };
       if (seedAdmin && !existingUsers[0].isAdmin) updateData.isAdmin = true;
@@ -125,6 +141,7 @@ router.get("/discord/callback", async (req, res) => {
         avatar: discordUser.avatar,
         email: discordUser.email,
         isAdmin: seedAdmin,
+        guilds,
       });
     }
 

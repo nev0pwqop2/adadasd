@@ -96,6 +96,7 @@ router.get("/users", async (req, res) => {
         isSuperAdmin: isSuperAdmin(u.discordId),
         activeSlots: userSlots.filter((s) => s.isActive).length,
         totalSlots: slotCount,
+        guilds: (u.guilds as any[] | null) ?? [],
       };
     });
 

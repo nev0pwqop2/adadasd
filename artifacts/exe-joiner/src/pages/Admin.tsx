@@ -5,7 +5,7 @@ import { useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Save, Users, Settings, Shield, ShieldOff, Loader2, RotateCcw, AlertTriangle, Crown } from 'lucide-react';
+import { ArrowLeft, Save, Users, Settings, Shield, ShieldOff, Loader2, RotateCcw, AlertTriangle, Crown, Server, ChevronDown, ChevronUp } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export default function Admin() {
@@ -88,6 +88,7 @@ export default function Admin() {
   const [minHours, setMinHours] = useState<string>('');
   const [editingUser, setEditingUser] = useState<string | null>(null);
   const [userSlotCount, setUserSlotCount] = useState<string>('');
+  const [expandedGuilds, setExpandedGuilds] = useState<string | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
   const [confirmResetLeaderboard, setConfirmResetLeaderboard] = useState(false);
   const [confirmResetDeposits, setConfirmResetDeposits] = useState(false);
@@ -316,78 +317,122 @@ export default function Admin() {
                   <div className="p-8 text-center font-mono text-muted-foreground text-sm">No users yet.</div>
                 )}
                 {usersData?.users.map((u: any) => (
-                  <div key={u.discordId} className="p-4 flex flex-col sm:flex-row sm:items-center gap-4">
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                      {u.avatar ? (
-                        <img src={`https://cdn.discordapp.com/avatars/${u.discordId}/${u.avatar}.png`} alt="" className="w-9 h-9 border border-primary/30 shrink-0" />
-                      ) : (
-                        <div className="w-9 h-9 bg-secondary border border-primary/30 shrink-0" />
-                      )}
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <p className="font-mono text-sm text-foreground font-bold truncate">{u.username}</p>
-                          {u.isSuperAdmin && (
-                            <span className="flex items-center gap-1 text-xs font-mono px-2 py-0.5 bg-yellow-500/10 border border-yellow-500/30 text-yellow-400">
-                              <Crown className="w-3 h-3" /> Super Admin
-                            </span>
-                          )}
-                          {u.isAdmin && !u.isSuperAdmin && (
-                            <span className="flex items-center gap-1 text-xs font-mono px-2 py-0.5 bg-primary/10 border border-primary/30 text-primary">
-                              <Shield className="w-3 h-3" /> Admin
-                            </span>
-                          )}
-                        </div>
-                        <p className="font-mono text-xs text-muted-foreground">{u.discordId}</p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className={`font-mono text-sm px-3 py-1 border chamfered shrink-0 ${u.activeSlots > 0 ? 'border-primary/40 text-primary bg-primary/10' : 'border-primary/10 text-muted-foreground'}`}>
-                        {u.activeSlots} / {u.totalSlots} active
-                      </span>
-
-                      {isSuperAdmin && !u.isSuperAdmin && (
-                        togglingAdmin === u.discordId ? (
-                          <Button size="sm" variant="outline" disabled className="border-primary/20 font-mono text-xs">
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                          </Button>
+                  <div key={u.discordId} className="border-b border-primary/10 last:border-0">
+                    <div className="p-4 flex flex-col sm:flex-row sm:items-center gap-4">
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        {u.avatar ? (
+                          <img src={`https://cdn.discordapp.com/avatars/${u.discordId}/${u.avatar}.png`} alt="" className="w-9 h-9 border border-primary/30 shrink-0" />
                         ) : (
+                          <div className="w-9 h-9 bg-secondary border border-primary/30 shrink-0" />
+                        )}
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-mono text-sm text-foreground font-bold truncate">{u.username}</p>
+                            {u.isSuperAdmin && (
+                              <span className="flex items-center gap-1 text-xs font-mono px-2 py-0.5 bg-yellow-500/10 border border-yellow-500/30 text-yellow-400">
+                                <Crown className="w-3 h-3" /> Super Admin
+                              </span>
+                            )}
+                            {u.isAdmin && !u.isSuperAdmin && (
+                              <span className="flex items-center gap-1 text-xs font-mono px-2 py-0.5 bg-primary/10 border border-primary/30 text-primary">
+                                <Shield className="w-3 h-3" /> Admin
+                              </span>
+                            )}
+                          </div>
+                          <p className="font-mono text-xs text-muted-foreground">{u.discordId}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`font-mono text-sm px-3 py-1 border chamfered shrink-0 ${u.activeSlots > 0 ? 'border-primary/40 text-primary bg-primary/10' : 'border-primary/10 text-muted-foreground'}`}>
+                          {u.activeSlots} / {u.totalSlots} active
+                        </span>
+
+                        {u.guilds?.length > 0 && (
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => { setTogglingAdmin(u.discordId); toggleAdmin(u.discordId); }}
-                            className={`font-mono text-xs border-primary/20 ${u.isAdmin ? 'text-red-400 hover:text-red-300' : 'text-primary hover:text-primary/80'}`}
+                            onClick={() => setExpandedGuilds(expandedGuilds === u.discordId ? null : u.discordId)}
+                            className="border-primary/20 text-muted-foreground hover:text-primary font-mono text-xs"
                           >
-                            {u.isAdmin ? <><ShieldOff className="w-3 h-3 mr-1" />Remove Admin</> : <><Shield className="w-3 h-3 mr-1" />Make Admin</>}
+                            <Server className="w-3 h-3 mr-1" />
+                            {u.guilds.length} Servers
+                            {expandedGuilds === u.discordId ? <ChevronUp className="w-3 h-3 ml-1" /> : <ChevronDown className="w-3 h-3 ml-1" />}
                           </Button>
-                        )
-                      )}
+                        )}
 
-                      {editingUser === u.discordId ? (
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="number"
-                            min={0}
-                            max={u.totalSlots}
-                            value={userSlotCount}
-                            onChange={e => setUserSlotCount(e.target.value)}
-                            placeholder="# active"
-                            className="w-24 bg-background border border-primary/50 text-foreground font-mono px-3 py-1.5 text-sm focus:outline-none focus:border-primary"
-                            autoFocus
-                          />
-                          <Button size="sm" onClick={() => handleUpdateUserSlots(u.discordId)} disabled={isUpdatingSlots}>
-                            {isUpdatingSlots ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Set'}
+                        {isSuperAdmin && !u.isSuperAdmin && (
+                          togglingAdmin === u.discordId ? (
+                            <Button size="sm" variant="outline" disabled className="border-primary/20 font-mono text-xs">
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => { setTogglingAdmin(u.discordId); toggleAdmin(u.discordId); }}
+                              className={`font-mono text-xs border-primary/20 ${u.isAdmin ? 'text-red-400 hover:text-red-300' : 'text-primary hover:text-primary/80'}`}
+                            >
+                              {u.isAdmin ? <><ShieldOff className="w-3 h-3 mr-1" />Remove Admin</> : <><Shield className="w-3 h-3 mr-1" />Make Admin</>}
+                            </Button>
+                          )
+                        )}
+
+                        {editingUser === u.discordId ? (
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="number"
+                              min={0}
+                              max={u.totalSlots}
+                              value={userSlotCount}
+                              onChange={e => setUserSlotCount(e.target.value)}
+                              placeholder="# active"
+                              className="w-24 bg-background border border-primary/50 text-foreground font-mono px-3 py-1.5 text-sm focus:outline-none focus:border-primary"
+                              autoFocus
+                            />
+                            <Button size="sm" onClick={() => handleUpdateUserSlots(u.discordId)} disabled={isUpdatingSlots}>
+                              {isUpdatingSlots ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Set'}
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => { setEditingUser(null); setUserSlotCount(''); }} className="border-primary/20">
+                              Cancel
+                            </Button>
+                          </div>
+                        ) : (
+                          <Button size="sm" variant="outline" onClick={() => { setEditingUser(u.discordId); setUserSlotCount(String(u.activeSlots)); }} className="border-primary/20 text-muted-foreground hover:text-primary font-mono text-xs">
+                            Edit Slots
                           </Button>
-                          <Button size="sm" variant="outline" onClick={() => { setEditingUser(null); setUserSlotCount(''); }} className="border-primary/20">
-                            Cancel
-                          </Button>
-                        </div>
-                      ) : (
-                        <Button size="sm" variant="outline" onClick={() => { setEditingUser(u.discordId); setUserSlotCount(String(u.activeSlots)); }} className="border-primary/20 text-muted-foreground hover:text-primary font-mono text-xs">
-                          Edit Slots
-                        </Button>
-                      )}
+                        )}
+                      </div>
                     </div>
+
+                    {expandedGuilds === u.discordId && u.guilds?.length > 0 && (
+                      <div className="px-4 pb-4">
+                        <div className="border border-primary/10 bg-background/50 p-3">
+                          <p className="font-mono text-xs text-muted-foreground mb-2 uppercase tracking-wider">Discord Servers ({u.guilds.length})</p>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-64 overflow-y-auto">
+                            {u.guilds.map((g: { id: string; name: string; icon: string | null; owner: boolean }) => (
+                              <div key={g.id} className="flex items-center gap-2 p-2 border border-primary/10 bg-primary/5">
+                                {g.icon ? (
+                                  <img
+                                    src={`https://cdn.discordapp.com/icons/${g.id}/${g.icon}.png?size=32`}
+                                    alt=""
+                                    className="w-6 h-6 rounded-full shrink-0"
+                                  />
+                                ) : (
+                                  <div className="w-6 h-6 rounded-full bg-secondary border border-primary/20 shrink-0 flex items-center justify-center">
+                                    <Server className="w-3 h-3 text-muted-foreground" />
+                                  </div>
+                                )}
+                                <span className="font-mono text-xs text-foreground truncate flex-1">{g.name}</span>
+                                {g.owner && (
+                                  <Crown className="w-3 h-3 text-yellow-400 shrink-0" title="Server Owner" />
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
