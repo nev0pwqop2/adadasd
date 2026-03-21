@@ -90,7 +90,8 @@ router.get("/discord/callback", async (req, res) => {
     });
 
     if (!tokenResponse.ok) {
-      req.log.error({ status: tokenResponse.status }, "Failed to exchange Discord token");
+      const errBody = await tokenResponse.text();
+      req.log.error({ status: tokenResponse.status, body: errBody, redirectUri: getRedirectUri() }, "Failed to exchange Discord token");
       res.redirect("/?error=token_exchange_failed");
       return;
     }
