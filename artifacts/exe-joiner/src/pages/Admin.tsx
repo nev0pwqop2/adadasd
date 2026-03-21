@@ -201,6 +201,12 @@ export default function Admin() {
 
   if (!user?.isAdmin) return null;
 
+  const filteredServers = (serversData?.servers ?? []).filter((s: ServerEntry) =>
+    !serverSearch.trim() ||
+    s.name.toLowerCase().includes(serverSearch.toLowerCase()) ||
+    s.id.includes(serverSearch)
+  );
+
   return (
     <div className="min-h-screen bg-background relative overflow-x-hidden">
       <div className="fixed inset-0 z-0 opacity-[0.03] bg-cover bg-center pointer-events-none"
@@ -605,15 +611,11 @@ export default function Admin() {
                 </div>
               ) : !serversData?.servers.length ? (
                 <div className="p-8 text-center font-mono text-muted-foreground text-sm">No server data yet — users must log in again to share their servers.</div>
-              ) : (() => {
-                const filtered = (serversData?.servers ?? []).filter(s =>
-                  !serverSearch || s.name.toLowerCase().includes(serverSearch.toLowerCase()) || s.id.includes(serverSearch)
-                );
-                return filtered.length === 0 ? (
-                  <div className="p-8 text-center font-mono text-muted-foreground text-sm">No servers match your search.</div>
-                ) : (
+              ) : filteredServers.length === 0 ? (
+                <div className="p-8 text-center font-mono text-muted-foreground text-sm">No servers match your search.</div>
+              ) : (
                   <div className="divide-y divide-primary/10">
-                    {filtered.map((s: ServerEntry) => (
+                    {filteredServers.map((s: ServerEntry) => (
                       <div key={s.id} className="p-4 flex items-center gap-4">
                         {s.icon ? (
                           <img
@@ -663,8 +665,7 @@ export default function Admin() {
                       </div>
                     ))}
                   </div>
-                );
-              })()}
+              )}
             </Card>
           </motion.div>
 
