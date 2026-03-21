@@ -125,7 +125,7 @@ router.get("/", requireAuth, async (req, res) => {
 
 router.get("/leaderboard", requireAuth, async (req, res) => {
   try {
-    const { slotDurationHours } = await getSettings();
+    const { slotDurationHours, pricePerDay } = await getSettings();
 
     const completedPayments = await db
       .select()
@@ -139,8 +139,12 @@ router.get("/leaderboard", requireAuth, async (req, res) => {
     for (const p of completedPayments) {
       if (!totals[p.userId]) totals[p.userId] = { userId: p.userId, totalSpent: 0, totalHours: 0 };
       const amt = parseFloat(p.amount ?? "0");
-      totals[p.userId].totalSpent += isNaN(amt) ? 0 : amt;
-      totals[p.userId].totalHours += slotDurationHours;
+      const validAmt = isNaN(amt) ? 0 : amt;
+      totals[p.userId].totalSpent += validAmt;
+      const hoursForPayment = pricePerDay > 0
+        ? Math.round((validAmt / pricePerDay) * slotDurationHours)
+        : slotDurationHours;
+      totals[p.userId].totalHours += hoursForPayment;
     }
 
     const leaderboard = Object.values(totals)

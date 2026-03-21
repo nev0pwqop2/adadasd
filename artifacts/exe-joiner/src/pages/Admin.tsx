@@ -33,12 +33,40 @@ export default function Admin() {
     onError: () => toast({ title: "Error", description: "Failed to reset slots.", variant: "destructive" }),
   });
 
+  const { mutate: resetLeaderboard, isPending: isResettingLeaderboard } = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`${import.meta.env.BASE_URL}api/admin/reset-leaderboard`, { method: 'POST', credentials: 'include' });
+      if (!res.ok) throw new Error('Failed to reset leaderboard');
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Leaderboard reset", description: "All leaderboard data has been cleared.", className: "bg-red-600 text-white border-none" });
+      setConfirmResetLeaderboard(false);
+    },
+    onError: () => toast({ title: "Error", description: "Failed to reset leaderboard.", variant: "destructive" }),
+  });
+
+  const { mutate: resetAllDeposits, isPending: isResettingDeposits } = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`${import.meta.env.BASE_URL}api/admin/reset-all-deposits`, { method: 'POST', credentials: 'include' });
+      if (!res.ok) throw new Error('Failed to reset deposits');
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "All deposits reset", description: "Every deposit record has been deleted.", className: "bg-red-600 text-white border-none" });
+      setConfirmResetDeposits(false);
+    },
+    onError: () => toast({ title: "Error", description: "Failed to reset deposits.", variant: "destructive" }),
+  });
+
   const [slotCount, setSlotCount] = useState<string>('');
   const [pricePerDay, setPricePerDay] = useState<string>('');
   const [slotDurationHours, setSlotDurationHours] = useState<string>('');
   const [editingUser, setEditingUser] = useState<string | null>(null);
   const [userSlotCount, setUserSlotCount] = useState<string>('');
   const [confirmReset, setConfirmReset] = useState(false);
+  const [confirmResetLeaderboard, setConfirmResetLeaderboard] = useState(false);
+  const [confirmResetDeposits, setConfirmResetDeposits] = useState(false);
 
   React.useEffect(() => {
     if (isUserError) setLocation('/');
@@ -260,37 +288,109 @@ export default function Admin() {
                 <AlertTriangle className="w-5 h-5 text-red-400" />
                 <h2 className="font-display font-bold uppercase tracking-wider text-red-400">Danger Zone</h2>
               </div>
-              <div className="p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <p className="font-mono text-sm text-foreground font-bold">Reset All Slots</p>
-                  <p className="text-xs text-muted-foreground font-mono mt-1">Deactivates every slot for every user. This cannot be undone.</p>
-                </div>
-                {confirmReset ? (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-mono text-red-400 uppercase">Are you sure?</span>
+
+              <div className="divide-y divide-red-500/10">
+                {/* Reset All Slots */}
+                <div className="p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <p className="font-mono text-sm text-foreground font-bold">Reset All Slots</p>
+                    <p className="text-xs text-muted-foreground font-mono mt-1">Deactivates every slot for every user. This cannot be undone.</p>
+                  </div>
+                  {confirmReset ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-mono text-red-400 uppercase">Are you sure?</span>
+                      <Button
+                        size="sm"
+                        className="bg-red-600 hover:bg-red-700 text-white border-none"
+                        onClick={() => resetAllSlots()}
+                        disabled={isResetting}
+                      >
+                        {isResetting ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Yes, Reset All'}
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => setConfirmReset(false)} className="border-primary/20">
+                        Cancel
+                      </Button>
+                    </div>
+                  ) : (
                     <Button
                       size="sm"
-                      className="bg-red-600 hover:bg-red-700 text-white border-none"
-                      onClick={() => resetAllSlots()}
-                      disabled={isResetting}
+                      variant="outline"
+                      className="border-red-500/40 text-red-400 hover:bg-red-500/10 hover:border-red-500 font-mono shrink-0"
+                      onClick={() => setConfirmReset(true)}
                     >
-                      {isResetting ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Yes, Reset All'}
+                      <RotateCcw className="w-4 h-4 mr-2" />
+                      Reset All Slots
                     </Button>
-                    <Button size="sm" variant="outline" onClick={() => setConfirmReset(false)} className="border-primary/20">
-                      Cancel
-                    </Button>
+                  )}
+                </div>
+
+                {/* Reset Leaderboard */}
+                <div className="p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <p className="font-mono text-sm text-foreground font-bold">Reset Leaderboard</p>
+                    <p className="text-xs text-muted-foreground font-mono mt-1">Clears all completed payment records, resetting the leaderboard to zero. This cannot be undone.</p>
                   </div>
-                ) : (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="border-red-500/40 text-red-400 hover:bg-red-500/10 hover:border-red-500 font-mono shrink-0"
-                    onClick={() => setConfirmReset(true)}
-                  >
-                    <RotateCcw className="w-4 h-4 mr-2" />
-                    Reset All Slots
-                  </Button>
-                )}
+                  {confirmResetLeaderboard ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-mono text-red-400 uppercase">Are you sure?</span>
+                      <Button
+                        size="sm"
+                        className="bg-red-600 hover:bg-red-700 text-white border-none"
+                        onClick={() => resetLeaderboard()}
+                        disabled={isResettingLeaderboard}
+                      >
+                        {isResettingLeaderboard ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Yes, Reset'}
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => setConfirmResetLeaderboard(false)} className="border-primary/20">
+                        Cancel
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-red-500/40 text-red-400 hover:bg-red-500/10 hover:border-red-500 font-mono shrink-0"
+                      onClick={() => setConfirmResetLeaderboard(true)}
+                    >
+                      <RotateCcw className="w-4 h-4 mr-2" />
+                      Reset Leaderboard
+                    </Button>
+                  )}
+                </div>
+
+                {/* Reset All Deposits */}
+                <div className="p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <p className="font-mono text-sm text-foreground font-bold">Reset All Deposits</p>
+                    <p className="text-xs text-muted-foreground font-mono mt-1">Permanently deletes every deposit record for all users. This cannot be undone.</p>
+                  </div>
+                  {confirmResetDeposits ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-mono text-red-400 uppercase">Are you sure?</span>
+                      <Button
+                        size="sm"
+                        className="bg-red-600 hover:bg-red-700 text-white border-none"
+                        onClick={() => resetAllDeposits()}
+                        disabled={isResettingDeposits}
+                      >
+                        {isResettingDeposits ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Yes, Delete All'}
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => setConfirmResetDeposits(false)} className="border-primary/20">
+                        Cancel
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-red-500/40 text-red-400 hover:bg-red-500/10 hover:border-red-500 font-mono shrink-0"
+                      onClick={() => setConfirmResetDeposits(true)}
+                    >
+                      <RotateCcw className="w-4 h-4 mr-2" />
+                      Reset All Deposits
+                    </Button>
+                  )}
+                </div>
               </div>
             </Card>
           </motion.div>

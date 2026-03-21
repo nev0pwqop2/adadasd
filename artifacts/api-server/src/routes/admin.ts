@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, slotsTable, usersTable } from "@workspace/db";
+import { db, slotsTable, usersTable, paymentsTable } from "@workspace/db";
 import { eq, sql, inArray, and, lte, isNotNull } from "drizzle-orm";
 import { requireAdmin } from "../middlewares/requireAdmin.js";
 import { getSettings, setSetting } from "../lib/settings.js";
@@ -185,6 +185,28 @@ router.post("/reset-all-slots", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to reset all slots");
     res.status(500).json({ error: "server_error", message: "Failed to reset slots" });
+  }
+});
+
+router.post("/reset-leaderboard", async (req, res) => {
+  try {
+    await db.delete(paymentsTable).where(eq(paymentsTable.status, "completed"));
+    req.log.info({ adminId: req.session.userId }, "Leaderboard reset by admin");
+    res.json({ success: true, message: "Leaderboard has been reset" });
+  } catch (err) {
+    req.log.error({ err }, "Failed to reset leaderboard");
+    res.status(500).json({ error: "server_error", message: "Failed to reset leaderboard" });
+  }
+});
+
+router.post("/reset-all-deposits", async (req, res) => {
+  try {
+    await db.delete(paymentsTable);
+    req.log.info({ adminId: req.session.userId }, "All deposits reset by admin");
+    res.json({ success: true, message: "All deposits have been reset" });
+  } catch (err) {
+    req.log.error({ err }, "Failed to reset all deposits");
+    res.status(500).json({ error: "server_error", message: "Failed to reset deposits" });
   }
 });
 
