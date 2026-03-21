@@ -60,14 +60,12 @@ async function getNowPaymentsStatus(nowpaymentsPaymentId: string): Promise<{ pay
   return nowpaymentsRequest(`/payment/${nowpaymentsPaymentId}`);
 }
 
+const NOWPAYMENTS_MIN_USD: Record<string, number> = {
+  USDT: 19.06,
+};
+
 async function getNowPaymentsMinAmount(currency: string): Promise<number> {
-  try {
-    const payCurrency = NOWPAYMENTS_CURRENCY_MAP[currency];
-    const data = await nowpaymentsRequest(`/min-amount?currency_from=usd&currency_to=${payCurrency}`);
-    return data.min_amount ?? 0;
-  } catch {
-    return 0;
-  }
+  return NOWPAYMENTS_MIN_USD[currency] ?? 0;
 }
 
 function isPaymentSuccessful(status: string): boolean {
