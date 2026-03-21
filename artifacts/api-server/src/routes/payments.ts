@@ -399,6 +399,31 @@ router.post("/nowpayments-ipn", async (req: Request, res: Response) => {
   }
 });
 
+router.delete("/cancel/:id", requireAuth, async (req: Request, res: Response) => {
+  const { id } = req.params;
+  try {
+    const payments = await db.select().from(paymentsTable).where(
+      and(eq(paymentsTable.id, id), eq(paymentsTable.userId, req.session.userId!))
+    ).limit(1);
+
+    if (!payments.length) {
+      res.status(404).json({ error: "not_found", message: "Payment not found" });
+      return;
+    }
+
+    if (payments[0].status !== "pending") {
+      res.status(400).json({ error: "not_cancellable", message: "Only pending payments can be cancelled" });
+      return;
+    }
+
+    await db.delete(paymentsTable).where(eq(paymentsTable.id, id));
+    res.json({ success: true });
+  } catch (err) {
+    req.log.error({ err }, "Failed to cancel payment");
+    res.status(500).json({ error: "server_error", message: "Failed to cancel payment" });
+  }
+});
+
 router.post("/verify-crypto", requireAuth, async (req: Request, res: Response) => {
   const { paymentId } = req.body;
 

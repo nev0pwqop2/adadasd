@@ -60,6 +60,12 @@ export function PaymentModal({
     : `${slotDurationHours}h`;
 
   const handleClose = () => {
+    if (cryptoSession?.paymentId) {
+      fetch(`${import.meta.env.BASE_URL}api/payments/cancel/${cryptoSession.paymentId}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      }).catch(() => {});
+    }
     resetCrypto();
     onClose();
   };

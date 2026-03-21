@@ -107,7 +107,7 @@ export default function Dashboard() {
     enabled: !!user && activeTab === 'leaderboard',
   });
 
-  const { data: historyRes, isLoading: isHistoryLoading } = useQuery({
+  const { data: historyRes, isLoading: isHistoryLoading, refetch: refetchHistory } = useQuery({
     queryKey: ['history'],
     queryFn: () => apiFetch<{ payments: { id: string; slotNumber: number; method: string; currency: string | null; amount: string | null; status: string; createdAt: string }[] }>('api/slots/history'),
     enabled: !!user && activeTab === 'deposit',
@@ -317,7 +317,7 @@ export default function Dashboard() {
                           <TrendingUp className="w-3.5 h-3.5" /> Your Bid
                         </h4>
 
-                        {myBid ? (
+                        {myBid && !showBidForm ? (
                           <div className="border border-primary/30 bg-primary/8 rounded-lg p-4">
                             <div className="flex items-center justify-between mb-3">
                               <div>
@@ -343,23 +343,25 @@ export default function Dashboard() {
                           </div>
                         ) : showBidForm ? (
                           <div className="border border-primary/25 p-4 rounded-lg space-y-3">
-                            <p className="font-mono text-xs text-muted-foreground">Enter your max bid in USD. Top bidder wins the next open slot.</p>
+                            <p className="font-mono text-xs text-muted-foreground">
+                              {myBid ? `Current bid: $${myBid.amount.toFixed(2)}. Enter a higher amount.` : 'Enter your max bid in USD. Highest bidder gets first pick on the next open slot.'}
+                            </p>
                             <div className="flex items-center gap-2">
                               <span className="font-mono text-muted-foreground text-sm">$</span>
                               <input
                                 type="number"
-                                min={0.01}
+                                min={myBid ? myBid.amount + 0.01 : 0.01}
                                 step={0.01}
                                 value={bidAmount}
                                 onChange={e => setBidAmount(e.target.value)}
-                                placeholder="0.00"
+                                placeholder={myBid ? (myBid.amount + 1).toFixed(2) : '0.00'}
                                 className="flex-1 bg-background border border-border rounded text-foreground font-mono px-3 py-2 text-sm focus:outline-none focus:border-primary/60"
                                 autoFocus
                               />
                             </div>
                             <div className="flex gap-2">
-                              <Button size="sm" className="flex-1 text-xs" disabled={isPlacingBid || !bidAmount || parseFloat(bidAmount) <= 0} onClick={() => placeBid(parseFloat(bidAmount))}>
-                                {isPlacingBid ? 'Placing…' : 'Place Bid'}
+                              <Button size="sm" className="flex-1 text-xs" disabled={isPlacingBid || !bidAmount || parseFloat(bidAmount) <= (myBid?.amount ?? 0)} onClick={() => placeBid(parseFloat(bidAmount))}>
+                                {isPlacingBid ? (myBid ? 'Updating…' : 'Placing…') : (myBid ? 'Update Bid' : 'Place Bid')}
                               </Button>
                               <Button size="sm" variant="outline" className="border-border text-xs" onClick={() => { setShowBidForm(false); setBidAmount(''); }}>
                                 Cancel
@@ -536,14 +538,14 @@ export default function Dashboard() {
 
       <PaymentModal
         isOpen={purchasingSlot !== null}
-        onClose={() => setPurchasingSlot(null)}
+        onClose={() => { setPurchasingSlot(null); refetchHistory(); }}
         slotNumber={purchasingSlot || 1}
         pricePerDay={pricePerDay}
         slotDurationHours={slotDurationHours}
         hourlyPricingEnabled={hourlyPricingEnabled}
         pricePerHour={pricePerHour}
         minHours={minHours}
-        onSuccess={() => { refetchSlots(); }}
+        onSuccess={() => { refetchSlots(); refetchHistory(); }}
       />
 
       <ManageSlotModal
