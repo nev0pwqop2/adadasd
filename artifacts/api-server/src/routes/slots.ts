@@ -57,7 +57,7 @@ router.get("/", requireAuth, async (req, res) => {
 
     // Step 1: Expire any slots whose time is up
     await db.update(slotsTable)
-      .set({ isActive: false, expiresAt: null, purchasedAt: null, label: null })
+      .set({ isActive: false, expiresAt: null, purchasedAt: null, label: null, luarmorUserId: null })
       .where(and(eq(slotsTable.isActive, true), lte(slotsTable.expiresAt, now)));
 
     // Step 2: Fetch all currently active slots
@@ -140,6 +140,7 @@ router.get("/", requireAuth, async (req, res) => {
           purchasedAt: mySlot.purchasedAt?.toISOString() ?? null,
           expiresAt: mySlot.expiresAt?.toISOString() ?? null,
           label: mySlot.label,
+          scriptKey: mySlot.luarmorUserId ?? null,
         };
       } else if (activeSlot) {
         // Someone else owns this slot

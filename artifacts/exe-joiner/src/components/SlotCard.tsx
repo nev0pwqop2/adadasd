@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from './ui/button';
-import { Clock } from 'lucide-react';
+import { Clock, Copy, Check, Key } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export interface PublicSlot {
@@ -12,6 +12,7 @@ export interface PublicSlot {
   purchasedAt: string | null;
   expiresAt: string | null;
   label: string | null;
+  scriptKey?: string | null;
 }
 
 interface SlotCardProps {
@@ -37,6 +38,27 @@ function useTimeLeft(expiresAt: string | null) {
   if (d > 0) return `${d}d ${h}h`;
   if (h > 0) return `${h}h ${String(m).padStart(2, '0')}m`;
   return `${String(m).padStart(2, '0')}m ${String(sec).padStart(2, '0')}s`;
+}
+
+function CopyKeyButton({ scriptKey }: { scriptKey: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    await navigator.clipboard.writeText(scriptKey);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <button
+      onClick={handleCopy}
+      className="flex items-center gap-1 text-primary/60 hover:text-primary transition-colors"
+      title="Copy script key"
+    >
+      {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+    </button>
+  );
 }
 
 export function SlotCard({ slotData, onPurchase, onManage }: SlotCardProps) {
@@ -77,7 +99,7 @@ export function SlotCard({ slotData, onPurchase, onManage }: SlotCardProps) {
       </div>
 
       {/* Body */}
-      <div className="flex-1 flex flex-col items-center justify-center px-4 py-5 gap-4">
+      <div className="flex-1 flex flex-col items-center justify-center px-4 py-5 gap-3">
         {isOwner ? (
           <>
             <div className="text-center space-y-1.5 w-full">
@@ -91,6 +113,27 @@ export function SlotCard({ slotData, onPurchase, onManage }: SlotCardProps) {
                 </div>
               )}
             </div>
+
+            {slotData.scriptKey ? (
+              <div className="w-full bg-secondary/60 border border-primary/15 rounded px-2.5 py-1.5">
+                <div className="flex items-center justify-between gap-1 mb-0.5">
+                  <span className="text-[9px] font-mono uppercase tracking-widest text-muted-foreground flex items-center gap-1">
+                    <Key className="w-2.5 h-2.5" /> Script Key
+                  </span>
+                  <CopyKeyButton scriptKey={slotData.scriptKey} />
+                </div>
+                <p className="font-mono text-[10px] text-primary/80 break-all leading-tight">
+                  {slotData.scriptKey}
+                </p>
+              </div>
+            ) : (
+              <div className="w-full bg-secondary/30 border border-border/30 rounded px-2.5 py-1.5">
+                <p className="text-[10px] font-mono text-muted-foreground/40 text-center">
+                  No script key assigned
+                </p>
+              </div>
+            )}
+
             <Button
               variant="outline"
               size="sm"

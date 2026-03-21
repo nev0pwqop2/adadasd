@@ -25,6 +25,7 @@ export interface Slot {
   purchasedAt?: string | null;
   expiresAt?: string | null;
   label?: string | null;
+  scriptKey?: string | null;
 }
 
 export interface SlotsResponse {

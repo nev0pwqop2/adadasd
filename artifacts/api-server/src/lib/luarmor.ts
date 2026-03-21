@@ -1,12 +1,13 @@
-const LUARMOR_BASE = "https://luarmor.net/api/v3";
+const LUARMOR_BASE = "https://api.luarmor.net/v3";
 
-interface LuarmorUser {
-  id: string;
-  key: string;
+export interface LuarmorUser {
+  user_key: string;
   identifier: string;
-  note?: string;
-  discord_id?: string;
-  expiry?: string | null;
+  discord_id: string;
+  note: string;
+  auth_expire: number;
+  banned: number;
+  status: string;
 }
 
 function getConfig(): { apiKey: string; projectId: string } | null {
@@ -41,29 +42,54 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export async function createLuarmorUser(discordId: string, username: string): Promise<LuarmorUser> {
+export async function createLuarmorUser(
+  discordId: string,
+  username: string,
+  expiresAt?: Date
+): Promise<{ user_key: string }> {
   const config = getConfig();
   if (!config) throw new Error("Luarmor not configured");
-  return request<LuarmorUser>(`/projects/${config.projectId}/users`, {
+
+  const body: Record<string, unknown> = {
+    discord_id: discordId,
+    note: username,
+  };
+
+  if (expiresAt) {
+    body.auth_expire = Math.floor(expiresAt.getTime() / 1000);
+  }
+
+  return request<{ user_key: string }>(`/projects/${config.projectId}/users`, {
     method: "POST",
-    body: JSON.stringify({
-      identifier: discordId,
-      note: username,
-      discord_id: discordId,
-    }),
+    body: JSON.stringify(body),
   });
 }
 
-export async function deleteLuarmorUser(luarmorUserId: string): Promise<void> {
+export async function deleteLuarmorUser(userKey: string): Promise<void> {
   const config = getConfig();
   if (!config) throw new Error("Luarmor not configured");
-  await request(`/projects/${config.projectId}/users/${luarmorUserId}`, {
+  await request(`/projects/${config.projectId}/users?user_key=${encodeURIComponent(userKey)}`, {
     method: "DELETE",
+  });
+}
+
+export async function updateLuarmorUser(
+  userKey: string,
+  updates: { auth_expire?: number; note?: string; discord_id?: string }
+): Promise<void> {
+  const config = getConfig();
+  if (!config) throw new Error("Luarmor not configured");
+  await request(`/projects/${config.projectId}/users`, {
+    method: "PATCH",
+    body: JSON.stringify({ user_key: userKey, ...updates }),
   });
 }
 
 export async function getLuarmorUsers(): Promise<LuarmorUser[]> {
   const config = getConfig();
   if (!config) throw new Error("Luarmor not configured");
-  return request<LuarmorUser[]>(`/projects/${config.projectId}/users`);
+  const data = await request<{ success: boolean; users: LuarmorUser[] }>(
+    `/projects/${config.projectId}/users`
+  );
+  return data.users ?? [];
 }

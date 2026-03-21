@@ -100,11 +100,13 @@ async function activateSlot(userId: string, slotNumber: number, paymentId: strin
   const userRows = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
   const user = userRows[0];
 
+  const expiresAt = new Date(Date.now() + expiryMs);
+
   let luarmorUserId: string | null = null;
   if (isLuarmorConfigured() && user) {
     try {
-      const luarmorUser = await createLuarmorUser(user.discordId, user.username);
-      luarmorUserId = luarmorUser.id;
+      const luarmorUser = await createLuarmorUser(user.discordId, user.username, expiresAt);
+      luarmorUserId = luarmorUser.user_key;
     } catch {
       // Luarmor failure should not block slot activation
     }
@@ -117,7 +119,7 @@ async function activateSlot(userId: string, slotNumber: number, paymentId: strin
   const slotData = {
     isActive: true,
     purchasedAt: new Date(),
-    expiresAt: new Date(Date.now() + expiryMs),
+    expiresAt,
     ...(luarmorUserId ? { luarmorUserId } : {}),
   };
 

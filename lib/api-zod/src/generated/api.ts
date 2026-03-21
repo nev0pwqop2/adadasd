@@ -55,6 +55,7 @@ export const GetSlotsResponse = zod.object({
       purchasedAt: zod.string().nullish(),
       expiresAt: zod.string().nullish(),
       label: zod.string().nullish(),
+      scriptKey: zod.string().nullish(),
     }),
   ),
   totalSlots: zod.number(),

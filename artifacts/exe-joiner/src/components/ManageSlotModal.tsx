@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Settings, Loader2, Tag } from 'lucide-react';
+import { X, Settings, Loader2, Tag, Key, Copy, Check } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
 import { useToast } from '@/hooks/use-toast';
@@ -15,7 +15,15 @@ interface ManageSlotModalProps {
 export function ManageSlotModal({ slot, onClose, onSuccess }: ManageSlotModalProps) {
   const [label, setLabel] = useState(slot?.label || '');
   const [isSaving, setIsSaving] = useState(false);
+  const [keyCopied, setKeyCopied] = useState(false);
   const { toast } = useToast();
+
+  const handleCopyKey = async () => {
+    if (!slot?.scriptKey) return;
+    await navigator.clipboard.writeText(slot.scriptKey);
+    setKeyCopied(true);
+    setTimeout(() => setKeyCopied(false), 2000);
+  };
 
   if (!slot) return null;
 
@@ -105,6 +113,33 @@ export function ManageSlotModal({ slot, onClose, onSuccess }: ManageSlotModalPro
                   </div>
                 )}
               </div>
+
+              {slot.scriptKey ? (
+                <div className="space-y-2">
+                  <label className="text-xs font-mono uppercase text-muted-foreground flex items-center gap-2">
+                    <Key className="w-3 h-3" /> Script Key
+                  </label>
+                  <div className="bg-secondary/60 border border-primary/20 p-3 rounded flex items-start justify-between gap-2">
+                    <p className="font-mono text-xs text-primary/90 break-all leading-relaxed flex-1">
+                      {slot.scriptKey}
+                    </p>
+                    <button
+                      onClick={handleCopyKey}
+                      className="shrink-0 text-muted-foreground hover:text-primary transition-colors mt-0.5"
+                      title="Copy script key"
+                    >
+                      {keyCopied ? <Check className="w-3.5 h-3.5 text-primary" /> : <Copy className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                  <p className="text-[10px] font-mono text-muted-foreground/50">
+                    Add <code className="text-primary/60">script_key = "{slot.scriptKey}"</code> at the top of your script loader.
+                  </p>
+                </div>
+              ) : (
+                <div className="bg-secondary/30 border border-border/30 p-3 rounded text-center">
+                  <p className="text-xs font-mono text-muted-foreground/40">No script key — Luarmor not configured</p>
+                </div>
+              )}
 
               <div className="flex gap-3">
                 <Button variant="outline" className="flex-1" onClick={onClose} disabled={isSaving}>

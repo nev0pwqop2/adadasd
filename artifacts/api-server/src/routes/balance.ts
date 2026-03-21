@@ -307,7 +307,7 @@ router.post("/use", requireAuth, async (req: Request, res: Response) => {
     const userId = req.session.userId!;
 
     const userRows = await db
-      .select({ balance: usersTable.balance })
+      .select({ balance: usersTable.balance, discordId: usersTable.discordId, username: usersTable.username })
       .from(usersTable)
       .where(eq(usersTable.id, userId))
       .limit(1);
@@ -352,33 +352,34 @@ router.post("/use", requireAuth, async (req: Request, res: Response) => {
 
     const expiresAt = new Date(Date.now() + durationMs);
 
-    if (slotRows.length) {
-      await db.update(slotsTable).set({
-        userId,
-        isActive: true,
-        activatedAt: new Date(),
-        expiresAt,
-        paymentId,
-        updatedAt: new Date(),
-      }).where(eq(slotsTable.slotNumber, slotNumber));
-    } else {
-      await db.insert(slotsTable).values({
-        slotNumber,
-        userId,
-        isActive: true,
-        activatedAt: new Date(),
-        expiresAt,
-        paymentId,
-      });
-    }
-
-    // Luarmor
-    if (isLuarmorConfigured()) {
+    let luarmorUserId: string | null = null;
+    if (isLuarmorConfigured() && userRows[0]) {
       try {
-        await createLuarmorUser(userId, slotNumber, expiresAt);
+        const luarmorUser = await createLuarmorUser(
+          userRows[0].discordId,
+          userRows[0].username,
+          expiresAt
+        );
+        luarmorUserId = luarmorUser.user_key;
       } catch (e) {
         req.log.warn({ e }, "Luarmor user creation failed (balance payment)");
       }
+    }
+
+    const slotData = {
+      userId,
+      isActive: true,
+      purchasedAt: new Date(),
+      expiresAt,
+      ...(luarmorUserId ? { luarmorUserId } : {}),
+    };
+
+    if (slotRows.length) {
+      await db.update(slotsTable).set(slotData).where(
+        and(eq(slotsTable.userId, userId), eq(slotsTable.slotNumber, slotNumber))
+      );
+    } else {
+      await db.insert(slotsTable).values({ slotNumber, ...slotData });
     }
 
     // Discord webhook

@@ -347,6 +347,9 @@ components:
         label:
           type: string
           nullable: true
+        scriptKey:
+          type: string
+          nullable: true
       required:
         - id
         - slotNumber
