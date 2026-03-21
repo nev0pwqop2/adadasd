@@ -5,7 +5,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Save, Users, Settings, Shield, ShieldOff, Loader2, RotateCcw, AlertTriangle, Crown, Server, ChevronDown, ChevronUp, Search, Copy } from 'lucide-react';
+import { ArrowLeft, Save, Users, Settings, Shield, ShieldOff, Loader2, RotateCcw, AlertTriangle, Crown, Server, ChevronDown, ChevronUp, Search, Copy, FlaskConical, Check, Key } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 async function apiFetch<T>(path: string): Promise<T> {
@@ -98,6 +98,19 @@ export default function Admin() {
   const [serverSearch, setServerSearch] = useState('');
   const [copiedServerId, setCopiedServerId] = useState<string | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [testScriptResult, setTestScriptResult] = useState<{ scriptKey: string | null; script: string | null; expiresAt: string; luarmorConfigured: boolean } | null>(null);
+  const [testKeyCopied, setTestKeyCopied] = useState(false);
+  const [testScriptCopied, setTestScriptCopied] = useState(false);
+
+  const { mutate: generateTestScript, isPending: isGeneratingTestScript } = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`${import.meta.env.BASE_URL}api/admin/test-script`, { method: 'POST', credentials: 'include' });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.message || 'Failed'); }
+      return res.json() as Promise<{ scriptKey: string | null; script: string | null; expiresAt: string; luarmorConfigured: boolean }>;
+    },
+    onSuccess: (data) => { setTestScriptResult(data); },
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
 
   type ServerEntry = { id: string; name: string; icon: string | null; userCount: number; users: { username: string; discordId: string }[] };
   const { data: serversData, isLoading: isServersLoading } = useQuery({
@@ -657,6 +670,84 @@ export default function Admin() {
                       </div>
                     ))}
                   </div>
+              )}
+            </Card>
+          </motion.div>
+
+          {/* Developer Tools */}
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}>
+            <Card className="border-blue-500/30 bg-blue-500/5">
+              <div className="p-6 border-b border-blue-500/20 flex items-center gap-3">
+                <FlaskConical className="w-5 h-5 text-blue-400" />
+                <h2 className="font-display font-bold uppercase tracking-wider text-blue-400">Developer Tools</h2>
+              </div>
+              <div className="p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <p className="font-mono text-sm text-foreground font-bold">Test Script (1 Minute)</p>
+                  <p className="text-xs text-muted-foreground font-mono mt-1">Generates a real Luarmor key for yourself that expires in 60 seconds. Use it to verify expiry and loader delivery.</p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-blue-500/40 text-blue-400 hover:bg-blue-500/10 hover:border-blue-500 font-mono shrink-0"
+                  onClick={() => generateTestScript()}
+                  disabled={isGeneratingTestScript}
+                >
+                  {isGeneratingTestScript ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <FlaskConical className="w-4 h-4 mr-2" />}
+                  Generate Test Script
+                </Button>
+              </div>
+
+              {testScriptResult && (
+                <div className="px-6 pb-6 space-y-4">
+                  <div className="border border-blue-500/20 bg-background/60 p-4 space-y-4">
+                    {!testScriptResult.luarmorConfigured && (
+                      <p className="text-xs font-mono text-yellow-400 bg-yellow-500/10 border border-yellow-500/20 px-3 py-2">
+                        Luarmor is not configured — no real key was generated. Set LUARMOR_API_KEY and LUARMOR_PROJECT_ID.
+                      </p>
+                    )}
+                    <div>
+                      <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest mb-2 flex items-center gap-1"><Key className="w-3 h-3" /> Script Key</p>
+                      {testScriptResult.scriptKey ? (
+                        <div className="flex items-start gap-2 bg-secondary/60 border border-blue-500/20 p-3">
+                          <p className="font-mono text-xs text-blue-300 break-all flex-1">{testScriptResult.scriptKey}</p>
+                          <button
+                            onClick={async () => { await navigator.clipboard.writeText(testScriptResult.scriptKey!); setTestKeyCopied(true); setTimeout(() => setTestKeyCopied(false), 2000); }}
+                            className="shrink-0 text-muted-foreground hover:text-blue-400 transition-colors"
+                          >
+                            {testKeyCopied ? <Check className="w-3.5 h-3.5 text-blue-400" /> : <Copy className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
+                      ) : (
+                        <p className="text-xs font-mono text-muted-foreground/50">No key generated</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest mb-2 flex items-center gap-1"><Key className="w-3 h-3" /> Full Loader Script</p>
+                      {testScriptResult.script ? (
+                        <div className="flex items-start gap-2 bg-secondary/60 border border-blue-500/20 p-3">
+                          <pre className="font-mono text-xs text-blue-300 break-all flex-1 whitespace-pre-wrap">{testScriptResult.script}</pre>
+                          <button
+                            onClick={async () => { await navigator.clipboard.writeText(testScriptResult.script!); setTestScriptCopied(true); setTimeout(() => setTestScriptCopied(false), 2000); }}
+                            className="shrink-0 text-muted-foreground hover:text-blue-400 transition-colors"
+                          >
+                            {testScriptCopied ? <Check className="w-3.5 h-3.5 text-blue-400" /> : <Copy className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
+                      ) : (
+                        <p className="text-xs font-mono text-yellow-400/80">Key generated but LUARMOR_SCRIPT_URL is not set — set it in Render env vars to get the full loader.</p>
+                      )}
+                    </div>
+
+                    <p className="text-[10px] font-mono text-muted-foreground/50">
+                      Expires: {new Date(testScriptResult.expiresAt).toLocaleTimeString()} (1 minute from generation)
+                    </p>
+                  </div>
+                  <Button size="sm" variant="ghost" className="text-muted-foreground font-mono text-xs" onClick={() => setTestScriptResult(null)}>
+                    Dismiss
+                  </Button>
+                </div>
               )}
             </Card>
           </motion.div>

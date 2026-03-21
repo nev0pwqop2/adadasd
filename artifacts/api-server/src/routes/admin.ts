@@ -245,6 +245,56 @@ router.post("/users/:discordId/slots", async (req, res) => {
   }
 });
 
+router.post("/test-script", async (req, res) => {
+  try {
+    const adminUserId = req.session.userId!;
+    const adminUser = await db.select().from(usersTable).where(eq(usersTable.id, adminUserId)).limit(1);
+    if (!adminUser.length) {
+      res.status(404).json({ error: "not_found", message: "Admin user not found" });
+      return;
+    }
+
+    const expiresAt = new Date(Date.now() + 60 * 1000); // 1 minute
+
+    // Create or reuse a Luarmor key
+    let scriptKey: string | null = null;
+    if (isLuarmorConfigured()) {
+      try {
+        const lu = await createLuarmorUser(adminUser[0].discordId, adminUser[0].username, expiresAt);
+        scriptKey = lu.user_key;
+      } catch (e) {
+        req.log.warn({ e }, "Luarmor user creation failed for test script");
+      }
+    }
+
+    const scriptUrl = process.env.LUARMOR_SCRIPT_URL ?? null;
+    const script = scriptKey && scriptUrl
+      ? `script_key="${scriptKey}";\nloadstring(game:HttpGet("${scriptUrl}"))()`
+      : null;
+
+    // Upsert a test slot row (slot number 999 = test slot, not shown on dashboard)
+    const existing = await db.select().from(slotsTable)
+      .where(and(eq(slotsTable.userId, adminUserId), eq(slotsTable.slotNumber, 999)))
+      .limit(1);
+
+    if (existing.length) {
+      await db.update(slotsTable)
+        .set({ isActive: true, purchasedAt: new Date(), expiresAt, luarmorUserId: scriptKey, label: "TEST" })
+        .where(eq(slotsTable.id, existing[0].id));
+    } else {
+      await db.insert(slotsTable).values({
+        userId: adminUserId, slotNumber: 999, isActive: true,
+        purchasedAt: new Date(), expiresAt, luarmorUserId: scriptKey, label: "TEST",
+      });
+    }
+
+    res.json({ scriptKey, script, expiresAt: expiresAt.toISOString(), luarmorConfigured: isLuarmorConfigured() });
+  } catch (err) {
+    req.log.error({ err }, "Failed to generate test script");
+    res.status(500).json({ error: "server_error", message: "Failed to generate test script" });
+  }
+});
+
 router.post("/reset-all-slots", async (req, res) => {
   try {
     if (isLuarmorConfigured()) {

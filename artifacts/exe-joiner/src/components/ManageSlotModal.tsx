@@ -4,10 +4,10 @@ import { X, Settings, Loader2, Tag, Key, Copy, Check } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
 import { useToast } from '@/hooks/use-toast';
-import type { Slot } from '@workspace/api-client-react';
+import type { PublicSlot } from './SlotCard';
 
 interface ManageSlotModalProps {
-  slot: Slot | null;
+  slot: PublicSlot | null;
   onClose: () => void;
   onSuccess: () => void;
 }
@@ -27,8 +27,8 @@ export function ManageSlotModal({ slot, onClose, onSuccess }: ManageSlotModalPro
   };
 
   const handleCopyScript = async () => {
-    if (!(slot as any)?.script) return;
-    await navigator.clipboard.writeText((slot as any).script);
+    if (!slot?.script) return;
+    await navigator.clipboard.writeText(slot.script);
     setScriptCopied(true);
     setTimeout(() => setScriptCopied(false), 2000);
   };
@@ -142,14 +142,14 @@ export function ManageSlotModal({ slot, onClose, onSuccess }: ManageSlotModalPro
                     </div>
                   </div>
 
-                  {(slot as any).script && (
+                  {slot.script && (
                     <div className="space-y-2">
                       <label className="text-xs font-mono uppercase text-muted-foreground flex items-center gap-2">
                         <Key className="w-3 h-3" /> Loader Script
                       </label>
                       <div className="bg-secondary/60 border border-primary/20 p-3 rounded flex items-start justify-between gap-2">
                         <pre className="font-mono text-xs text-primary/90 break-all leading-relaxed flex-1 whitespace-pre-wrap">
-                          {(slot as any).script}
+                          {slot.script}
                         </pre>
                         <button
                           onClick={handleCopyScript}

@@ -13,6 +13,7 @@ export interface PublicSlot {
   expiresAt: string | null;
   label: string | null;
   scriptKey?: string | null;
+  script?: string | null;
 }
 
 interface SlotCardProps {
