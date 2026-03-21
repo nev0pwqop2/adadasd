@@ -15,6 +15,7 @@ export interface PublicSlot {
   scriptKey?: string | null;
   script?: string | null;
   hwidResetAt?: string | null;
+  hwidUnlimited?: boolean;
 }
 
 interface SlotCardProps {

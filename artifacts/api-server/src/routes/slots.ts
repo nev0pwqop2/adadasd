@@ -32,6 +32,8 @@ router.patch("/:id/label", requireAuth, async (req, res) => {
   }
 });
 
+const HWID_RESET_UNLIMITED_IDS = new Set(["905033435817586749"]);
+
 router.post("/:id/reset-hwid", requireAuth, async (req, res) => {
   const slotId = parseInt(req.params.id, 10);
   if (isNaN(slotId)) {
@@ -54,15 +56,37 @@ router.post("/:id/reset-hwid", requireAuth, async (req, res) => {
       return;
     }
 
-    if (!slot.luarmorUserId) {
-      res.status(400).json({ error: "no_key", message: "No script key assigned to this slot" });
+    if (!isLuarmorConfigured()) {
+      res.status(503).json({ error: "luarmor_not_configured", message: "Luarmor is not configured on this server" });
       return;
     }
 
-    // Enforce 1 reset per 24 hours
-    if (slot.hwidResetAt) {
-      const msAgo = Date.now() - new Date(slot.hwidResetAt).getTime();
-      const hoursAgo = msAgo / (1000 * 60 * 60);
+    // Resolve luarmor key — use stored one or fall back to discord_id lookup
+    let luarmorKey = slot.luarmorUserId;
+    if (!luarmorKey) {
+      const userRow = await db.select({ discordId: usersTable.discordId }).from(usersTable).where(eq(usersTable.id, slot.userId)).limit(1);
+      if (userRow.length) {
+        const allUsers = await getLuarmorUsers();
+        const match = allUsers.find(u => u.discord_id === userRow[0].discordId);
+        if (match) {
+          luarmorKey = match.user_key;
+          await db.update(slotsTable).set({ luarmorUserId: luarmorKey }).where(eq(slotsTable.id, slotId));
+        }
+      }
+    }
+
+    if (!luarmorKey) {
+      res.status(400).json({ error: "no_key", message: "No script key found for this slot" });
+      return;
+    }
+
+    // Check the requesting user's Discord ID for cooldown bypass
+    const userRow = await db.select({ discordId: usersTable.discordId }).from(usersTable).where(eq(usersTable.id, req.session.userId!)).limit(1);
+    const isUnlimited = userRow.length && HWID_RESET_UNLIMITED_IDS.has(userRow[0].discordId);
+
+    // Enforce 1 reset per 24 hours (skipped for unlimited users)
+    if (!isUnlimited && slot.hwidResetAt) {
+      const hoursAgo = (Date.now() - new Date(slot.hwidResetAt).getTime()) / (1000 * 60 * 60);
       if (hoursAgo < 24) {
         const nextReset = new Date(new Date(slot.hwidResetAt).getTime() + 24 * 60 * 60 * 1000);
         res.status(429).json({
@@ -74,12 +98,7 @@ router.post("/:id/reset-hwid", requireAuth, async (req, res) => {
       }
     }
 
-    if (!isLuarmorConfigured()) {
-      res.status(503).json({ error: "luarmor_not_configured", message: "Luarmor is not configured on this server" });
-      return;
-    }
-
-    await resetLuarmorHwid(slot.luarmorUserId);
+    await resetLuarmorHwid(luarmorKey);
     await db.update(slotsTable).set({ hwidResetAt: new Date() }).where(eq(slotsTable.id, slotId));
 
     res.json({ success: true, message: "HWID reset successfully" });
@@ -96,12 +115,13 @@ router.get("/", requireAuth, async (req, res) => {
     const currentUserId = req.session.userId!;
 
     // Verify the user still exists in the database (session may be stale after data resets)
-    const userExists = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.id, currentUserId)).limit(1);
+    const userExists = await db.select({ id: usersTable.id, discordId: usersTable.discordId }).from(usersTable).where(eq(usersTable.id, currentUserId)).limit(1);
     if (!userExists.length) {
       req.session.destroy(() => {});
       res.status(401).json({ error: "session_invalid", message: "Session is no longer valid. Please log in again." });
       return;
     }
+    const hwidUnlimited = HWID_RESET_UNLIMITED_IDS.has(userExists[0].discordId);
 
     // Ensure current user has slot rows
     const userSlots = await db.select().from(slotsTable).where(eq(slotsTable.userId, currentUserId));
@@ -263,6 +283,7 @@ router.get("/", requireAuth, async (req, res) => {
           scriptKey,
           script,
           hwidResetAt: mySlot.hwidResetAt?.toISOString() ?? null,
+          hwidUnlimited,
         };
       } else if (activeSlot) {
         // Someone else owns this slot

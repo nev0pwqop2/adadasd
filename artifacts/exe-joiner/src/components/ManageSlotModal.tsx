@@ -22,7 +22,7 @@ export function ManageSlotModal({ slot, onClose, onSuccess }: ManageSlotModalPro
 
   const hwidResetAt = slot?.hwidResetAt ? new Date(slot.hwidResetAt) : null;
   const nextHwidReset = hwidResetAt ? new Date(hwidResetAt.getTime() + 24 * 60 * 60 * 1000) : null;
-  const hwidOnCooldown = nextHwidReset ? nextHwidReset > new Date() : false;
+  const hwidOnCooldown = slot?.hwidUnlimited ? false : (nextHwidReset ? nextHwidReset > new Date() : false);
 
   const handleResetHwid = async () => {
     if (!slot?.id || hwidOnCooldown) return;
@@ -208,9 +208,9 @@ export function ManageSlotModal({ slot, onClose, onSuccess }: ManageSlotModalPro
                         <span>On cooldown — next reset available {nextHwidReset.toLocaleString()}</span>
                       </div>
                     ) : hwidResetAt ? (
-                      <p className="text-xs font-mono text-muted-foreground/60">Last reset: {hwidResetAt.toLocaleString()}</p>
+                      <p className="text-xs font-mono text-muted-foreground/60">Last reset: {hwidResetAt.toLocaleString()}{slot?.hwidUnlimited ? ' — unlimited resets' : ''}</p>
                     ) : (
-                      <p className="text-xs font-mono text-muted-foreground/60">No resets used today.</p>
+                      <p className="text-xs font-mono text-muted-foreground/60">{slot?.hwidUnlimited ? 'Unlimited resets enabled.' : 'No resets used today.'}</p>
                     )}
                     <Button
                       variant="outline"
