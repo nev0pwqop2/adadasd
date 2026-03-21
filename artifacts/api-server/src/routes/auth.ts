@@ -166,7 +166,12 @@ router.get("/discord/callback", async (req, res) => {
     req.session.discordId = discordUser.id;
     req.session.username = displayName;
 
-    res.redirect("/dashboard");
+    req.session.save((err) => {
+      if (err) {
+        req.log.error({ err }, "Session save failed after login");
+      }
+      res.redirect("/dashboard");
+    });
   } catch (err) {
     req.log.error({ err }, "Discord OAuth callback error");
     res.redirect("/?error=server_error");
