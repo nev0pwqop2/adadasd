@@ -32,7 +32,7 @@ export default function Dashboard() {
 
   const { data: slotsRes, refetch: refetchSlots, isLoading: isSlotsLoading } = useQuery({
     queryKey: ['slots'],
-    queryFn: () => apiFetch<{ slots: PublicSlot[]; totalSlots: number; pricePerDay: number }>('api/slots'),
+    queryFn: () => apiFetch<{ slots: PublicSlot[]; totalSlots: number; pricePerDay: number; slotDurationHours: number }>('api/slots'),
     enabled: !!user,
   });
 
@@ -87,6 +87,7 @@ export default function Dashboard() {
   const slots = slotsRes?.slots || [];
   const totalSlots = slotsRes?.totalSlots ?? 10;
   const pricePerDay = slotsRes?.pricePerDay ?? 20;
+  const slotDurationHours = slotsRes?.slotDurationHours ?? 24;
   const activeCount = slots.filter(s => s.isActive).length;
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
@@ -171,7 +172,7 @@ export default function Dashboard() {
                   <LayoutGrid className="text-primary" /> Array Configuration
                 </h2>
                 <p className="text-muted-foreground font-mono mt-1 text-sm">
-                  Manage your execution slots — <span className="text-primary">${pricePerDay.toFixed(2)}/day per slot</span>
+                  Manage your execution slots — <span className="text-primary">${pricePerDay.toFixed(2)} / {slotDurationHours}h per slot</span>
                 </p>
               </div>
               <motion.div
@@ -315,6 +316,7 @@ export default function Dashboard() {
         onClose={() => setPurchasingSlot(null)}
         slotNumber={purchasingSlot || 1}
         pricePerDay={pricePerDay}
+        slotDurationHours={slotDurationHours}
         onSuccess={() => { refetchSlots(); }}
       />
 

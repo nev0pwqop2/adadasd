@@ -18,12 +18,13 @@ interface PaymentModalProps {
   onClose: () => void;
   slotNumber: number;
   pricePerDay?: number;
+  slotDurationHours?: number;
   onSuccess: () => void;
 }
 
 type Tab = 'crypto' | 'stripe';
 
-export function PaymentModal({ isOpen, onClose, slotNumber, pricePerDay = 20, onSuccess }: PaymentModalProps) {
+export function PaymentModal({ isOpen, onClose, slotNumber, pricePerDay = 20, slotDurationHours = 24, onSuccess }: PaymentModalProps) {
   const [tab, setTab] = useState<Tab>('crypto');
   const [currency, setCurrency] = useState<CreateCryptoSessionRequestCurrency>('BTC');
   const { toast } = useToast();
@@ -134,7 +135,7 @@ export function PaymentModal({ isOpen, onClose, slotNumber, pricePerDay = 20, on
                   <div className="bg-secondary/50 p-4 border border-primary/20 text-center space-y-2">
                     <p className="text-muted-foreground font-mono text-sm uppercase">Total Amount</p>
                     <p className="text-4xl font-display font-bold text-primary glow-text">${pricePerDay.toFixed(2)}</p>
-                    <p className="text-xs text-muted-foreground font-mono">/ day</p>
+                    <p className="text-xs text-muted-foreground font-mono">/ {slotDurationHours}h</p>
                   </div>
                   <Button 
                     className="w-full h-14 text-lg" 
@@ -170,7 +171,7 @@ export function PaymentModal({ isOpen, onClose, slotNumber, pricePerDay = 20, on
                   
                   <div className="bg-secondary/50 p-4 border border-primary/20 text-center flex justify-between items-center">
                     <span className="text-muted-foreground font-mono text-sm uppercase">Price</span>
-                    <span className="text-xl font-display font-bold text-primary">${pricePerDay.toFixed(2)}</span>
+                    <span className="text-xl font-display font-bold text-primary">${pricePerDay.toFixed(2)} <span className="text-sm font-normal text-muted-foreground">/ {slotDurationHours}h</span></span>
                   </div>
 
                   <Button 

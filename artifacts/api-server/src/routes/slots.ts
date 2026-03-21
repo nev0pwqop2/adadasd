@@ -33,7 +33,7 @@ router.patch("/:id/label", requireAuth, async (req, res) => {
 
 router.get("/", requireAuth, async (req, res) => {
   try {
-    const { slotCount, pricePerDay } = await getSettings();
+    const { slotCount, pricePerDay, slotDurationHours } = await getSettings();
     const currentUserId = req.session.userId!;
 
     // Ensure current user has slot rows
@@ -116,7 +116,7 @@ router.get("/", requireAuth, async (req, res) => {
       }
     });
 
-    res.json({ slots, totalSlots: slotCount, pricePerDay });
+    res.json({ slots, totalSlots: slotCount, pricePerDay, slotDurationHours });
   } catch (err) {
     req.log.error({ err }, "Failed to fetch slots");
     res.status(500).json({ error: "server_error", message: "Failed to fetch slots" });
