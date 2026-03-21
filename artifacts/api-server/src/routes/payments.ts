@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import { db, slotsTable, paymentsTable, usersTable, preordersTable } from "@workspace/db";
-import { eq, and, ne } from "drizzle-orm";
+import { eq, and, ne, sql } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { getSettings } from "../lib/settings.js";
 import { isLuarmorConfigured, createLuarmorUser } from "../lib/luarmor.js";
@@ -260,11 +260,24 @@ router.post("/stripe-webhook", async (req: Request, res: Response) => {
     }
 
     if (event.type === "checkout.session.completed") {
-      const session = event.data.object as { metadata?: { userId?: string; slotNumber?: string; isPreorder?: string }; payment_status?: string };
-      const { userId, slotNumber, isPreorder } = session.metadata || {};
+      const session = event.data.object as { metadata?: { userId?: string; slotNumber?: string; isPreorder?: string; type?: string }; payment_status?: string };
+      const { userId, slotNumber, isPreorder, type } = session.metadata || {};
 
       if (userId && session.payment_status === "paid") {
-        if (isPreorder === "true") {
+        if (type === "balance_deposit") {
+          // Balance deposit — credit the user's balance
+          const pending = await db.select().from(paymentsTable)
+            .where(and(eq(paymentsTable.userId, userId), eq(paymentsTable.method, "balance-deposit-stripe"), eq(paymentsTable.status, "pending")))
+            .orderBy(paymentsTable.createdAt)
+            .limit(1);
+          if (pending.length) {
+            const depositAmount = parseFloat(pending[0].amount ?? "0");
+            await db.update(paymentsTable).set({ status: "completed", updatedAt: new Date() }).where(eq(paymentsTable.id, pending[0].id));
+            await db.update(usersTable)
+              .set({ balance: sql`${usersTable.balance} + ${depositAmount.toFixed(2)}::numeric`, updatedAt: new Date() })
+              .where(eq(usersTable.id, userId));
+          }
+        } else if (isPreorder === "true") {
           // Pre-order payment — mark payment completed + create preorder record
           const pending = await db.select().from(paymentsTable)
             .where(and(eq(paymentsTable.userId, userId), eq(paymentsTable.slotNumber, 0), eq(paymentsTable.status, "pending"), eq(paymentsTable.method, "preorder-stripe")))
@@ -417,7 +430,15 @@ router.post("/nowpayments-ipn", async (req: Request, res: Response) => {
 
     const payment = payments[0];
 
-    if (payment.method === "preorder-crypto") {
+    if (payment.method === "balance-deposit-crypto") {
+      // Balance deposit — credit user balance
+      const depositAmount = parseFloat(payment.amount ?? "0");
+      await db.update(paymentsTable).set({ status: "completed", updatedAt: new Date() }).where(eq(paymentsTable.id, payment.id));
+      await db.update(usersTable)
+        .set({ balance: sql`${usersTable.balance} + ${depositAmount.toFixed(2)}::numeric`, updatedAt: new Date() })
+        .where(eq(usersTable.id, payment.userId));
+      req.log.info({ paymentId: payment.id, amount: depositAmount }, "NOWPayments IPN: balance credited");
+    } else if (payment.method === "preorder-crypto") {
       // Pre-order: mark payment completed + create preorder record
       await db.update(paymentsTable).set({ status: "completed", updatedAt: new Date() }).where(eq(paymentsTable.id, payment.id));
       await db.insert(preordersTable).values({
@@ -448,6 +469,8 @@ router.delete("/cancel-pending", requireAuth, async (req: Request, res: Response
         eq(paymentsTable.status, "pending"),
         ne(paymentsTable.method, "preorder-stripe"),
         ne(paymentsTable.method, "preorder-crypto"),
+        ne(paymentsTable.method, "balance-deposit-stripe"),
+        ne(paymentsTable.method, "balance-deposit-crypto"),
       )
     );
     res.json({ success: true });

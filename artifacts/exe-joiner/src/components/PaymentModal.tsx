@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { QRCodeSVG } from 'qrcode.react';
-import { X, CreditCard, Bitcoin, Loader2, CheckCircle, Copy, Plus, Minus } from 'lucide-react';
+import { X, CreditCard, Bitcoin, Loader2, CheckCircle, Copy, Plus, Minus, Wallet } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
 import { cn } from '@/lib/utils';
@@ -22,10 +22,11 @@ interface PaymentModalProps {
   hourlyPricingEnabled?: boolean;
   pricePerHour?: number;
   minHours?: number;
+  userBalance?: number;
   onSuccess: () => void;
 }
 
-type Tab = 'crypto' | 'stripe';
+type Tab = 'crypto' | 'stripe' | 'balance';
 
 export function PaymentModal({
   isOpen,
@@ -36,11 +37,13 @@ export function PaymentModal({
   hourlyPricingEnabled = false,
   pricePerHour = 5,
   minHours = 2,
+  userBalance = 0,
   onSuccess,
 }: PaymentModalProps) {
   const [tab, setTab] = useState<Tab>('crypto');
   const [currency, setCurrency] = useState<CreateCryptoSessionRequestCurrency>('BTC');
   const [selectedHours, setSelectedHours] = useState<number>(minHours);
+  const [isBalanceLoading, setIsBalanceLoading] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -67,6 +70,31 @@ export function PaymentModal({
     resetCrypto();
     onClose();
   };
+
+  const handleBalancePay = async () => {
+    setIsBalanceLoading(true);
+    try {
+      const body: any = { slotNumber };
+      if (hourlyPricingEnabled) body.hours = selectedHours;
+      const res = await fetch(`${import.meta.env.BASE_URL}api/balance/use`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Payment failed');
+      toast({ title: "Slot Activated!", description: `Slot #${slotNumber} is now yours. Remaining balance: $${parseFloat(data.balance).toFixed(2)}`, className: "bg-primary text-primary-foreground border-none" });
+      onSuccess();
+      handleClose();
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } finally {
+      setIsBalanceLoading(false);
+    }
+  };
+
+  const canPayWithBalance = userBalance >= totalPrice;
 
   const handleStripePay = () => {
     const data: any = { slotNumber };
@@ -198,6 +226,25 @@ export function PaymentModal({
             </div>
 
             <div className="p-6">
+              {canPayWithBalance && (
+                <div className="mb-4 p-3.5 rounded-xl border border-primary/30 bg-primary/5 flex items-center gap-3">
+                  <Wallet className="w-4 h-4 text-primary shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-mono text-xs text-muted-foreground">Your balance</p>
+                    <p className="font-mono text-sm font-bold text-primary">${userBalance.toFixed(2)}</p>
+                  </div>
+                  <button
+                    onClick={() => setTab('balance')}
+                    className={cn(
+                      "px-3 py-1.5 rounded-lg font-mono text-xs font-semibold transition-all shrink-0",
+                      tab === 'balance' ? "bg-primary text-primary-foreground" : "border border-primary/30 text-primary hover:bg-primary/10"
+                    )}
+                  >
+                    Use Balance
+                  </button>
+                </div>
+              )}
+
               <div className="flex p-1 bg-secondary rounded-none mb-6 chamfered">
                 <button
                   onClick={() => setTab('crypto')}
@@ -320,6 +367,34 @@ export function PaymentModal({
                   <p className="text-center text-xs text-muted-foreground font-mono">
                     Click verify after sending the exact amount. <br/>Session expires in 15 minutes.
                   </p>
+                </div>
+              )}
+
+              {tab === 'balance' && (
+                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
+                  {hourlyPricingEnabled && <HourSelector />}
+                  <div className="bg-secondary/30 p-4 rounded-xl border border-primary/20">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="font-mono text-xs text-muted-foreground uppercase">Available Balance</span>
+                      <span className="font-mono text-sm font-bold text-primary">${userBalance.toFixed(2)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono text-xs text-muted-foreground uppercase">Slot Cost</span>
+                      <span className="font-mono text-sm font-bold text-foreground">${totalPrice.toFixed(2)}</span>
+                    </div>
+                    <div className="h-px bg-border my-3" />
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono text-xs text-muted-foreground uppercase">After Purchase</span>
+                      <span className="font-mono text-sm font-bold text-primary">${Math.max(0, userBalance - totalPrice).toFixed(2)}</span>
+                    </div>
+                  </div>
+                  <Button
+                    className="w-full h-14 text-base"
+                    onClick={handleBalancePay}
+                    disabled={isBalanceLoading || !canPayWithBalance}
+                  >
+                    {isBalanceLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Wallet className="w-4 h-4 mr-2" /> Pay with Balance</>}
+                  </Button>
                 </div>
               )}
             </div>

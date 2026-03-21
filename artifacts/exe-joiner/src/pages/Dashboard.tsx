@@ -1,12 +1,13 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useLocation } from 'wouter';
-import { LogOut, LayoutGrid, Settings, Trophy, History, Gavel, Clock, TrendingUp, X, Crown, CalendarClock } from 'lucide-react';
+import { LogOut, LayoutGrid, Settings, Trophy, History, Gavel, Clock, TrendingUp, X, Crown, CalendarClock, Wallet, Plus } from 'lucide-react';
 import { useGetMe, useLogout } from '@workspace/api-client-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { SlotCard, type PublicSlot } from '@/components/SlotCard';
 import { PaymentModal } from '@/components/PaymentModal';
 import { ManageSlotModal } from '@/components/ManageSlotModal';
 import { PreorderModal } from '@/components/PreorderModal';
+import { DepositModal } from '@/components/DepositModal';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { motion } from 'framer-motion';
@@ -52,6 +53,7 @@ export default function Dashboard() {
   const [bidAmount, setBidAmount] = useState('');
   const [showBidForm, setShowBidForm] = useState(false);
   const [showPreorderModal, setShowPreorderModal] = useState(false);
+  const [showDepositModal, setShowDepositModal] = useState(false);
 
   const { data: slotsRes, refetch: refetchSlots, isLoading: isSlotsLoading } = useQuery({
     queryKey: ['slots'],
@@ -124,6 +126,14 @@ export default function Dashboard() {
     enabled: !!user && activeTab === 'deposit',
   });
 
+  const { data: balanceRes, refetch: refetchBalance } = useQuery({
+    queryKey: ['balance'],
+    queryFn: () => apiFetch<{ balance: string; balanceNum: number }>('api/balance'),
+    enabled: !!user,
+    refetchInterval: 10000,
+    refetchIntervalInBackground: false,
+  });
+
   const { mutate: logoutMutate } = useLogout();
 
   // Must be called before early returns (Rules of Hooks)
@@ -145,6 +155,11 @@ export default function Dashboard() {
     } else if (params.get('preorder') === 'cancelled') {
       toast({ title: "Pre-order Cancelled", description: "No charge was made.", variant: "destructive" });
       window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (params.get('deposit') === 'success') {
+      toast({ title: "Funds Added!", description: "Your balance has been credited.", className: "bg-primary text-primary-foreground border-none" });
+      window.history.replaceState({}, document.title, window.location.pathname);
+      refetchBalance();
+      setActiveTab('deposit');
     }
   }, [toast, refetchSlots]);
 
@@ -183,6 +198,7 @@ export default function Dashboard() {
   const myBid = bidsRes?.myBid ?? null;
   const preorderQueue = preordersRes?.queue ?? [];
   const myPreorder = preordersRes?.myPreorder ?? null;
+  const userBalance = balanceRes?.balanceNum ?? 0;
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'slots', label: 'Slots', icon: <LayoutGrid className="w-4 h-4" /> },
@@ -584,58 +600,94 @@ export default function Dashboard() {
 
           {/* DEPOSIT TAB */}
           {activeTab === 'deposit' && (
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-              <div className="mb-6 flex items-center justify-between flex-wrap gap-4">
-                <div>
-                  <h2 className="text-xl font-display font-bold text-foreground flex items-center gap-2.5">
-                    <History className="w-5 h-5 text-primary" /> Deposit History
-                  </h2>
-                  <p className="text-muted-foreground font-mono mt-1 text-sm">Your transaction history</p>
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+              {/* Balance card */}
+              <div className="relative overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent p-6">
+                <div className="flex items-center justify-between gap-4 flex-wrap">
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Wallet className="w-4 h-4 text-primary" />
+                      <p className="font-mono text-xs text-muted-foreground uppercase tracking-wider">Account Balance</p>
+                    </div>
+                    <p className="font-display font-bold text-4xl text-foreground">
+                      <span className="text-primary">$</span>{userBalance.toFixed(2)}
+                    </p>
+                    <p className="font-mono text-xs text-muted-foreground mt-1.5">Available to spend on slots</p>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Button onClick={() => setShowDepositModal(true)} className="font-mono text-xs uppercase tracking-wider">
+                      <Plus className="w-3.5 h-3.5 mr-1.5" /> Add Funds
+                    </Button>
+                    {userBalance >= pricePerDay && (
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          const availableSlot = slots.find(s => !s.isActive);
+                          if (availableSlot) setPurchasingSlot(availableSlot.slotNumber);
+                          else toast({ title: "No slots available", description: "All slots are currently occupied.", variant: "destructive" });
+                        }}
+                        className="font-mono text-xs uppercase tracking-wider"
+                      >
+                        Buy a Slot
+                      </Button>
+                    )}
+                  </div>
                 </div>
-                <Button
-                  onClick={() => {
-                    const availableSlot = slots.find(s => !s.isActive);
-                    if (availableSlot) setPurchasingSlot(availableSlot.slotNumber);
-                    else toast({ title: "No slots available", description: "All slots are currently occupied.", variant: "destructive" });
-                  }}
-                  className="font-mono text-xs uppercase tracking-wider"
-                >
-                  + Buy a Slot
-                </Button>
+                <div className="absolute -right-8 -bottom-8 w-32 h-32 bg-primary/5 rounded-full blur-2xl pointer-events-none" />
               </div>
 
-              {isHistoryLoading ? (
-                <div className="flex justify-center py-16">
-                  <div className="w-10 h-10 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                </div>
-              ) : !historyRes?.payments.length ? (
-                <div className="text-center py-16 font-mono text-muted-foreground text-sm">No transactions yet.</div>
-              ) : (
-                <div className="space-y-2">
-                  {historyRes.payments.map(p => (
-                    <div key={p.id} className="flex items-center gap-4 p-4 border border-border bg-card/30 rounded-xl">
-                      <div className={`px-2.5 py-1 text-[10px] font-mono font-bold rounded-full ${
-                        p.status === 'completed' ? 'bg-primary/15 text-primary' :
-                        p.status === 'pending' ? 'bg-yellow-500/15 text-yellow-400' :
-                        'bg-red-500/15 text-red-400'
-                      }`}>
-                        {p.status.toUpperCase()}
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-mono text-sm text-foreground">Slot #{p.slotNumber}</p>
-                        <p className="font-mono text-xs text-muted-foreground">
-                          {p.method === 'stripe' ? 'Card' : `Crypto (${p.currency ?? '?'})`} · {format(new Date(p.createdAt), 'MMM dd, yyyy HH:mm')}
-                        </p>
-                      </div>
-                      {p.amount && (
-                        <p className="font-mono text-sm font-bold text-primary">
-                          {p.method === 'stripe' ? `$${parseFloat(p.amount).toFixed(2)}` : `${p.amount} ${p.currency ?? ''}`}
-                        </p>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
+              {/* Transaction history */}
+              <div>
+                <h2 className="text-base font-display font-bold text-foreground flex items-center gap-2 mb-4">
+                  <History className="w-4 h-4 text-primary" /> Transaction History
+                </h2>
+
+                {isHistoryLoading ? (
+                  <div className="flex justify-center py-16">
+                    <div className="w-10 h-10 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                  </div>
+                ) : !historyRes?.payments.length ? (
+                  <div className="text-center py-16 font-mono text-muted-foreground text-sm">No transactions yet.</div>
+                ) : (
+                  <div className="space-y-2">
+                    {historyRes.payments.map(p => {
+                      const isDeposit = p.method === 'balance-deposit-stripe' || p.method === 'balance-deposit-crypto';
+                      const isBalancePay = p.method === 'balance';
+                      const methodLabel = p.method === 'stripe' ? 'Card'
+                        : p.method === 'balance' ? 'Balance'
+                        : p.method === 'balance-deposit-stripe' ? 'Balance Deposit (Card)'
+                        : p.method === 'balance-deposit-crypto' ? `Balance Deposit (Crypto${p.currency ? ` · ${p.currency}` : ''})`
+                        : p.method === 'preorder-stripe' ? 'Pre-order (Card)'
+                        : p.method === 'preorder-crypto' ? `Pre-order (Crypto${p.currency ? ` · ${p.currency}` : ''})`
+                        : `Crypto${p.currency ? ` · ${p.currency}` : ''}`;
+                      return (
+                        <div key={p.id} className="flex items-center gap-4 p-4 border border-border bg-card/30 rounded-xl">
+                          <div className={`px-2.5 py-1 text-[10px] font-mono font-bold rounded-full ${
+                            p.status === 'completed' ? 'bg-primary/15 text-primary' :
+                            p.status === 'pending' ? 'bg-yellow-500/15 text-yellow-400' :
+                            'bg-red-500/15 text-red-400'
+                          }`}>
+                            {p.status.toUpperCase()}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-mono text-sm text-foreground">
+                              {isDeposit ? 'Balance Deposit' : isBalancePay ? `Slot #${p.slotNumber}` : `Slot #${p.slotNumber}`}
+                            </p>
+                            <p className="font-mono text-xs text-muted-foreground truncate">
+                              {methodLabel} · {format(new Date(p.createdAt), 'MMM dd, yyyy HH:mm')}
+                            </p>
+                          </div>
+                          {p.amount && (
+                            <p className={`font-mono text-sm font-bold shrink-0 ${isDeposit ? 'text-green-400' : 'text-primary'}`}>
+                              {isDeposit ? '+' : ''}{p.method === 'crypto' ? `${p.amount} ${p.currency ?? ''}` : `$${parseFloat(p.amount).toFixed(2)}`}
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </motion.div>
           )}
         </main>
@@ -656,7 +708,14 @@ export default function Dashboard() {
         hourlyPricingEnabled={hourlyPricingEnabled}
         pricePerHour={pricePerHour}
         minHours={minHours}
-        onSuccess={() => { refetchSlots(); refetchHistory(); }}
+        userBalance={userBalance}
+        onSuccess={() => { refetchSlots(); refetchHistory(); refetchBalance(); }}
+      />
+
+      <DepositModal
+        isOpen={showDepositModal}
+        onClose={() => setShowDepositModal(false)}
+        onSuccess={() => { refetchBalance(); refetchHistory(); }}
       />
 
       <ManageSlotModal

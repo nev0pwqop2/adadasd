@@ -19,12 +19,20 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 ## Exe Joiner Features
 
 - **Discord OAuth2 login** with CSRF state verification
-- **10-slot dashboard** per user, yellow cyberpunk theme
-- **Payments**: Stripe card + Crypto (BTC, ETH, LTC, USDT, USDC, SOL) with QR codes
+- **10-slot dashboard** per user, dark amber-gold theme
+- **Payments**: Stripe card + Crypto (BTC, LTC, USDT TRC20) with QR codes
+- **Account Balance / Wallet**: Users can deposit funds (Stripe or Crypto) and use their balance to buy slots instantly
+  - GET/POST `/api/balance` — balance routes
+  - Balance stored as `numeric(12,2)` on `usersTable`
+  - Stripe webhook and NOWPayments IPN auto-credit balance
+  - `cancel-pending` excludes balance deposit payments
 - **Admin panel** at `/admin` — only Discord IDs `905033435817586749` and `1279091875378368595`
   - Edit slot count (global) and price per day
   - View all users, manually set active slot counts
-- **Settings table** in DB: `slotCount` (default 10), `pricePerDay` (default $20.00)
+- **Pre-orders**: Queue for next available slot, paid via Stripe or Crypto
+- **Leaderboard**: Top depositors by total spend
+- **Bidding**: Bid queue when all slots are full
+- **Settings table** in DB: `slotCount=10`, `pricePerDay=20.00`, `slotDurationHours=24`, `hourlyPricingEnabled=false`, `pricePerHour=5.00`, `minHours=2`
 - Pricing dynamically used for Stripe unit amount and crypto equivalents
 
 ## Structure
