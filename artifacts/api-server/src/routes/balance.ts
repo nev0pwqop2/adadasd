@@ -296,7 +296,18 @@ router.post("/use", requireAuth, async (req: Request, res: Response) => {
 
     // Discord webhook
     try {
-      await sendPaymentWebhook(userId, slotNumber, chargeAmount, "balance", purchasedHours);
+      const webhookUserRows = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+      if (webhookUserRows.length) {
+        await sendPaymentWebhook({
+          username: webhookUserRows[0].username,
+          discordId: webhookUserRows[0].discordId,
+          method: "balance",
+          currency: "USD",
+          amount: chargeAmount.toFixed(2),
+          slotNumber,
+          purchaseType: "slot",
+        });
+      }
     } catch {}
 
     res.json({ success: true, slotNumber, expiresAt: expiresAt.toISOString(), balance: (currentBalance - chargeAmount).toFixed(2) });
