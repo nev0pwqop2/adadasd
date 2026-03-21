@@ -1,0 +1,87 @@
+Can you make like tabs?
+ [USSB], 
+⛧ aʀᴄᴛɪᴄ𝖽𝖗𝖊𝖆𝖒 ⛧ [SAB],  — Yesterday at 23:23
+Tabs for what and yes I can
+Elite [USSB],  — Yesterday at 23:23
+Like slots tab and leaderboard tab deposit tab
+ [USSB], 
+⛧ aʀᴄᴛɪᴄ𝖽𝖗𝖊𝖆𝖒 ⛧ [SAB],  — Yesterday at 23:23
+Leaderboard by most spender or?
+Elite [USSB],  — Yesterday at 23:23
+Leaderboard to see who deposited most and hours bought
+ [USSB], 
+⛧ aʀᴄᴛɪᴄ𝖽𝖗𝖊𝖆𝖒 ⛧ [SAB],  — Yesterday at 23:23
+Deposit for most money spent?
+ [USSB], 
+⛧ aʀᴄᴛɪᴄ𝖽𝖗𝖊𝖆𝖒 ⛧ [SAB],  — Yesterday at 23:23
+Btw only option for a day or to add for half day also
+ [SAB], 
+Elite [USSB],  — Yesterday at 23:23
+Like deposit and have balance which u can use to buy slot
+ [SAB], 
+Elite [USSB],  — Yesterday at 23:24
+Just keep as day rn
+ [USSB], 
+⛧ aʀᴄᴛɪᴄ𝖽𝖗𝖊𝖆𝖒 ⛧ [SAB],  — Yesterday at 23:24
+Sure
+So add tabs, leaderboard for most spender, most hours
+and a slots tab
+Elite [USSB],  — Yesterday at 23:24
+U can make thing in admin panel like slots: so I can edit and slot time: so I can edit time of all slots to be so like rn example 1 day
+?
+Yh
+ [USSB], 
+⛧ aʀᴄᴛɪᴄ𝖽𝖗𝖊𝖆𝖒 ⛧ [SAB],  — Yesterday at 23:25
+Of course, btw the user management is if someone like did something you give him like one slot for day
+There is an option active slots
+ [SAB], 
+⛧ aʀᴄᴛɪᴄ𝖽𝖗𝖊𝖆𝖒 ⛧ [SAB],  — Yesterday at 23:25
+You can also remove slots from them
+ [USSB], 
+⛧ aʀᴄᴛɪᴄ𝖽𝖗𝖊𝖆𝖒 ⛧ [SAB],  — Yesterday at 23:25
+One slot at a person?
+ [SAB], 
+Elite [USSB],  — Yesterday at 23:26
+I mean like I’m admin panel I can edit the slots how many there will be today , and also how long each slot will be like I can edit price from
+Example
+To
+5$/h and then I can change it to 50$ a day or something
+And that 1 person can’t book all slots
+1 slot max per id
+ [USSB], 
+⛧ aʀᴄᴛɪᴄ𝖽𝖗𝖊𝖆𝖒 ⛧ [SAB],  — Yesterday at 23:26
+You can change price for day and how much slots
+ [USSB], 
+⛧ aʀᴄᴛɪᴄ𝖽𝖗𝖊𝖆𝖒 ⛧ [SAB],  — Yesterday at 23:26
+K
+ [SAB], 
+Elite [USSB],  — Yesterday at 23:27
+Yh
+⛧ aʀᴄᴛɪᴄ𝖽𝖗𝖊𝖆𝖒 ⛧ [SAB],  — Yesterday at 23:28
+Bet, Imma add those things tomorrow
+Gotta go now cya!
+Elite [USSB],  — Yesterday at 23:29
+Cya
+Also lmk if u need help to make any lua scripts or want payment because u helping me
+ [USSB], 
+⛧ aʀᴄᴛɪᴄ𝖽𝖗𝖊𝖆𝖒 ⛧ [SAB],  — Yesterday at 23:29
+Nahh dw
+I would never want a friend to pay me
+ [USSB], 
+⛧ aʀᴄᴛɪᴄ𝖽𝖗𝖊𝖆𝖒 ⛧ [SAB],  — Yesterday at 23:30
+Btw, if you want I can be something like a site manager or smt
+ [SAB], 
+Elite [USSB],  — Yesterday at 23:30
+Yh if u wanna sure cuz I don’t really know what to do if someone ddos site or attack it
+ [USSB], 
+⛧ aʀᴄᴛɪᴄ𝖽𝖗𝖊𝖆𝖒 ⛧ [SAB],  — Yesterday at 23:31
+If they DDOS it I will blacklist their IP address, even if it's a proxy, then shutdown all systems, and figure out the problem
+Elite [USSB],  — Yesterday at 23:31
+Ooh ok
+⛧ aʀᴄᴛɪᴄ𝖽𝖗𝖊𝖆𝖒 ⛧ [SAB],  — Yesterday at 23:31
+I may also need to add some discord bot to shut down the whole site
+But that later
+Elite [USSB],  — Yesterday at 23:32
+Could u also make like transaction thing so when someone pay it get sent to discord we hook and save like payment detail there
+Like ltc: 5$ discord id: 910029 Type: deposit
+ [USSB], 
