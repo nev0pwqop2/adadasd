@@ -177,57 +177,58 @@ export default function Dashboard() {
         style={{ backgroundImage: `url(${import.meta.env.BASE_URL}images/cyber-bg.png)` }} />
 
       <div className="relative z-10 flex flex-col min-h-screen">
-        <header className="border-b border-primary/20 bg-card/80 backdrop-blur-md sticky top-0 z-40">
-          <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="w-8 h-8 bg-primary text-primary-foreground flex items-center justify-center font-display font-bold chamfered">EX</div>
-              <h1 className="font-display font-bold uppercase tracking-widest text-primary hidden sm:block glow-text">Dashboard</h1>
+        <header className="border-b border-border bg-card/90 backdrop-blur-md sticky top-0 z-40">
+          <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3 shrink-0">
+              <img src={`${import.meta.env.BASE_URL}exe-logo.png`} alt="EXE" className="w-7 h-7 drop-shadow-[0_0_8px_rgba(218,165,32,0.4)]" />
+              <span className="font-display font-bold text-foreground tracking-tight hidden sm:block">Exe Joiner</span>
             </div>
-            <div className="flex items-center gap-6">
-              <div className="hidden md:flex flex-col items-end">
-                <span className="text-xs font-mono text-muted-foreground uppercase">System Status</span>
-                <span className="text-sm font-mono text-primary flex items-center gap-2">
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
-                  </span>
-                  {activeCount} / {totalSlots} NODES ONLINE
+
+            <div className="flex items-center gap-3 ml-auto">
+              <div className="hidden sm:flex items-center gap-2 text-xs font-mono text-muted-foreground">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-60" />
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-primary" />
                 </span>
+                {activeCount}/{totalSlots} active
               </div>
-              <div className="h-8 w-px bg-primary/20 hidden sm:block" />
-              <div className="flex items-center gap-3">
+
+              <div className="h-5 w-px bg-border hidden sm:block" />
+
+              <div className="flex items-center gap-2">
                 {user.avatar ? (
-                  <img src={`https://cdn.discordapp.com/avatars/${user.discordId}/${user.avatar}.png`} alt="Avatar" className="w-8 h-8 rounded-none border border-primary/50 chamfered" />
+                  <img src={`https://cdn.discordapp.com/avatars/${user.discordId}/${user.avatar}.png`} alt="Avatar" className="w-7 h-7 rounded-full border border-border" />
                 ) : (
-                  <div className="w-8 h-8 bg-secondary border border-primary/50 chamfered" />
+                  <div className="w-7 h-7 rounded-full bg-secondary border border-border" />
                 )}
-                <span className="font-mono text-sm hidden sm:block text-foreground">{user.username}</span>
+                <span className="font-mono text-sm hidden md:block text-foreground">{user.username}</span>
               </div>
+
               {user.isAdmin && (
-                <Button variant="outline" size="sm" onClick={() => setLocation('/admin')} className="border-yellow-500/40 text-yellow-400 hover:text-yellow-300">
-                  <Settings className="w-4 h-4 sm:mr-2" />
-                  <span className="hidden sm:inline">ADMIN</span>
+                <Button variant="outline" size="sm" onClick={() => setLocation('/admin')} className="border-primary/30 text-primary hover:bg-primary/10 text-xs h-8">
+                  <Settings className="w-3.5 h-3.5 sm:mr-1.5" />
+                  <span className="hidden sm:inline">Admin</span>
                 </Button>
               )}
-              <Button variant="outline" size="sm" onClick={handleLogout} className="border-primary/20 text-muted-foreground hover:text-primary">
-                <LogOut className="w-4 h-4 sm:mr-2" />
-                <span className="hidden sm:inline">DISCONNECT</span>
+              <Button variant="outline" size="sm" onClick={handleLogout} className="border-border text-muted-foreground hover:text-foreground text-xs h-8">
+                <LogOut className="w-3.5 h-3.5 sm:mr-1.5" />
+                <span className="hidden sm:inline">Logout</span>
               </Button>
             </div>
           </div>
         </header>
 
         {/* Tab bar */}
-        <div className="border-b border-primary/10 bg-card/50 backdrop-blur-sm sticky top-16 z-30">
+        <div className="border-b border-border bg-card/60 backdrop-blur-sm sticky top-14 z-30">
           <div className="max-w-7xl mx-auto px-4 flex gap-0">
             {tabs.map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-6 py-3 font-mono text-xs uppercase tracking-widest transition-all border-b-2 ${
+                className={`flex items-center gap-2 px-5 py-3 font-mono text-xs tracking-wide transition-all border-b-2 ${
                   activeTab === tab.id
-                    ? 'border-primary text-primary bg-primary/5'
-                    : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-primary/5'
+                    ? 'border-primary text-primary'
+                    : 'border-transparent text-muted-foreground hover:text-foreground'
                 }`}
               >
                 {tab.icon}
@@ -242,23 +243,15 @@ export default function Dashboard() {
           {/* SLOTS TAB */}
           {activeTab === 'slots' && (
             <>
-              <div className="mb-8">
-                <h2 className="text-2xl font-display font-bold uppercase text-foreground flex items-center gap-3">
-                  <LayoutGrid className="text-primary" /> Array Configuration
+              <div className="mb-6">
+                <h2 className="text-xl font-display font-bold text-foreground flex items-center gap-2.5">
+                  <LayoutGrid className="w-5 h-5 text-primary" /> Slots
                 </h2>
                 <p className="text-muted-foreground font-mono mt-1 text-sm">
                   {hourlyPricingEnabled ? (
-                    <>
-                      Manage your execution slots — <span className="text-primary">${pricePerHour.toFixed(2)}/hr</span>
-                      <span className="text-muted-foreground"> · min {minHours}h purchase per slot</span>
-                    </>
+                    <><span className="text-primary">${pricePerHour.toFixed(2)}/hr</span> · min {minHours}h per slot</>
                   ) : (
-                    <>
-                      Manage your execution slots — <span className="text-primary">${pricePerDay.toFixed(2)} / {slotDurationHours}h</span>
-                      <span className="text-muted-foreground"> · </span>
-                      <span className="text-primary/70">${(pricePerDay / slotDurationHours).toFixed(2)}/hr</span>
-                      <span className="text-muted-foreground"> per slot</span>
-                    </>
+                    <><span className="text-primary">${pricePerDay.toFixed(2)}</span> / {slotDurationHours}h per slot</>
                   )}
                 </p>
               </div>
@@ -286,34 +279,33 @@ export default function Dashboard() {
                   transition={{ delay: 0.2 }}
                   className="mt-10"
                 >
-                  <div className="border border-primary/30 bg-primary/5 chamfered overflow-hidden">
+                  <div className="border border-primary/20 bg-primary/5 rounded-xl overflow-hidden">
                     {/* Header */}
-                    <div className="border-b border-primary/20 p-5 flex flex-col sm:flex-row sm:items-center gap-4">
+                    <div className="border-b border-primary/15 p-5 flex flex-col sm:flex-row sm:items-center gap-4">
                       <div className="flex-1">
-                        <h3 className="font-display font-bold uppercase tracking-widest text-primary flex items-center gap-2 text-lg">
-                          <Gavel className="w-5 h-5" /> Slot Queue
+                        <h3 className="font-display font-bold text-primary flex items-center gap-2 text-base">
+                          <Gavel className="w-4 h-4" /> Slot Queue
                         </h3>
-                        <p className="font-mono text-xs text-muted-foreground mt-1">All slots are occupied. Place a bid to reserve your spot — highest bid wins the next free slot.</p>
+                        <p className="font-mono text-xs text-muted-foreground mt-1">All slots occupied — highest bid gets the next free slot.</p>
                       </div>
-                      {/* Countdown */}
                       {countdown && (
-                        <div className="flex items-center gap-3 border border-primary/30 bg-background/60 px-5 py-3 chamfered shrink-0">
+                        <div className="flex items-center gap-3 border border-primary/20 bg-background/50 px-4 py-2.5 rounded-lg shrink-0">
                           <Clock className="w-4 h-4 text-primary" />
-                          <div className="text-center">
-                            <p className="font-mono text-xs text-muted-foreground uppercase tracking-wider mb-1">Next slot free in</p>
-                            <div className="flex items-center gap-1 font-display font-bold text-primary text-xl tabular-nums">
+                          <div>
+                            <p className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Next slot in</p>
+                            <div className="flex items-center font-display font-bold text-primary text-lg tabular-nums">
                               <span>{String(countdown.h).padStart(2, '0')}</span>
-                              <span className="animate-pulse">:</span>
+                              <span className="opacity-50 mx-0.5">:</span>
                               <span>{String(countdown.m).padStart(2, '0')}</span>
-                              <span className="animate-pulse">:</span>
+                              <span className="opacity-50 mx-0.5">:</span>
                               <span>{String(countdown.s).padStart(2, '0')}</span>
                             </div>
                           </div>
                         </div>
                       )}
                       {!countdown && !nextExpiresAt && (
-                        <div className="flex items-center gap-2 border border-primary/20 px-4 py-2 chamfered text-muted-foreground font-mono text-xs">
-                          <Clock className="w-4 h-4" /> Expiry time unknown
+                        <div className="flex items-center gap-2 border border-border px-3 py-2 rounded-lg text-muted-foreground font-mono text-xs">
+                          <Clock className="w-3.5 h-3.5" /> Expiry unknown
                         </div>
                       )}
                     </div>
@@ -326,43 +318,32 @@ export default function Dashboard() {
                         </h4>
 
                         {myBid ? (
-                          <div className="border border-primary/40 bg-primary/10 chamfered p-4">
+                          <div className="border border-primary/30 bg-primary/8 rounded-lg p-4">
                             <div className="flex items-center justify-between mb-3">
                               <div>
                                 <p className="font-display font-bold text-primary text-2xl">${myBid.amount.toFixed(2)}</p>
                                 <p className="font-mono text-xs text-muted-foreground mt-1">
                                   {myBid.rank === 1
-                                    ? '🏆 You are the top bidder!'
-                                    : `You are #${myBid.rank} in queue — outbid by $${(bids[0]?.amount - myBid.amount).toFixed(2)}`}
+                                    ? '🏆 Top bidder!'
+                                    : `Rank #${myBid.rank} — outbid by $${(bids[0]?.amount - myBid.amount).toFixed(2)}`}
                                 </p>
                               </div>
-                              <span className={`font-mono text-xs px-3 py-1 border chamfered ${myBid.rank === 1 ? 'border-primary text-primary bg-primary/10' : 'border-orange-500/40 text-orange-400 bg-orange-500/10'}`}>
+                              <span className={`font-mono text-xs px-2.5 py-1 rounded-full border ${myBid.rank === 1 ? 'border-primary/40 text-primary bg-primary/10' : 'border-orange-500/30 text-orange-400 bg-orange-500/10'}`}>
                                 #{myBid.rank}
                               </span>
                             </div>
                             <div className="flex gap-2">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="border-primary/30 text-primary font-mono text-xs flex-1"
-                                onClick={() => { setBidAmount(String(myBid.amount)); setShowBidForm(true); }}
-                              >
+                              <Button size="sm" variant="outline" className="border-primary/30 text-primary text-xs flex-1" onClick={() => { setBidAmount(String(myBid.amount)); setShowBidForm(true); }}>
                                 Raise Bid
                               </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="border-red-500/30 text-red-400 font-mono text-xs"
-                                disabled={isCancellingBid}
-                                onClick={() => cancelBid()}
-                              >
+                              <Button size="sm" variant="outline" className="border-red-500/25 text-red-400 text-xs" disabled={isCancellingBid} onClick={() => cancelBid()}>
                                 <X className="w-3 h-3 mr-1" /> Cancel
                               </Button>
                             </div>
                           </div>
                         ) : showBidForm ? (
-                          <div className="border border-primary/30 p-4 chamfered space-y-3">
-                            <p className="font-mono text-xs text-muted-foreground">Enter your max bid in USD. The top bidder wins the next available slot.</p>
+                          <div className="border border-primary/25 p-4 rounded-lg space-y-3">
+                            <p className="font-mono text-xs text-muted-foreground">Enter your max bid in USD. Top bidder wins the next open slot.</p>
                             <div className="flex items-center gap-2">
                               <span className="font-mono text-muted-foreground text-sm">$</span>
                               <input
@@ -372,32 +353,23 @@ export default function Dashboard() {
                                 value={bidAmount}
                                 onChange={e => setBidAmount(e.target.value)}
                                 placeholder="0.00"
-                                className="flex-1 bg-background border border-primary/50 text-foreground font-mono px-3 py-2 text-sm focus:outline-none focus:border-primary"
+                                className="flex-1 bg-background border border-border rounded text-foreground font-mono px-3 py-2 text-sm focus:outline-none focus:border-primary/60"
                                 autoFocus
                               />
                             </div>
                             <div className="flex gap-2">
-                              <Button
-                                size="sm"
-                                className="flex-1 font-mono text-xs"
-                                disabled={isPlacingBid || !bidAmount || parseFloat(bidAmount) <= 0}
-                                onClick={() => placeBid(parseFloat(bidAmount))}
-                              >
-                                {isPlacingBid ? 'Placing...' : 'Place Bid'}
+                              <Button size="sm" className="flex-1 text-xs" disabled={isPlacingBid || !bidAmount || parseFloat(bidAmount) <= 0} onClick={() => placeBid(parseFloat(bidAmount))}>
+                                {isPlacingBid ? 'Placing…' : 'Place Bid'}
                               </Button>
-                              <Button size="sm" variant="outline" className="border-primary/20 font-mono text-xs" onClick={() => { setShowBidForm(false); setBidAmount(''); }}>
+                              <Button size="sm" variant="outline" className="border-border text-xs" onClick={() => { setShowBidForm(false); setBidAmount(''); }}>
                                 Cancel
                               </Button>
                             </div>
                           </div>
                         ) : (
-                          <div className="border border-primary/20 p-4 chamfered text-center">
-                            <p className="font-mono text-xs text-muted-foreground mb-3">No active bid. Place one to get in line.</p>
-                            <Button
-                              size="sm"
-                              onClick={() => setShowBidForm(true)}
-                              className="font-mono text-xs w-full"
-                            >
+                          <div className="border border-border p-4 rounded-lg text-center">
+                            <p className="font-mono text-xs text-muted-foreground mb-3">No active bid. Place one to join the queue.</p>
+                            <Button size="sm" onClick={() => setShowBidForm(true)} className="text-xs w-full">
                               <Gavel className="w-3 h-3 mr-2" /> Place a Bid
                             </Button>
                           </div>
@@ -410,7 +382,7 @@ export default function Dashboard() {
                           <Crown className="w-3.5 h-3.5" /> Bid Queue ({bids.length})
                         </h4>
                         {bids.length === 0 ? (
-                          <div className="border border-primary/10 p-4 chamfered text-center font-mono text-xs text-muted-foreground">
+                          <div className="border border-border p-4 rounded-lg text-center font-mono text-xs text-muted-foreground">
                             No bids yet — be the first!
                           </div>
                         ) : (
@@ -418,17 +390,17 @@ export default function Dashboard() {
                             {bids.map((b, i) => (
                               <div
                                 key={b.id}
-                                className={`flex items-center gap-3 p-2.5 border chamfered ${b.isOwn ? 'border-primary/40 bg-primary/10' : 'border-primary/10 bg-card/30'}`}
+                                className={`flex items-center gap-3 p-2.5 rounded-lg border ${b.isOwn ? 'border-primary/30 bg-primary/8' : 'border-border bg-card/40'}`}
                               >
-                                <span className={`w-6 h-6 flex items-center justify-center font-display font-bold text-xs chamfered shrink-0 ${i === 0 ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground'}`}>
+                                <span className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${i === 0 ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground'}`}>
                                   {i + 1}
                                 </span>
                                 {b.avatar ? (
-                                  <img src={`https://cdn.discordapp.com/avatars/${b.discordId}/${b.avatar}.png`} alt="" className="w-6 h-6 border border-primary/20 shrink-0" />
+                                  <img src={`https://cdn.discordapp.com/avatars/${b.discordId}/${b.avatar}.png`} alt="" className="w-6 h-6 rounded-full border border-border shrink-0" />
                                 ) : (
-                                  <div className="w-6 h-6 bg-secondary border border-primary/10 shrink-0" />
+                                  <div className="w-6 h-6 rounded-full bg-secondary border border-border shrink-0" />
                                 )}
-                                <span className={`font-mono text-xs flex-1 truncate ${b.isOwn ? 'text-primary font-bold' : 'text-foreground'}`}>
+                                <span className={`font-mono text-xs flex-1 truncate ${b.isOwn ? 'text-primary font-semibold' : 'text-foreground'}`}>
                                   {b.username}{b.isOwn ? ' (you)' : ''}
                                 </span>
                                 <span className="font-mono text-sm font-bold text-primary shrink-0">${b.amount.toFixed(2)}</span>
@@ -447,9 +419,9 @@ export default function Dashboard() {
           {/* LEADERBOARD TAB */}
           {activeTab === 'leaderboard' && (
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-              <div className="mb-8">
-                <h2 className="text-2xl font-display font-bold uppercase text-foreground flex items-center gap-3">
-                  <Trophy className="text-primary" /> Leaderboard
+              <div className="mb-6">
+                <h2 className="text-xl font-display font-bold text-foreground flex items-center gap-2.5">
+                  <Trophy className="w-5 h-5 text-primary" /> Leaderboard
                 </h2>
                 <p className="text-muted-foreground font-mono mt-1 text-sm">Top depositors ranked by total spend</p>
               </div>
@@ -463,28 +435,28 @@ export default function Dashboard() {
               ) : (
                 <div className="space-y-2">
                   {leaderboardRes.leaderboard.map((entry) => (
-                    <div key={entry.discordId} className={`flex items-center gap-4 p-4 border chamfered transition-all ${
-                      entry.rank === 1 ? 'border-yellow-500/40 bg-yellow-500/5' :
-                      entry.rank === 2 ? 'border-slate-400/30 bg-slate-400/5' :
-                      entry.rank === 3 ? 'border-amber-700/30 bg-amber-700/5' :
-                      'border-primary/10 bg-card/30'
+                    <div key={entry.discordId} className={`flex items-center gap-4 p-4 border rounded-xl transition-all ${
+                      entry.rank === 1 ? 'border-yellow-500/30 bg-yellow-500/5' :
+                      entry.rank === 2 ? 'border-slate-400/20 bg-slate-400/5' :
+                      entry.rank === 3 ? 'border-amber-700/25 bg-amber-700/5' :
+                      'border-border bg-card/30'
                     }`}>
-                      <div className={`w-8 h-8 flex items-center justify-center font-display font-bold text-sm chamfered ${
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
                         entry.rank === 1 ? 'bg-yellow-500 text-black' :
                         entry.rank === 2 ? 'bg-slate-400 text-black' :
                         entry.rank === 3 ? 'bg-amber-700 text-white' :
-                        'bg-secondary text-muted-foreground border border-primary/20'
+                        'bg-secondary text-muted-foreground'
                       }`}>
-                        #{entry.rank}
+                        {entry.rank}
                       </div>
                       {entry.avatar ? (
-                        <img src={`https://cdn.discordapp.com/avatars/${entry.discordId}/${entry.avatar}.png`} alt="" className="w-9 h-9 border border-primary/30 chamfered" />
+                        <img src={`https://cdn.discordapp.com/avatars/${entry.discordId}/${entry.avatar}.png`} alt="" className="w-9 h-9 rounded-full border border-border" />
                       ) : (
-                        <div className="w-9 h-9 bg-secondary border border-primary/30 chamfered" />
+                        <div className="w-9 h-9 rounded-full bg-secondary border border-border" />
                       )}
                       <div className="flex-1">
-                        <p className="font-mono text-sm font-bold text-foreground">{entry.username}</p>
-                        <p className="font-mono text-xs text-muted-foreground">{entry.totalHours}h bought</p>
+                        <p className="font-mono text-sm font-semibold text-foreground">{entry.username}</p>
+                        <p className="font-mono text-xs text-muted-foreground">{entry.totalHours}h purchased</p>
                       </div>
                       <div className="text-right">
                         <p className="font-mono text-sm font-bold text-primary">${entry.totalSpent.toFixed(2)}</p>
@@ -500,10 +472,10 @@ export default function Dashboard() {
           {/* DEPOSIT TAB */}
           {activeTab === 'deposit' && (
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-              <div className="mb-8 flex items-center justify-between flex-wrap gap-4">
+              <div className="mb-6 flex items-center justify-between flex-wrap gap-4">
                 <div>
-                  <h2 className="text-2xl font-display font-bold uppercase text-foreground flex items-center gap-3">
-                    <History className="text-primary" /> Deposit History
+                  <h2 className="text-xl font-display font-bold text-foreground flex items-center gap-2.5">
+                    <History className="w-5 h-5 text-primary" /> Deposit History
                   </h2>
                   <p className="text-muted-foreground font-mono mt-1 text-sm">Your transaction history</p>
                 </div>
@@ -528,11 +500,11 @@ export default function Dashboard() {
               ) : (
                 <div className="space-y-2">
                   {historyRes.payments.map(p => (
-                    <div key={p.id} className="flex items-center gap-4 p-4 border border-primary/10 bg-card/30 chamfered">
-                      <div className={`px-2 py-1 text-xs font-mono font-bold chamfered ${
-                        p.status === 'completed' ? 'bg-primary/20 text-primary border border-primary/30' :
-                        p.status === 'pending' ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30' :
-                        'bg-red-500/20 text-red-400 border border-red-500/30'
+                    <div key={p.id} className="flex items-center gap-4 p-4 border border-border bg-card/30 rounded-xl">
+                      <div className={`px-2.5 py-1 text-[10px] font-mono font-bold rounded-full ${
+                        p.status === 'completed' ? 'bg-primary/15 text-primary' :
+                        p.status === 'pending' ? 'bg-yellow-500/15 text-yellow-400' :
+                        'bg-red-500/15 text-red-400'
                       }`}>
                         {p.status.toUpperCase()}
                       </div>
@@ -555,9 +527,9 @@ export default function Dashboard() {
           )}
         </main>
 
-        <footer className="border-t border-primary/10 bg-background/50 py-6 mt-auto">
-          <div className="max-w-7xl mx-auto px-4 text-center text-xs font-mono text-muted-foreground">
-            <p className="uppercase tracking-widest">[ Exe Joiner Core System v1.0.0 ]</p>
+        <footer className="border-t border-border bg-card/30 py-5 mt-auto">
+          <div className="max-w-7xl mx-auto px-4 text-center text-xs font-mono text-muted-foreground/50">
+            Exe Joiner · All rights reserved
           </div>
         </footer>
       </div>

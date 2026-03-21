@@ -36,106 +36,92 @@
 }
 
 :root {
-  /* Dark Cyber Hacker Theme - Yellow & Black */
   --background: 240 10% 4%;
-  --foreground: 60 5% 90%;
-  
-  /* Cyber Yellow */
-  --primary: 54 100% 50%;
-  --primary-foreground: 240 10% 4%;
-  
-  --secondary: 240 10% 12%;
-  --secondary-foreground: 60 5% 90%;
-  
-  --muted: 240 10% 12%;
-  --muted-foreground: 240 5% 60%;
-  
-  --accent: 54 100% 50%;
-  --accent-foreground: 240 10% 4%;
-  
-  --destructive: 0 84% 60%;
-  --destructive-foreground: 60 5% 90%;
-  
-  --border: 54 100% 50%;
-  --input: 240 10% 16%;
-  --ring: 54 100% 50%;
-  
-  --card: 240 10% 6%;
-  --card-foreground: 60 5% 90%;
+  --foreground: 220 15% 88%;
 
-  --radius: 0.25rem;
+  /* Amber-gold — warmer, less neon */
+  --primary: 43 96% 56%;
+  --primary-foreground: 240 10% 4%;
+
+  --secondary: 240 8% 11%;
+  --secondary-foreground: 220 15% 70%;
+
+  --muted: 240 8% 11%;
+  --muted-foreground: 240 5% 52%;
+
+  --accent: 43 96% 56%;
+  --accent-foreground: 240 10% 4%;
+
+  --destructive: 0 72% 55%;
+  --destructive-foreground: 220 15% 90%;
+
+  /* Subtle dark border — no longer neon yellow globally */
+  --border: 240 8% 16%;
+  --input: 240 8% 14%;
+  --ring: 43 96% 56%;
+
+  --card: 240 8% 6%;
+  --card-foreground: 220 15% 88%;
+
+  --radius: 0.375rem;
 }
 
 @layer base {
   * {
     @apply border-border;
   }
-  
+
   body {
-    @apply bg-background text-foreground antialiased font-sans selection:bg-primary selection:text-primary-foreground;
-    background-image: 
-      linear-gradient(to right, rgba(255, 215, 0, 0.03) 1px, transparent 1px),
-      linear-gradient(to bottom, rgba(255, 215, 0, 0.03) 1px, transparent 1px);
-    background-size: 40px 40px;
+    @apply bg-background text-foreground antialiased font-sans selection:bg-primary/30 selection:text-foreground;
+    background-image:
+      linear-gradient(to right, rgba(180, 140, 30, 0.02) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(180, 140, 30, 0.02) 1px, transparent 1px);
+    background-size: 48px 48px;
     background-attachment: fixed;
   }
 
   h1, h2, h3, h4, h5, h6 {
-    @apply font-display font-bold tracking-tight uppercase;
+    @apply font-display font-bold tracking-tight;
   }
 }
 
 @layer utilities {
   .glow-text {
-    text-shadow: 0 0 10px hsla(var(--primary) / 0.5), 0 0 20px hsla(var(--primary) / 0.3);
+    text-shadow: 0 0 18px hsla(var(--primary) / 0.4), 0 0 40px hsla(var(--primary) / 0.15);
   }
-  
+
   .glow-box {
-    box-shadow: 0 0 15px hsla(var(--primary) / 0.15), inset 0 0 15px hsla(var(--primary) / 0.05);
+    box-shadow: 0 0 0 1px hsla(var(--primary) / 0.12), 0 4px 24px hsla(var(--primary) / 0.08);
   }
-  
+
   .glow-box-active {
-    box-shadow: 0 0 20px hsla(var(--primary) / 0.4), inset 0 0 10px hsla(var(--primary) / 0.2);
+    box-shadow: 0 0 0 1px hsla(var(--primary) / 0.35), 0 4px 32px hsla(var(--primary) / 0.18);
+  }
+
+  .chamfered {
+    clip-path: polygon(
+      0 8px,
+      8px 0,
+      100% 0,
+      100% calc(100% - 8px),
+      calc(100% - 8px) 100%,
+      0 100%
+    );
+  }
+
+  .chamfered-btn {
+    clip-path: polygon(
+      0 0,
+      calc(100% - 8px) 0,
+      100% 8px,
+      100% 100%,
+      8px 100%,
+      0 calc(100% - 8px)
+    );
   }
 
   .scanline {
     position: relative;
     overflow: hidden;
-  }
-  
-  .scanline::after {
-    content: " ";
-    display: block;
-    position: absolute;
-    top: 0;
-    left: 0;
-    bottom: 0;
-    right: 0;
-    background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
-    z-index: 50;
-    background-size: 100% 2px, 3px 100%;
-    pointer-events: none;
-  }
-
-  .chamfered {
-    clip-path: polygon(
-      0 10px,
-      10px 0,
-      100% 0,
-      100% calc(100% - 10px),
-      calc(100% - 10px) 100%,
-      0 100%
-    );
-  }
-  
-  .chamfered-btn {
-    clip-path: polygon(
-      0 0,
-      calc(100% - 10px) 0,
-      100% 10px,
-      100% 100%,
-      10px 100%,
-      0 calc(100% - 10px)
-    );
   }
 }

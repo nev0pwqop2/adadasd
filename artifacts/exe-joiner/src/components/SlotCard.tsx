@@ -2,7 +2,7 @@ import React from 'react';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { format } from 'date-fns';
-import { Terminal, ShieldAlert, Zap, Lock } from 'lucide-react';
+import { Zap, Lock, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export interface PublicSlot {
@@ -28,104 +28,101 @@ export function SlotCard({ slotData, onPurchase, onManage }: SlotCardProps) {
 
   return (
     <Card className={cn(
-      "transition-all duration-500 overflow-hidden h-full flex flex-col",
+      'transition-all duration-300 overflow-hidden h-full flex flex-col rounded-xl',
       isOwner
-        ? "border-primary/50 glow-box-active bg-primary/5"
+        ? 'border-primary/40 glow-box-active bg-primary/5'
         : takenByOther
-          ? "border-red-500/30 bg-red-500/5 opacity-80"
-          : "border-primary/10 opacity-70 hover:opacity-100"
+          ? 'border-red-500/20 bg-red-500/5'
+          : 'border-border hover:border-primary/20 hover:bg-secondary/30 opacity-80 hover:opacity-100'
     )}>
 
+      {/* Card header */}
       <div className={cn(
-        "px-4 py-3 flex justify-between items-center border-b font-mono text-sm tracking-wider uppercase",
+        'px-4 py-2.5 flex justify-between items-center border-b text-xs font-mono tracking-wider',
         isOwner
-          ? "border-primary/30 bg-primary/10 text-primary"
+          ? 'border-primary/20 bg-primary/10 text-primary'
           : takenByOther
-            ? "border-red-500/20 bg-red-500/10 text-red-400"
-            : "border-primary/10 bg-secondary/50 text-muted-foreground"
+            ? 'border-red-500/15 bg-red-500/8 text-red-400/80'
+            : 'border-border bg-secondary/30 text-muted-foreground'
       )}>
-        <span className="flex items-center gap-2">
-          <Terminal className="w-4 h-4" />
-          Slot_0{slotNumber}
-        </span>
+        <span className="font-semibold">Slot {String(slotNumber).padStart(2, '0')}</span>
         <span className={cn(
-          "px-2 py-0.5 text-xs font-bold chamfered",
+          'px-2 py-0.5 rounded text-[10px] font-bold tracking-widest uppercase',
           isOwner
-            ? "bg-primary text-primary-foreground"
+            ? 'bg-primary/20 text-primary'
             : takenByOther
-              ? "bg-red-600 text-white"
-              : "bg-secondary text-muted-foreground border border-primary/20"
+              ? 'bg-red-500/15 text-red-400'
+              : 'bg-secondary text-muted-foreground'
         )}>
-          {isOwner ? 'ONLINE' : takenByOther ? 'TAKEN' : 'OFFLINE'}
+          {isOwner ? 'Active' : takenByOther ? 'Taken' : 'Open'}
         </span>
       </div>
 
-      <div className="p-6 flex-1 flex flex-col justify-between items-center text-center space-y-6 scanline">
+      {/* Card body */}
+      <div className="p-5 flex-1 flex flex-col justify-between items-center text-center gap-5">
 
         {isOwner ? (
           <>
-            <div className="relative">
-              <div className="absolute inset-0 bg-primary/20 blur-xl rounded-full animate-pulse" />
-              <Zap className="w-16 h-16 text-primary relative z-10 mx-auto drop-shadow-[0_0_8px_rgba(255,215,0,0.8)]" />
+            <div className="flex-1 flex flex-col items-center justify-center gap-3">
+              <div className="relative">
+                <div className="absolute inset-0 bg-primary/20 blur-2xl rounded-full" />
+                <Zap className="w-10 h-10 text-primary relative z-10 mx-auto drop-shadow-[0_0_8px_rgba(218,165,32,0.6)]" />
+              </div>
+              <div className="w-full space-y-1.5">
+                <p className="text-primary font-display font-bold uppercase tracking-wide text-sm">
+                  {slotData.label || 'Running'}
+                </p>
+                {slotData.expiresAt && (
+                  <p className="text-xs font-mono text-muted-foreground">
+                    Expires <span className="text-foreground/70">{format(new Date(slotData.expiresAt), 'MMM d, HH:mm')}</span>
+                  </p>
+                )}
+              </div>
             </div>
-            <div className="space-y-1 w-full">
-              <p className="text-primary font-display font-bold uppercase tracking-widest text-lg glow-text">
-                {slotData.label || "SYSTEM ACTIVE"}
-              </p>
-              {slotData.expiresAt && (
-                <div className="text-xs font-mono text-muted-foreground mt-4 bg-background/50 p-2 border border-primary/20 chamfered">
-                  EXPIRES: <span className="text-primary">{format(new Date(slotData.expiresAt), 'MMM dd, yyyy HH:mm')}</span>
-                </div>
-              )}
-            </div>
-            <Button variant="outline" className="w-full mt-auto" onClick={() => onManage(slotData)}>
-              Manage Configuration
+            <Button variant="outline" size="sm" className="w-full border-primary/25 text-primary/80 hover:text-primary hover:border-primary/50 text-xs font-mono" onClick={() => onManage(slotData)}>
+              Manage
             </Button>
           </>
         ) : takenByOther ? (
           <>
-            <div className="relative">
-              <div className="absolute inset-0 bg-red-500/10 blur-xl rounded-full" />
-              <Lock className="w-16 h-16 text-red-400/60 relative z-10 mx-auto" />
+            <div className="flex-1 flex flex-col items-center justify-center gap-3">
+              <Lock className="w-9 h-9 text-red-400/40 mx-auto" />
+              <div className="space-y-2">
+                <p className="text-red-400/80 text-xs font-mono uppercase tracking-wide">Reserved</p>
+                {owner && (
+                  <div className="flex items-center justify-center gap-2">
+                    {owner.avatar ? (
+                      <img
+                        src={`https://cdn.discordapp.com/avatars/${owner.discordId}/${owner.avatar}.png`}
+                        alt=""
+                        className="w-5 h-5 rounded-full border border-red-500/20"
+                      />
+                    ) : (
+                      <div className="w-5 h-5 rounded-full bg-secondary border border-red-500/20" />
+                    )}
+                    <span className="font-mono text-xs text-muted-foreground">{owner.username}</span>
+                  </div>
+                )}
+              </div>
             </div>
-            <div className="space-y-3 w-full">
-              <p className="text-red-400 font-display font-bold uppercase tracking-widest text-sm">
-                Slot Reserved
-              </p>
-              {owner && (
-                <div className="flex items-center justify-center gap-2">
-                  {owner.avatar ? (
-                    <img
-                      src={`https://cdn.discordapp.com/avatars/${owner.discordId}/${owner.avatar}.png`}
-                      alt=""
-                      className="w-6 h-6 border border-red-500/30 chamfered"
-                    />
-                  ) : (
-                    <div className="w-6 h-6 bg-secondary border border-red-500/30 chamfered" />
-                  )}
-                  <span className="font-mono text-sm text-muted-foreground">{owner.username}</span>
-                </div>
-              )}
-              {slotData.expiresAt === null && (
-                <p className="text-xs text-muted-foreground/50 font-mono">Occupied</p>
-              )}
-            </div>
-            <Button disabled variant="outline" className="border-red-500/20 text-red-400/50 cursor-not-allowed w-full mt-auto">
+            <Button disabled variant="outline" size="sm" className="w-full border-red-500/15 text-red-400/40 cursor-not-allowed text-xs font-mono">
               Unavailable
             </Button>
           </>
         ) : (
           <>
-            <ShieldAlert className="w-16 h-16 text-muted-foreground/30 mx-auto" />
-            <div className="space-y-2">
-              <p className="text-muted-foreground font-mono text-sm uppercase">Access Denied</p>
-              <p className="text-xs text-muted-foreground/70 font-mono">Requires authorization to activate terminal node.</p>
+            <div className="flex-1 flex flex-col items-center justify-center gap-3">
+              <div className="w-10 h-10 rounded-full border-2 border-dashed border-border flex items-center justify-center mx-auto">
+                <Plus className="w-4 h-4 text-muted-foreground/50" />
+              </div>
+              <p className="text-muted-foreground font-mono text-xs">Available slot</p>
             </div>
             <Button
-              className="w-full mt-auto group relative overflow-hidden"
+              size="sm"
+              className="w-full text-xs font-semibold tracking-wide"
               onClick={() => onPurchase(slotNumber)}
             >
-              <span className="relative z-10 group-hover:glow-text">Purchase Access</span>
+              Purchase
             </Button>
           </>
         )}
