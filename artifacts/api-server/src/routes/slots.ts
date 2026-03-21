@@ -150,7 +150,7 @@ router.get("/", requireAuth, async (req, res) => {
           owner: owners[activeSlot.userId] ?? null,
           id: null,
           purchasedAt: null,
-          expiresAt: null,
+          expiresAt: activeSlot.expiresAt?.toISOString() ?? null,
           label: null,
         };
       } else {
