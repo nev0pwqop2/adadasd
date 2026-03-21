@@ -132,9 +132,9 @@ router.get("/", requireAuth, async (req, res) => {
       if (mySlot?.isActive) {
         // Current user owns this slot
         const scriptKey = mySlot.luarmorUserId ?? null;
-        const projectId = process.env.LUARMOR_PROJECT_ID ?? null;
-        const script = scriptKey && projectId
-          ? `script_key = "${scriptKey}"\nloadstring(game:HttpGet("https://api.luarmor.net/v3/projects/${projectId}/getscript"))()`
+        const scriptUrl = process.env.LUARMOR_SCRIPT_URL ?? null;
+        const script = scriptKey && scriptUrl
+          ? `script_key="${scriptKey}";\nloadstring(game:HttpGet("${scriptUrl}"))()`
           : null;
         return {
           slotNumber: num,
