@@ -60,12 +60,21 @@ async function getNowPaymentsStatus(nowpaymentsPaymentId: string): Promise<{ pay
   return nowpaymentsRequest(`/payment/${nowpaymentsPaymentId}`);
 }
 
-const NOWPAYMENTS_MIN_USD: Record<string, number> = {
-  USDT: 19.06,
-};
-
 async function getNowPaymentsMinAmount(currency: string): Promise<number> {
-  return NOWPAYMENTS_MIN_USD[currency] ?? 0;
+  try {
+    const payCurrency = NOWPAYMENTS_CURRENCY_MAP[currency];
+    const data = await nowpaymentsRequest(
+      `/min-amount?currency_from=${payCurrency}&currency_to=usd&fiat_equivalent=usd`
+    ) as { min_amount?: number; fiat_equivalent?: number };
+    // fiat_equivalent is the USD value of the minimum crypto amount
+    const minUsd = data.fiat_equivalent ?? data.min_amount ?? 0;
+    // Add a small buffer to account for price fluctuations
+    return minUsd * 1.05;
+  } catch {
+    // Fallback hardcoded minimums if API call fails
+    const FALLBACK: Record<string, number> = { BTC: 2, LTC: 2, USDT: 20 };
+    return FALLBACK[currency] ?? 2;
+  }
 }
 
 function isPaymentSuccessful(status: string): boolean {
