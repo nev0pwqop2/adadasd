@@ -33,3 +33,4 @@ STRIPE_PUBLISHABLE_KEY = "pk_live_51T3FxoJtkf3KMCtyiReqFIPoPvXbOBVpFgB2KVysGsAgE
 
 [nix]
 channel = "stable-25_05"
+packages = ["flyctl"]
