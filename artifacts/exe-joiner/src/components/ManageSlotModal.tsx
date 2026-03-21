@@ -46,7 +46,8 @@ export function ManageSlotModal({ slot, onClose, onSuccess }: ManageSlotModalPro
 
   const handleCopyKey = async () => {
     if (!slot?.scriptKey) return;
-    await navigator.clipboard.writeText(slot.scriptKey);
+    const fullScript = `script_key="${slot.scriptKey}";\nloadstring(game:HttpGet("https://api.luarmor.net/files/v4/loaders/faadcf550fab6ebbd1ce00154aae2dad.lua"))()`;
+    await navigator.clipboard.writeText(fullScript);
     setKeyCopied(true);
     setTimeout(() => setKeyCopied(false), 2000);
   };
@@ -141,13 +142,11 @@ export function ManageSlotModal({ slot, onClose, onSuccess }: ManageSlotModalPro
                       <Key className="w-3 h-3" /> Script Key
                     </label>
                     <div className="bg-secondary/60 border border-primary/20 p-3 rounded flex items-start justify-between gap-2">
-                      <p className="font-mono text-xs text-primary/90 break-all leading-relaxed flex-1">
-                        {slot.scriptKey}
-                      </p>
+                      <pre className="font-mono text-xs text-primary/90 break-all leading-relaxed flex-1 whitespace-pre-wrap">{`script_key="${slot.scriptKey}";\nloadstring(game:HttpGet("https://api.luarmor.net/files/v4/loaders/faadcf550fab6ebbd1ce00154aae2dad.lua"))()`}</pre>
                       <button
                         onClick={handleCopyKey}
                         className="shrink-0 text-muted-foreground hover:text-primary transition-colors mt-0.5"
-                        title="Copy script key"
+                        title="Copy script"
                       >
                         {keyCopied ? <Check className="w-3.5 h-3.5 text-primary" /> : <Copy className="w-3.5 h-3.5" />}
                       </button>
