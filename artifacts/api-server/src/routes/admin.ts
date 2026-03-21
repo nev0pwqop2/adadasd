@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, slotsTable, usersTable } from "@workspace/db";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, inArray, and, lte, isNotNull } from "drizzle-orm";
 import { requireAdmin } from "../middlewares/requireAdmin.js";
 import { getSettings, setSetting } from "../lib/settings.js";
 import { isLuarmorConfigured, deleteLuarmorUser } from "../lib/luarmor.js";
@@ -88,7 +88,7 @@ router.get("/slots", async (req, res) => {
     const allActive = await db
       .select()
       .from(slotsTable)
-      .where(sql`${slotsTable.isActive} = true AND ${slotsTable.slotNumber} <= ${slotCount}`);
+      .where(and(eq(slotsTable.isActive, true), lte(slotsTable.slotNumber, slotCount)));
 
     const ownerIds = [...new Set(allActive.map((s) => s.userId))];
     const owners: Record<string, { username: string; discordId: string; avatar: string | null }> = {};
@@ -96,7 +96,7 @@ router.get("/slots", async (req, res) => {
       const ownerRows = await db
         .select({ id: usersTable.id, username: usersTable.username, discordId: usersTable.discordId, avatar: usersTable.avatar })
         .from(usersTable)
-        .where(sql`${usersTable.id} = ANY(${ownerIds})`);
+        .where(inArray(usersTable.id, ownerIds));
       for (const o of ownerRows) owners[o.id] = { username: o.username, discordId: o.discordId, avatar: o.avatar };
     }
 
@@ -173,7 +173,7 @@ router.post("/users/:discordId/slots", async (req, res) => {
 router.post("/reset-all-slots", async (req, res) => {
   try {
     if (isLuarmorConfigured()) {
-      const activeSlots = await db.select().from(slotsTable).where(sql`${slotsTable.isActive} = true AND ${slotsTable.luarmorUserId} IS NOT NULL`);
+      const activeSlots = await db.select().from(slotsTable).where(and(eq(slotsTable.isActive, true), isNotNull(slotsTable.luarmorUserId)));
       await Promise.allSettled(
         activeSlots.filter((s) => s.luarmorUserId).map((s) => deleteLuarmorUser(s.luarmorUserId!))
       );

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, slotsTable, usersTable, paymentsTable } from "@workspace/db";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, inArray, lte, desc } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { getSettings } from "../lib/settings.js";
 
@@ -49,7 +49,7 @@ router.get("/", requireAuth, async (req, res) => {
     const allActiveSlots = await db
       .select()
       .from(slotsTable)
-      .where(and(eq(slotsTable.isActive, true), sql`${slotsTable.slotNumber} <= ${slotCount}`));
+      .where(and(eq(slotsTable.isActive, true), lte(slotsTable.slotNumber, slotCount)));
 
     // Get owners for active slots
     const ownerIds = [...new Set(allActiveSlots.map((s) => s.userId))];
@@ -58,7 +58,7 @@ router.get("/", requireAuth, async (req, res) => {
       const ownerRows = await db
         .select({ id: usersTable.id, username: usersTable.username, discordId: usersTable.discordId, avatar: usersTable.avatar })
         .from(usersTable)
-        .where(sql`${usersTable.id} = ANY(${ownerIds})`);
+        .where(inArray(usersTable.id, ownerIds));
       for (const o of ownerRows) owners[o.id] = { username: o.username, discordId: o.discordId, avatar: o.avatar };
     }
 
@@ -170,7 +170,7 @@ router.get("/history", requireAuth, async (req, res) => {
       .select()
       .from(paymentsTable)
       .where(eq(paymentsTable.userId, req.session.userId!))
-      .orderBy(sql`${paymentsTable.createdAt} DESC`);
+      .orderBy(desc(paymentsTable.createdAt));
 
     res.json({
       payments: payments.map((p) => ({
