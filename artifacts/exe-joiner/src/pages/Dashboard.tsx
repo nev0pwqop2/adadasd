@@ -173,11 +173,8 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-background relative overflow-x-hidden">
-      <div className="fixed inset-0 z-0 opacity-[0.03] bg-cover bg-center mix-blend-screen pointer-events-none"
-        style={{ backgroundImage: `url(${import.meta.env.BASE_URL}images/cyber-bg.png)` }} />
-
-      <div className="relative z-10 flex flex-col min-h-screen">
-        <header className="border-b border-border bg-card/90 backdrop-blur-md sticky top-0 z-40">
+      <div className="flex flex-col min-h-screen">
+        <header className="border-b border-border/60 bg-background/80 backdrop-blur-md sticky top-0 z-40">
           <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between gap-4">
             <div className="flex items-center gap-3 shrink-0">
               <img src={`${import.meta.env.BASE_URL}exe-logo.png`} alt="EXE" className="w-7 h-7 drop-shadow-[0_0_8px_rgba(218,165,32,0.4)]" />
@@ -219,16 +216,16 @@ export default function Dashboard() {
         </header>
 
         {/* Tab bar */}
-        <div className="border-b border-border bg-card/60 backdrop-blur-sm sticky top-14 z-30">
-          <div className="max-w-7xl mx-auto px-4 flex gap-0">
+        <div className="border-b border-border/40 sticky top-14 z-30 bg-background/80 backdrop-blur-md">
+          <div className="max-w-7xl mx-auto px-4 py-2.5 flex gap-1">
             {tabs.map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-5 py-3 font-mono text-xs tracking-wide transition-all border-b-2 ${
+                className={`flex items-center gap-2 px-4 py-1.5 rounded-full font-mono text-xs tracking-wide transition-all ${
                   activeTab === tab.id
-                    ? 'border-primary text-primary'
-                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                    ? 'bg-primary/15 text-primary border border-primary/30'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-white/5 border border-transparent'
                 }`}
               >
                 {tab.icon}
@@ -529,8 +526,8 @@ export default function Dashboard() {
           )}
         </main>
 
-        <footer className="border-t border-border bg-card/30 py-5 mt-auto">
-          <div className="max-w-7xl mx-auto px-4 text-center text-xs font-mono text-muted-foreground/50">
+        <footer className="border-t border-border/40 py-5 mt-auto">
+          <div className="max-w-7xl mx-auto px-4 text-center text-xs font-mono text-muted-foreground/40">
             Exe Joiner · All rights reserved
           </div>
         </footer>

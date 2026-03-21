@@ -70,7 +70,7 @@ export function SlotCard({ slotData, onPurchase, onManage }: SlotCardProps) {
       )}>
         <span className="font-semibold">Slot {String(slotNumber).padStart(2, '0')}</span>
         <span className={cn(
-          'px-2 py-0.5 rounded text-[10px] font-bold tracking-widest uppercase',
+          'px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-widest uppercase',
           isOwner
             ? 'bg-primary/20 text-primary'
             : takenByOther
