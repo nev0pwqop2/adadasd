@@ -297,7 +297,7 @@ export function PaymentModal({
                               : "border-primary/20 bg-transparent text-muted-foreground hover:border-primary/50"
                           )}
                         >
-                          {c === 'USDT' ? 'USDT TRC20' : c}
+                          {c === 'USDT' ? 'USDT' : c}
                         </button>
                       ))}
                     </div>

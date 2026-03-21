@@ -115,26 +115,7 @@ export function ManageSlotModal({ slot, onClose, onSuccess }: ManageSlotModalPro
             </div>
 
             <div className="p-6 space-y-6">
-              <div className="space-y-2">
-                <label className="text-xs font-mono uppercase text-muted-foreground flex items-center gap-2">
-                  <Tag className="w-3 h-3" /> Slot Label
-                </label>
-                <input
-                  type="text"
-                  value={label}
-                  onChange={(e) => setLabel(e.target.value)}
-                  placeholder="e.g. Main Bot, Server #1..."
-                  maxLength={64}
-                  className="w-full bg-secondary border border-primary/20 text-foreground font-mono text-sm px-3 py-2 focus:outline-none focus:border-primary/60 transition-colors"
-                />
-                <p className="text-xs text-muted-foreground font-mono">Give this slot a custom name to identify it.</p>
-              </div>
-
               <div className="bg-secondary/50 border border-primary/10 p-3 space-y-1 font-mono text-xs">
-                <div className="flex justify-between text-muted-foreground">
-                  <span>SLOT ID</span>
-                  <span className="text-primary">#{slot.slotNumber}</span>
-                </div>
                 <div className="flex justify-between text-muted-foreground">
                   <span>STATUS</span>
                   <span className="text-primary">ONLINE</span>

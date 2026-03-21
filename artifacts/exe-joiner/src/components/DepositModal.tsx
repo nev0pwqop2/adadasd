@@ -268,7 +268,7 @@ export function DepositModal({ isOpen, onClose, onSuccess }: DepositModalProps) 
                                 : 'border-border bg-card/50 text-muted-foreground hover:border-primary/50 hover:text-foreground'
                             )}
                           >
-                            {c === 'USDT' ? 'USDT TRC20' : c === 'ETH' ? 'Ethereum' : c === 'SOL' ? 'Solana' : c}
+                            {c === 'USDT' ? 'USDT' : c === 'ETH' ? 'Ethereum' : c === 'SOL' ? 'Solana' : c}
                           </button>
                         ))}
                       </div>
