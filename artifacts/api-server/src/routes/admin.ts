@@ -21,7 +21,7 @@ router.get("/settings", async (req, res) => {
 
 router.post("/settings", async (req, res) => {
   try {
-    const { slotCount, pricePerDay, slotDurationHours } = req.body;
+    const { slotCount, pricePerDay, slotDurationHours, hourlyPricingEnabled, pricePerHour, minHours } = req.body;
 
     if (slotCount !== undefined) {
       const count = parseInt(slotCount, 10);
@@ -48,6 +48,28 @@ router.post("/settings", async (req, res) => {
         return;
       }
       await setSetting("slotDurationHours", String(hours));
+    }
+
+    if (hourlyPricingEnabled !== undefined) {
+      await setSetting("hourlyPricingEnabled", hourlyPricingEnabled ? "true" : "false");
+    }
+
+    if (pricePerHour !== undefined) {
+      const price = parseFloat(pricePerHour);
+      if (isNaN(price) || price < 0) {
+        res.status(400).json({ error: "invalid_value", message: "pricePerHour must be >= 0" });
+        return;
+      }
+      await setSetting("pricePerHour", price.toFixed(2));
+    }
+
+    if (minHours !== undefined) {
+      const min = parseInt(minHours, 10);
+      if (isNaN(min) || min < 1 || min > 720) {
+        res.status(400).json({ error: "invalid_value", message: "minHours must be 1–720" });
+        return;
+      }
+      await setSetting("minHours", String(min));
     }
 
     const updated = await getSettings();

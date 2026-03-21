@@ -32,7 +32,7 @@ export default function Dashboard() {
 
   const { data: slotsRes, refetch: refetchSlots, isLoading: isSlotsLoading } = useQuery({
     queryKey: ['slots'],
-    queryFn: () => apiFetch<{ slots: PublicSlot[]; totalSlots: number; pricePerDay: number; slotDurationHours: number }>('api/slots'),
+    queryFn: () => apiFetch<{ slots: PublicSlot[]; totalSlots: number; pricePerDay: number; slotDurationHours: number; hourlyPricingEnabled: boolean; pricePerHour: number; minHours: number }>('api/slots'),
     enabled: !!user,
     refetchInterval: 5000,
     refetchIntervalInBackground: false,
@@ -90,6 +90,9 @@ export default function Dashboard() {
   const totalSlots = slotsRes?.totalSlots ?? 10;
   const pricePerDay = slotsRes?.pricePerDay ?? 20;
   const slotDurationHours = slotsRes?.slotDurationHours ?? 24;
+  const hourlyPricingEnabled = slotsRes?.hourlyPricingEnabled ?? false;
+  const pricePerHour = slotsRes?.pricePerHour ?? 5;
+  const minHours = slotsRes?.minHours ?? 2;
   const activeCount = slots.filter(s => s.isActive).length;
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
@@ -174,10 +177,19 @@ export default function Dashboard() {
                   <LayoutGrid className="text-primary" /> Array Configuration
                 </h2>
                 <p className="text-muted-foreground font-mono mt-1 text-sm">
-                  Manage your execution slots — <span className="text-primary">${pricePerDay.toFixed(2)} / {slotDurationHours}h</span>
-                  <span className="text-muted-foreground"> · </span>
-                  <span className="text-primary/70">${(pricePerDay / slotDurationHours).toFixed(2)}/hr</span>
-                  <span className="text-muted-foreground"> per slot</span>
+                  {hourlyPricingEnabled ? (
+                    <>
+                      Manage your execution slots — <span className="text-primary">${pricePerHour.toFixed(2)}/hr</span>
+                      <span className="text-muted-foreground"> · min {minHours}h purchase per slot</span>
+                    </>
+                  ) : (
+                    <>
+                      Manage your execution slots — <span className="text-primary">${pricePerDay.toFixed(2)} / {slotDurationHours}h</span>
+                      <span className="text-muted-foreground"> · </span>
+                      <span className="text-primary/70">${(pricePerDay / slotDurationHours).toFixed(2)}/hr</span>
+                      <span className="text-muted-foreground"> per slot</span>
+                    </>
+                  )}
                 </p>
               </div>
               <motion.div
@@ -322,6 +334,9 @@ export default function Dashboard() {
         slotNumber={purchasingSlot || 1}
         pricePerDay={pricePerDay}
         slotDurationHours={slotDurationHours}
+        hourlyPricingEnabled={hourlyPricingEnabled}
+        pricePerHour={pricePerHour}
+        minHours={minHours}
         onSuccess={() => { refetchSlots(); }}
       />
 

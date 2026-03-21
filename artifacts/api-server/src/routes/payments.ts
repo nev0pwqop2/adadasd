@@ -71,9 +71,10 @@ function verifyNowPaymentsIpn(body: string, signature: string): boolean {
   return expected === signature;
 }
 
-async function activateSlot(userId: string, slotNumber: number, paymentId: string) {
+async function activateSlot(userId: string, slotNumber: number, paymentId: string, durationHoursOverride?: number) {
   const { slotDurationHours } = await getSettings();
-  const expiryMs = slotDurationHours * 60 * 60 * 1000;
+  const hours = durationHoursOverride ?? slotDurationHours;
+  const expiryMs = hours * 60 * 60 * 1000;
 
   await db.update(paymentsTable)
     .set({ status: "completed", updatedAt: new Date() })
@@ -132,11 +133,27 @@ router.post("/create-stripe-session", requireAuth, async (req: Request, res: Res
     return;
   }
 
-  const { slotNumber } = req.body;
-  const { slotCount, pricePerDay } = await getSettings();
+  const { slotNumber, hours } = req.body;
+  const { slotCount, pricePerDay, slotDurationHours, hourlyPricingEnabled, pricePerHour, minHours } = await getSettings();
   if (!slotNumber || slotNumber < 1 || slotNumber > slotCount) {
     res.status(400).json({ error: "invalid_slot", message: "Invalid slot number" });
     return;
+  }
+
+  // Validate hours when hourly pricing is enabled
+  let purchasedHours: number = slotDurationHours;
+  let chargeAmount: number = pricePerDay;
+  let description: string = `${slotDurationHours}h activation for Exe Joiner slot at $${pricePerDay.toFixed(2)}`;
+
+  if (hourlyPricingEnabled) {
+    const h = parseInt(hours, 10);
+    if (!hours || isNaN(h) || h < minHours) {
+      res.status(400).json({ error: "invalid_hours", message: `Minimum purchase is ${minHours} hour(s)` });
+      return;
+    }
+    purchasedHours = h;
+    chargeAmount = parseFloat((h * pricePerHour).toFixed(2));
+    description = `${h}h activation for Exe Joiner slot at $${pricePerHour.toFixed(2)}/hr`;
   }
 
   const slots = await db.select().from(slotsTable).where(
@@ -155,7 +172,7 @@ router.post("/create-stripe-session", requireAuth, async (req: Request, res: Res
     const baseUrl = process.env.REPLIT_DEV_DOMAIN
       ? `https://${process.env.REPLIT_DEV_DOMAIN}`
       : process.env.BASE_URL || "http://localhost:80";
-    const unitAmount = Math.round(pricePerDay * 100);
+    const unitAmount = Math.round(chargeAmount * 100);
 
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
@@ -167,7 +184,7 @@ router.post("/create-stripe-session", requireAuth, async (req: Request, res: Res
             unit_amount: unitAmount,
             product_data: {
               name: `Exe Joiner — Slot #${slotNumber}`,
-              description: `1-day activation for Exe Joiner slot at $${pricePerDay.toFixed(2)}/day`,
+              description,
             },
           },
           quantity: 1,
@@ -188,10 +205,11 @@ router.post("/create-stripe-session", requireAuth, async (req: Request, res: Res
       slotNumber,
       method: "stripe",
       status: "pending",
-      amount: pricePerDay.toFixed(2),
+      amount: chargeAmount.toFixed(2),
       currency: "USD",
       stripeSessionId: session.id,
       expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+      derivationIndex: purchasedHours,
     });
 
     res.json({ sessionId: session.id, url: session.url });
@@ -234,7 +252,7 @@ router.post("/stripe-webhook", async (req: Request, res: Response) => {
           .where(and(eq(paymentsTable.userId, userId), eq(paymentsTable.slotNumber, slotNum), eq(paymentsTable.status, "pending")))
           .limit(1);
         if (pending.length) {
-          await activateSlot(userId, slotNum, pending[0].id);
+          await activateSlot(userId, slotNum, pending[0].id, pending[0].derivationIndex ?? undefined);
         }
       }
     }
@@ -247,8 +265,8 @@ router.post("/stripe-webhook", async (req: Request, res: Response) => {
 });
 
 router.post("/create-crypto-session", requireAuth, async (req: Request, res: Response) => {
-  const { slotNumber, currency } = req.body;
-  const { slotCount, pricePerDay } = await getSettings();
+  const { slotNumber, currency, hours } = req.body;
+  const { slotCount, pricePerDay, slotDurationHours, hourlyPricingEnabled, pricePerHour, minHours } = await getSettings();
 
   if (!slotNumber || slotNumber < 1 || slotNumber > slotCount) {
     res.status(400).json({ error: "invalid_slot", message: "Invalid slot number" });
@@ -263,6 +281,19 @@ router.post("/create-crypto-session", requireAuth, async (req: Request, res: Res
   if (!process.env.NOWPAYMENTS_API_KEY) {
     res.status(503).json({ error: "payment_unavailable", message: "Crypto payments not configured" });
     return;
+  }
+
+  let purchasedHours: number = slotDurationHours;
+  let chargeAmount: number = pricePerDay;
+
+  if (hourlyPricingEnabled) {
+    const h = parseInt(hours, 10);
+    if (!hours || isNaN(h) || h < minHours) {
+      res.status(400).json({ error: "invalid_hours", message: `Minimum purchase is ${minHours} hour(s)` });
+      return;
+    }
+    purchasedHours = h;
+    chargeAmount = parseFloat((h * pricePerHour).toFixed(2));
   }
 
   const slots = await db.select().from(slotsTable).where(
@@ -282,7 +313,7 @@ router.post("/create-crypto-session", requireAuth, async (req: Request, res: Res
       : process.env.BASE_URL || "http://localhost:80";
     const ipnCallbackUrl = `${baseUrl}/api/payments/nowpayments-ipn`;
 
-    const nowPayment = await createNowPaymentsPayment(paymentId, pricePerDay, currency, ipnCallbackUrl);
+    const nowPayment = await createNowPaymentsPayment(paymentId, chargeAmount, currency, ipnCallbackUrl);
 
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
     const amount = String(nowPayment.pay_amount);
@@ -298,6 +329,7 @@ router.post("/create-crypto-session", requireAuth, async (req: Request, res: Res
       address: nowPayment.pay_address,
       txHash: nowPayment.payment_id,
       expiresAt,
+      derivationIndex: purchasedHours,
     });
 
     res.json({
@@ -341,7 +373,7 @@ router.post("/nowpayments-ipn", async (req: Request, res: Response) => {
     }
 
     const payment = payments[0];
-    await activateSlot(payment.userId, payment.slotNumber, payment.id);
+    await activateSlot(payment.userId, payment.slotNumber, payment.id, payment.derivationIndex ?? undefined);
     req.log.info({ paymentId: payment.id }, "NOWPayments IPN: slot activated");
     res.json({ received: true });
   } catch (err) {
@@ -395,7 +427,7 @@ router.post("/verify-crypto", requireAuth, async (req: Request, res: Response) =
       return;
     }
 
-    await activateSlot(payment.userId, payment.slotNumber, payment.id);
+    await activateSlot(payment.userId, payment.slotNumber, payment.id, payment.derivationIndex ?? undefined);
     res.json({ success: true, message: "Payment verified and slot activated" });
   } catch (err) {
     req.log.error({ err }, "Crypto payment verification failed");

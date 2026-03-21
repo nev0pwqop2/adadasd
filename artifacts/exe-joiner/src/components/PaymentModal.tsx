@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { QRCodeSVG } from 'qrcode.react';
-import { X, CreditCard, Bitcoin, Loader2, CheckCircle, Copy } from 'lucide-react';
+import { X, CreditCard, Bitcoin, Loader2, CheckCircle, Copy, Plus, Minus } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
 import { cn } from '@/lib/utils';
@@ -19,20 +19,45 @@ interface PaymentModalProps {
   slotNumber: number;
   pricePerDay?: number;
   slotDurationHours?: number;
+  hourlyPricingEnabled?: boolean;
+  pricePerHour?: number;
+  minHours?: number;
   onSuccess: () => void;
 }
 
 type Tab = 'crypto' | 'stripe';
 
-export function PaymentModal({ isOpen, onClose, slotNumber, pricePerDay = 20, slotDurationHours = 24, onSuccess }: PaymentModalProps) {
+export function PaymentModal({
+  isOpen,
+  onClose,
+  slotNumber,
+  pricePerDay = 20,
+  slotDurationHours = 24,
+  hourlyPricingEnabled = false,
+  pricePerHour = 5,
+  minHours = 2,
+  onSuccess,
+}: PaymentModalProps) {
   const [tab, setTab] = useState<Tab>('crypto');
   const [currency, setCurrency] = useState<CreateCryptoSessionRequestCurrency>('BTC');
+  const [selectedHours, setSelectedHours] = useState<number>(minHours);
   const { toast } = useToast();
 
-  // Mutations
+  useEffect(() => {
+    setSelectedHours(minHours);
+  }, [minHours, isOpen]);
+
   const { mutate: createStripe, isPending: isStripeLoading } = useCreateStripeSession();
   const { mutate: createCrypto, data: cryptoSession, isPending: isCryptoLoading, reset: resetCrypto } = useCreateCryptoSession();
   const { mutate: verifyCrypto, isPending: isVerifyLoading } = useVerifyCryptoPayment();
+
+  const totalPrice = hourlyPricingEnabled
+    ? selectedHours * pricePerHour
+    : pricePerDay;
+
+  const durationLabel = hourlyPricingEnabled
+    ? `${selectedHours}h`
+    : `${slotDurationHours}h`;
 
   const handleClose = () => {
     resetCrypto();
@@ -40,10 +65,10 @@ export function PaymentModal({ isOpen, onClose, slotNumber, pricePerDay = 20, sl
   };
 
   const handleStripePay = () => {
-    createStripe({ data: { slotNumber } }, {
-      onSuccess: (data) => {
-        window.location.href = data.url;
-      },
+    const data: any = { slotNumber };
+    if (hourlyPricingEnabled) data.hours = selectedHours;
+    createStripe({ data }, {
+      onSuccess: (res) => { window.location.href = res.url; },
       onError: (err) => {
         toast({ title: "Error", description: err.message || "Failed to initialize Stripe", variant: "destructive" });
       }
@@ -51,7 +76,9 @@ export function PaymentModal({ isOpen, onClose, slotNumber, pricePerDay = 20, sl
   };
 
   const handleCryptoGenerate = () => {
-    createCrypto({ data: { slotNumber, currency } }, {
+    const data: any = { slotNumber, currency };
+    if (hourlyPricingEnabled) data.hours = selectedHours;
+    createCrypto({ data }, {
       onError: (err) => {
         toast({ title: "Error", description: err.message || "Failed to generate crypto session", variant: "destructive" });
       }
@@ -78,6 +105,64 @@ export function PaymentModal({ isOpen, onClose, slotNumber, pricePerDay = 20, sl
   };
 
   if (!isOpen) return null;
+
+  const HourSelector = () => (
+    <div className="space-y-3">
+      <label className="text-xs font-mono uppercase text-muted-foreground">Select Hours</label>
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => setSelectedHours(h => Math.max(minHours, h - 1))}
+          disabled={selectedHours <= minHours}
+          className="w-10 h-10 border border-primary/30 flex items-center justify-center text-primary hover:bg-primary/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors chamfered"
+        >
+          <Minus className="w-4 h-4" />
+        </button>
+        <div className="flex-1 text-center">
+          <span className="text-3xl font-display font-bold text-primary">{selectedHours}</span>
+          <span className="text-muted-foreground font-mono text-sm ml-1">hr{selectedHours !== 1 ? 's' : ''}</span>
+        </div>
+        <button
+          onClick={() => setSelectedHours(h => h + 1)}
+          className="w-10 h-10 border border-primary/30 flex items-center justify-center text-primary hover:bg-primary/10 transition-colors chamfered"
+        >
+          <Plus className="w-4 h-4" />
+        </button>
+      </div>
+      {minHours > 1 && (
+        <p className="text-xs text-muted-foreground font-mono text-center">Minimum purchase: {minHours} hours</p>
+      )}
+      <div className="grid grid-cols-4 gap-1.5 pt-1">
+        {[minHours, minHours + 2, minHours + 6, minHours + 22].filter((v, i, a) => a.indexOf(v) === i).map(h => (
+          <button
+            key={h}
+            onClick={() => setSelectedHours(h)}
+            className={cn(
+              "py-1.5 text-xs font-mono border transition-all chamfered-btn",
+              selectedHours === h
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-primary/20 text-muted-foreground hover:border-primary/50"
+            )}
+          >
+            {h}h
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+
+  const PriceSummary = () => (
+    <div className="bg-secondary/50 p-4 border border-primary/20 flex justify-between items-center">
+      <span className="text-muted-foreground font-mono text-sm uppercase">Total</span>
+      <div className="text-right">
+        <span className="text-2xl font-display font-bold text-primary glow-text">${totalPrice.toFixed(2)}</span>
+        <p className="text-xs text-muted-foreground font-mono mt-0.5">
+          {hourlyPricingEnabled
+            ? `${selectedHours}h × $${pricePerHour.toFixed(2)}/hr`
+            : `/ ${slotDurationHours}h · $${(pricePerDay / slotDurationHours).toFixed(2)}/hr`}
+        </p>
+      </div>
+    </div>
+  );
 
   return (
     <AnimatePresence>
@@ -132,11 +217,8 @@ export function PaymentModal({ isOpen, onClose, slotNumber, pricePerDay = 20, sl
 
               {tab === 'stripe' && (
                 <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
-                  <div className="bg-secondary/50 p-4 border border-primary/20 text-center space-y-2">
-                    <p className="text-muted-foreground font-mono text-sm uppercase">Total Amount</p>
-                    <p className="text-4xl font-display font-bold text-primary glow-text">${pricePerDay.toFixed(2)}</p>
-                    <p className="text-xs text-muted-foreground font-mono">/ {slotDurationHours}h &nbsp;·&nbsp; ${(pricePerDay / slotDurationHours).toFixed(2)}/hr</p>
-                  </div>
+                  {hourlyPricingEnabled && <HourSelector />}
+                  <PriceSummary />
                   <Button 
                     className="w-full h-14 text-lg" 
                     onClick={handleStripePay} 
@@ -149,6 +231,7 @@ export function PaymentModal({ isOpen, onClose, slotNumber, pricePerDay = 20, sl
 
               {tab === 'crypto' && !cryptoSession && (
                 <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
+                  {hourlyPricingEnabled && <HourSelector />}
                   <div className="space-y-3">
                     <label className="text-xs font-mono uppercase text-muted-foreground">Select Currency</label>
                     <div className="grid grid-cols-3 gap-2">
@@ -168,15 +251,7 @@ export function PaymentModal({ isOpen, onClose, slotNumber, pricePerDay = 20, sl
                       ))}
                     </div>
                   </div>
-                  
-                  <div className="bg-secondary/50 p-4 border border-primary/20 flex justify-between items-center">
-                    <span className="text-muted-foreground font-mono text-sm uppercase">Price</span>
-                    <div className="text-right">
-                      <span className="text-xl font-display font-bold text-primary">${pricePerDay.toFixed(2)} <span className="text-sm font-normal text-muted-foreground">/ {slotDurationHours}h</span></span>
-                      <p className="text-xs text-muted-foreground font-mono mt-0.5">${(pricePerDay / slotDurationHours).toFixed(2)}/hr</p>
-                    </div>
-                  </div>
-
+                  <PriceSummary />
                   <Button 
                     className="w-full h-14" 
                     onClick={handleCryptoGenerate}

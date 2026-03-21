@@ -124,7 +124,8 @@ router.get("/", requireAuth, async (req, res) => {
       }
     });
 
-    res.json({ slots, totalSlots: slotCount, pricePerDay, slotDurationHours });
+    const { hourlyPricingEnabled, pricePerHour, minHours } = await getSettings();
+    res.json({ slots, totalSlots: slotCount, pricePerDay, slotDurationHours, hourlyPricingEnabled, pricePerHour, minHours });
   } catch (err) {
     req.log.error({ err }, "Failed to fetch slots");
     res.status(500).json({ error: "server_error", message: "Failed to fetch slots" });

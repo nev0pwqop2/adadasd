@@ -62,6 +62,9 @@ export default function Admin() {
   const [slotCount, setSlotCount] = useState<string>('');
   const [pricePerDay, setPricePerDay] = useState<string>('');
   const [slotDurationHours, setSlotDurationHours] = useState<string>('');
+  const [hourlyPricingEnabled, setHourlyPricingEnabled] = useState<boolean>(false);
+  const [pricePerHour, setPricePerHour] = useState<string>('');
+  const [minHours, setMinHours] = useState<string>('');
   const [editingUser, setEditingUser] = useState<string | null>(null);
   const [userSlotCount, setUserSlotCount] = useState<string>('');
   const [confirmReset, setConfirmReset] = useState(false);
@@ -81,6 +84,9 @@ export default function Admin() {
       setSlotCount(String(settings.slotCount));
       setPricePerDay(String(settings.pricePerDay));
       setSlotDurationHours(String((settings as any).slotDurationHours ?? 24));
+      setHourlyPricingEnabled(Boolean((settings as any).hourlyPricingEnabled));
+      setPricePerHour(String((settings as any).pricePerHour ?? 5));
+      setMinHours(String((settings as any).minHours ?? 2));
     }
   }, [settings]);
 
@@ -88,6 +94,8 @@ export default function Admin() {
     const count = parseInt(slotCount, 10);
     const price = parseFloat(pricePerDay);
     const hours = parseInt(slotDurationHours, 10);
+    const pph = parseFloat(pricePerHour);
+    const mh = parseInt(minHours, 10);
     if (isNaN(count) || count < 1 || count > 100) {
       toast({ title: "Invalid slot count", description: "Must be between 1 and 100.", variant: "destructive" });
       return;
@@ -100,9 +108,19 @@ export default function Admin() {
       toast({ title: "Invalid duration", description: "Must be between 1 and 720 hours.", variant: "destructive" });
       return;
     }
-    updateSettings({ data: { slotCount: count, pricePerDay: price, slotDurationHours: hours } as any }, {
+    if (hourlyPricingEnabled) {
+      if (isNaN(pph) || pph < 0) {
+        toast({ title: "Invalid price per hour", description: "Must be >= 0.", variant: "destructive" });
+        return;
+      }
+      if (isNaN(mh) || mh < 1) {
+        toast({ title: "Invalid minimum hours", description: "Must be at least 1.", variant: "destructive" });
+        return;
+      }
+    }
+    updateSettings({ data: { slotCount: count, pricePerDay: price, slotDurationHours: hours, hourlyPricingEnabled, pricePerHour: pph, minHours: mh } as any }, {
       onSuccess: () => {
-        toast({ title: "Settings saved", description: "Slot count and price updated.", className: "bg-primary text-primary-foreground" });
+        toast({ title: "Settings saved", description: "Settings updated successfully.", className: "bg-primary text-primary-foreground" });
         refetchSettings();
       },
       onError: () => toast({ title: "Error", description: "Failed to save settings.", variant: "destructive" }),
@@ -205,6 +223,50 @@ export default function Admin() {
                   />
                   <p className="text-xs text-muted-foreground font-mono">How long each slot stays active (e.g. 24 = 1 day)</p>
                 </div>
+
+                <div className="space-y-3 pt-2 border-t border-primary/20">
+                  <p className="text-xs font-mono text-primary uppercase tracking-wider font-bold">Hourly Pricing Mode</p>
+                  <label className="flex items-center gap-3 cursor-pointer select-none group">
+                    <div
+                      onClick={() => setHourlyPricingEnabled(v => !v)}
+                      className={`relative w-12 h-6 rounded-none transition-colors border cursor-pointer ${hourlyPricingEnabled ? 'bg-primary border-primary' : 'bg-secondary border-primary/30'}`}
+                    >
+                      <div className={`absolute top-0.5 w-5 h-5 bg-background transition-transform ${hourlyPricingEnabled ? 'translate-x-6' : 'translate-x-0.5'}`} />
+                    </div>
+                    <span className="text-sm font-mono text-foreground">
+                      {hourlyPricingEnabled ? 'Enabled — users pick how many hours to buy' : 'Disabled — fixed price per slot'}
+                    </span>
+                  </label>
+                </div>
+
+                {hourlyPricingEnabled && (
+                  <>
+                    <div className="space-y-2">
+                      <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Price Per Hour (USD)</label>
+                      <input
+                        type="number"
+                        min={0}
+                        step={0.01}
+                        value={pricePerHour}
+                        onChange={e => setPricePerHour(e.target.value)}
+                        className="w-full bg-background border border-primary/30 text-foreground font-mono px-4 py-3 focus:outline-none focus:border-primary text-lg"
+                      />
+                      <p className="text-xs text-muted-foreground font-mono">Charged per hour when hourly pricing is active</p>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Minimum Hours</label>
+                      <input
+                        type="number"
+                        min={1}
+                        step={1}
+                        value={minHours}
+                        onChange={e => setMinHours(e.target.value)}
+                        className="w-full bg-background border border-primary/30 text-foreground font-mono px-4 py-3 focus:outline-none focus:border-primary text-lg"
+                      />
+                      <p className="text-xs text-muted-foreground font-mono">Minimum hours a user must purchase per slot</p>
+                    </div>
+                  </>
+                )}
               </div>
               <div className="px-6 pb-6">
                 <Button onClick={handleSaveSettings} disabled={isSaving} className="w-full sm:w-auto">

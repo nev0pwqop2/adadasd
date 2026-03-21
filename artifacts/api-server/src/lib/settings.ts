@@ -5,6 +5,9 @@ const DEFAULTS = {
   slotCount: "10",
   pricePerDay: "20.00",
   slotDurationHours: "24",
+  hourlyPricingEnabled: "false",
+  pricePerHour: "5.00",
+  minHours: "2",
 };
 
 export async function getSetting(key: string): Promise<string> {
@@ -13,13 +16,23 @@ export async function getSetting(key: string): Promise<string> {
   return DEFAULTS[key as keyof typeof DEFAULTS] ?? "";
 }
 
-export async function getSettings(): Promise<{ slotCount: number; pricePerDay: number; slotDurationHours: number }> {
+export async function getSettings(): Promise<{
+  slotCount: number;
+  pricePerDay: number;
+  slotDurationHours: number;
+  hourlyPricingEnabled: boolean;
+  pricePerHour: number;
+  minHours: number;
+}> {
   const rows = await db.select().from(settingsTable);
   const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
   return {
     slotCount: parseInt(map.slotCount ?? DEFAULTS.slotCount, 10),
     pricePerDay: parseFloat(map.pricePerDay ?? DEFAULTS.pricePerDay),
     slotDurationHours: parseInt(map.slotDurationHours ?? DEFAULTS.slotDurationHours, 10),
+    hourlyPricingEnabled: (map.hourlyPricingEnabled ?? DEFAULTS.hourlyPricingEnabled) === "true",
+    pricePerHour: parseFloat(map.pricePerHour ?? DEFAULTS.pricePerHour),
+    minHours: parseInt(map.minHours ?? DEFAULTS.minHours, 10),
   };
 }
 
