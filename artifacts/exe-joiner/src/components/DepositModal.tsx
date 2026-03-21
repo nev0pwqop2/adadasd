@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, CreditCard, Bitcoin, Loader2, Wallet, Copy, Check } from 'lucide-react';
+import { X, CreditCard, Bitcoin, Loader2, Wallet, Copy, Check, CheckCircle } from 'lucide-react';
 import { Button } from './ui/button';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -31,6 +31,7 @@ export function DepositModal({ isOpen, onClose, onSuccess }: DepositModalProps) 
   const [amount, setAmount] = useState<number>(25);
   const [customAmount, setCustomAmount] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
   const [cryptoSession, setCryptoSession] = useState<CryptoSession | null>(null);
   const [copied, setCopied] = useState<'address' | 'amount' | null>(null);
 
@@ -44,6 +45,7 @@ export function DepositModal({ isOpen, onClose, onSuccess }: DepositModalProps) 
     setAmount(25);
     setCustomAmount('');
     setIsLoading(false);
+    setIsVerifying(false);
     setCryptoSession(null);
     setCopied(null);
   };
@@ -64,6 +66,32 @@ export function DepositModal({ isOpen, onClose, onSuccess }: DepositModalProps) 
   const handleDone = () => {
     reset();
     onClose();
+  };
+
+  const handleVerify = async () => {
+    if (!cryptoSession) return;
+    setIsVerifying(true);
+    try {
+      const res = await fetch(`${BASE}api/balance/deposit/verify`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paymentId: cryptoSession.paymentId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Payment not confirmed yet');
+      toast({
+        title: 'Balance Credited!',
+        description: data.alreadyCredited ? 'Your balance was already credited.' : `$${effectiveAmount.toFixed(2)} added to your balance.`,
+        className: 'bg-primary text-primary-foreground border-none',
+      });
+      onSuccess();
+      handleDone();
+    } catch (e: any) {
+      toast({ title: 'Not Confirmed Yet', description: e.message, variant: 'destructive' });
+    } finally {
+      setIsVerifying(false);
+    }
   };
 
   const handleStripeDeposit = async () => {
@@ -298,16 +326,28 @@ export function DepositModal({ isOpen, onClose, onSuccess }: DepositModalProps) 
                   </div>
 
                   <p className="text-center font-mono text-xs text-muted-foreground/70">
-                    Your balance will be credited automatically after the network confirms your transaction.
+                    Your balance will be credited automatically, or click verify once you've sent the payment.
                   </p>
 
-                  <Button
-                    variant="outline"
-                    className="w-full font-mono text-xs"
-                    onClick={handleDone}
-                  >
-                    Done
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      className="flex-1 font-mono text-xs"
+                      onClick={handleDone}
+                      disabled={isVerifying}
+                    >
+                      Close
+                    </Button>
+                    <Button
+                      className="flex-[2] font-mono text-xs"
+                      onClick={handleVerify}
+                      disabled={isVerifying}
+                    >
+                      {isVerifying
+                        ? <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Verifying…</>
+                        : <><CheckCircle className="w-4 h-4 mr-2" /> Verify Payment</>}
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>

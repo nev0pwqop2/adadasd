@@ -192,6 +192,76 @@ router.post("/deposit/crypto", requireAuth, async (req: Request, res: Response) 
   }
 });
 
+// POST /api/balance/deposit/verify — manually verify a crypto deposit payment
+router.post("/deposit/verify", requireAuth, async (req: Request, res: Response) => {
+  const { paymentId } = req.body as { paymentId?: string };
+  if (!paymentId) {
+    res.status(400).json({ error: "invalid_request", message: "Payment ID required" });
+    return;
+  }
+
+  try {
+    const payments = await db.select().from(paymentsTable).where(
+      and(
+        eq(paymentsTable.id, paymentId),
+        eq(paymentsTable.userId, req.session.userId!),
+        eq(paymentsTable.method, "balance-deposit-crypto"),
+      )
+    ).limit(1);
+
+    if (!payments.length) {
+      res.status(404).json({ error: "not_found", message: "Payment not found" });
+      return;
+    }
+
+    const payment = payments[0];
+
+    if (payment.status === "completed") {
+      res.json({ success: true, alreadyCredited: true, message: "Balance already credited" });
+      return;
+    }
+
+    if (!payment.txHash) {
+      res.status(400).json({ error: "invalid_payment", message: "No payment reference found" });
+      return;
+    }
+
+    const nowStatus = await nowpaymentsRequest(`/payment/${payment.txHash}`) as { payment_status: string };
+    const isConfirmed = nowStatus.payment_status === "finished" || nowStatus.payment_status === "confirmed";
+
+    if (!isConfirmed) {
+      res.status(402).json({
+        error: "not_confirmed",
+        message: `Payment status: ${nowStatus.payment_status}. Please wait and try again.`,
+      });
+      return;
+    }
+
+    const depositAmount = parseFloat(payment.amount ?? "0");
+    await db.update(paymentsTable).set({ status: "completed", updatedAt: new Date() }).where(eq(paymentsTable.id, payment.id));
+    await db.update(usersTable)
+      .set({ balance: sql`${usersTable.balance} + ${depositAmount.toFixed(2)}::numeric`, updatedAt: new Date() })
+      .where(eq(usersTable.id, req.session.userId!));
+
+    const userRows = await db.select().from(usersTable).where(eq(usersTable.id, req.session.userId!)).limit(1);
+    if (userRows.length) {
+      await sendPaymentWebhook({
+        username: userRows[0].username,
+        discordId: userRows[0].discordId,
+        method: payment.method,
+        currency: payment.currency,
+        amount: payment.amount,
+        purchaseType: "balance_deposit",
+      });
+    }
+
+    res.json({ success: true, alreadyCredited: false, message: "Balance credited successfully" });
+  } catch (err) {
+    req.log.error({ err }, "Balance deposit verification failed");
+    res.status(500).json({ error: "server_error", message: "Verification failed" });
+  }
+});
+
 // DELETE /api/balance/deposit/cancel — cancel any pending deposit payments
 router.delete("/deposit/cancel", requireAuth, async (req: Request, res: Response) => {
   try {
