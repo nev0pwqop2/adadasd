@@ -34,6 +34,8 @@ export default function Dashboard() {
     queryKey: ['slots'],
     queryFn: () => apiFetch<{ slots: PublicSlot[]; totalSlots: number; pricePerDay: number; slotDurationHours: number }>('api/slots'),
     enabled: !!user,
+    refetchInterval: 5000,
+    refetchIntervalInBackground: false,
   });
 
   const { data: leaderboardRes, isLoading: isLeaderboardLoading } = useQuery({
