@@ -135,7 +135,7 @@ export function PaymentModal({ isOpen, onClose, slotNumber, pricePerDay = 20, sl
                   <div className="bg-secondary/50 p-4 border border-primary/20 text-center space-y-2">
                     <p className="text-muted-foreground font-mono text-sm uppercase">Total Amount</p>
                     <p className="text-4xl font-display font-bold text-primary glow-text">${pricePerDay.toFixed(2)}</p>
-                    <p className="text-xs text-muted-foreground font-mono">/ {slotDurationHours}h</p>
+                    <p className="text-xs text-muted-foreground font-mono">/ {slotDurationHours}h &nbsp;·&nbsp; ${(pricePerDay / slotDurationHours).toFixed(2)}/hr</p>
                   </div>
                   <Button 
                     className="w-full h-14 text-lg" 
@@ -169,9 +169,12 @@ export function PaymentModal({ isOpen, onClose, slotNumber, pricePerDay = 20, sl
                     </div>
                   </div>
                   
-                  <div className="bg-secondary/50 p-4 border border-primary/20 text-center flex justify-between items-center">
+                  <div className="bg-secondary/50 p-4 border border-primary/20 flex justify-between items-center">
                     <span className="text-muted-foreground font-mono text-sm uppercase">Price</span>
-                    <span className="text-xl font-display font-bold text-primary">${pricePerDay.toFixed(2)} <span className="text-sm font-normal text-muted-foreground">/ {slotDurationHours}h</span></span>
+                    <div className="text-right">
+                      <span className="text-xl font-display font-bold text-primary">${pricePerDay.toFixed(2)} <span className="text-sm font-normal text-muted-foreground">/ {slotDurationHours}h</span></span>
+                      <p className="text-xs text-muted-foreground font-mono mt-0.5">${(pricePerDay / slotDurationHours).toFixed(2)}/hr</p>
+                    </div>
                   </div>
 
                   <Button 

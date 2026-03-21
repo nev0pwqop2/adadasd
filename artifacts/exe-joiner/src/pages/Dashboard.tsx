@@ -174,7 +174,10 @@ export default function Dashboard() {
                   <LayoutGrid className="text-primary" /> Array Configuration
                 </h2>
                 <p className="text-muted-foreground font-mono mt-1 text-sm">
-                  Manage your execution slots — <span className="text-primary">${pricePerDay.toFixed(2)} / {slotDurationHours}h per slot</span>
+                  Manage your execution slots — <span className="text-primary">${pricePerDay.toFixed(2)} / {slotDurationHours}h</span>
+                  <span className="text-muted-foreground"> · </span>
+                  <span className="text-primary/70">${(pricePerDay / slotDurationHours).toFixed(2)}/hr</span>
+                  <span className="text-muted-foreground"> per slot</span>
                 </p>
               </div>
               <motion.div
