@@ -9,9 +9,22 @@ const DiscordIcon = () => (
   </svg>
 );
 
+const ERROR_MESSAGES: Record<string, string> = {
+  token_exchange_failed: 'Login failed — Discord rejected the token exchange.',
+  discord_denied: 'You cancelled the Discord login.',
+  invalid_state: 'Login session expired or was tampered with. Please try again.',
+  no_code: 'No authorisation code received from Discord.',
+  user_fetch_failed: 'Could not retrieve your Discord profile.',
+  server_error: 'An unexpected server error occurred.',
+};
+
 export default function Landing() {
   const [, setLocation] = useLocation();
   const { data: user, isLoading } = useGetMe({ query: { retry: false } });
+
+  const params = new URLSearchParams(window.location.search);
+  const errorCode = params.get('error');
+  const errorDetail = params.get('detail');
 
   useEffect(() => {
     if (!isLoading && user) setLocation('/dashboard');
@@ -38,7 +51,7 @@ export default function Landing() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, ease: 'easeOut' }}
-        className="relative z-10 flex flex-col items-center text-center max-w-xs w-full"
+        className="relative z-10 flex flex-col items-center text-center max-w-sm w-full"
       >
         <div className="relative mb-8">
           <div className="absolute inset-0 rounded-full bg-primary/25 blur-3xl scale-[2]" />
@@ -55,6 +68,19 @@ export default function Landing() {
         <p className="text-sm text-muted-foreground mb-10">
           Premium slot access · Discord verified
         </p>
+
+        {errorCode && (
+          <div className="w-full mb-6 rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-left space-y-2">
+            <p className="text-sm font-semibold text-red-400">
+              {ERROR_MESSAGES[errorCode] ?? `Error: ${errorCode}`}
+            </p>
+            {errorDetail && (
+              <pre className="text-[10px] font-mono text-red-300/70 whitespace-pre-wrap break-all leading-relaxed">
+                {decodeURIComponent(errorDetail)}
+              </pre>
+            )}
+          </div>
+        )}
 
         <button
           onClick={handleLogin}
