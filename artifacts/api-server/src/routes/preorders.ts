@@ -141,6 +141,7 @@ router.post("/create-stripe", requireAuth, async (req: Request, res: Response) =
       method: "preorder-stripe",
       status: "pending",
       amount: pricePerDay.toFixed(2),
+      usdAmount: pricePerDay.toFixed(2),
       currency: "USD",
       stripeSessionId: session.id,
       expiresAt: new Date(Date.now() + 30 * 60 * 1000),
@@ -212,6 +213,7 @@ router.post("/create-crypto", requireAuth, async (req: Request, res: Response) =
       status: "pending",
       currency,
       amount: String(nowPayment.pay_amount),
+      usdAmount: pricePerDay.toFixed(2),
       address: nowPayment.pay_address,
       txHash: nowPayment.payment_id,
       expiresAt,
@@ -278,6 +280,7 @@ router.post("/create-balance", requireAuth, async (req: Request, res: Response) 
       method: "preorder-balance",
       status: "completed",
       amount: pricePerDay.toFixed(2),
+      usdAmount: pricePerDay.toFixed(2),
       currency: "USD",
       derivationIndex: slotDurationHours,
     });

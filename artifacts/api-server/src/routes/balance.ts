@@ -106,6 +106,7 @@ router.post("/deposit/stripe", requireAuth, async (req: Request, res: Response) 
       method: "balance-deposit-stripe",
       status: "pending",
       amount: amount.toFixed(2),
+      usdAmount: amount.toFixed(2),
       currency: "USD",
       stripeSessionId: session.id,
       expiresAt: new Date(Date.now() + 30 * 60 * 1000),
@@ -177,6 +178,7 @@ router.post("/deposit/crypto", requireAuth, async (req: Request, res: Response) 
       status: "pending",
       currency,
       amount: amount.toFixed(2),
+      usdAmount: amount.toFixed(2),
       address: nowPayment.pay_address,
       expiresAt,
     });

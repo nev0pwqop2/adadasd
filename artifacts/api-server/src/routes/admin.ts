@@ -73,21 +73,6 @@ router.post("/settings", async (req, res) => {
       await setSetting("minHours", String(min));
     }
 
-    // Partner wallet addresses per crypto currency (for auto-split tracking)
-    const partnerWallets: Record<string, string> = {
-      partnerWalletLTC: req.body.partnerWalletLTC,
-      partnerWalletBTC: req.body.partnerWalletBTC,
-      partnerWalletETH: req.body.partnerWalletETH,
-      partnerWalletUSDT: req.body.partnerWalletUSDT,
-      partnerWalletSOL: req.body.partnerWalletSOL,
-      ownWalletLTC: req.body.ownWalletLTC,
-    };
-    for (const [key, value] of Object.entries(partnerWallets)) {
-      if (value !== undefined && typeof value === "string") {
-        await setSetting(key, value.trim());
-      }
-    }
-
     const updated = await getSettings();
     res.json(updated);
   } catch (err) {
@@ -440,97 +425,91 @@ router.post("/reset-all-deposits", async (req, res) => {
   }
 });
 
-// GET /admin/sales — all completed payments requiring a 50/50 split, with partner wallet info
-router.get("/sales", async (req, res) => {
+// GET /admin/transactions — revenue summary and per-transaction detail
+router.get("/transactions", async (req, res) => {
   try {
     const payments = await db
       .select()
       .from(paymentsTable)
       .where(eq(paymentsTable.status, "completed"))
       .orderBy(desc(paymentsTable.updatedAt))
-      .limit(500);
+      .limit(1000);
 
-    // Filter to only purchases that need splitting (not balance deposits, not balance-paid items)
-    const saleable = payments.filter(p =>
-      p.method !== "balance-deposit-crypto" &&
-      p.method !== "balance-deposit-stripe" &&
+    // Revenue = real sales only (exclude balance-funded purchases and deposits)
+    const revenue = payments.filter(p =>
       p.method !== "balance" &&
-      p.method !== "balance-preorder"
+      p.method !== "preorder-balance" &&
+      p.method !== "balance-deposit-crypto" &&
+      p.method !== "balance-deposit-stripe"
     );
 
-    const userIds = [...new Set(saleable.map(p => p.userId))];
+    const userIds = [...new Set(revenue.map(p => p.userId))];
     const userMap: Record<string, { username: string; discordId: string; avatar: string | null }> = {};
     if (userIds.length) {
-      const rows = await db.select({ id: usersTable.id, username: usersTable.username, discordId: usersTable.discordId, avatar: usersTable.avatar })
+      const rows = await db
+        .select({ id: usersTable.id, username: usersTable.username, discordId: usersTable.discordId, avatar: usersTable.avatar })
         .from(usersTable)
         .where(inArray(usersTable.id, userIds));
       for (const u of rows) userMap[u.id] = { username: u.username, discordId: u.discordId, avatar: u.avatar };
     }
 
-    // Load partner wallet addresses from settings
-    const [ltcPartner, btcPartner, ethPartner, usdtPartner, solPartner, ownLtc] = await Promise.all([
-      getSetting("partnerWalletLTC"),
-      getSetting("partnerWalletBTC"),
-      getSetting("partnerWalletETH"),
-      getSetting("partnerWalletUSDT"),
-      getSetting("partnerWalletSOL"),
-      getSetting("ownWalletLTC"),
-    ]);
-    const partnerWallets: Record<string, string> = { LTC: ltcPartner, BTC: btcPartner, ETH: ethPartner, USDT: usdtPartner, SOL: solPartner };
+    function getUsdValue(p: typeof revenue[0]): number {
+      if (p.usdAmount) return parseFloat(p.usdAmount);
+      if (p.method?.includes("stripe")) return parseFloat(p.amount ?? "0");
+      return 0;
+    }
 
-    const sales = saleable.map(p => {
-      const isStripe = p.method?.includes("stripe");
-      const isCrypto = p.method?.includes("crypto") || (!isStripe && !p.method?.includes("balance"));
-      const currencyUpper = (p.currency ?? "").toUpperCase();
-      const rawAmount = parseFloat(p.amount ?? "0");
-      const halfAmount = Math.round(rawAmount * 0.5 * 1e8) / 1e8;
-      const partnerAddr = isStripe ? ownLtc : (partnerWallets[currencyUpper] ?? "");
-      const purchaseType = p.method?.startsWith("preorder") ? "preorder" : "slot";
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfWeek = new Date(startOfToday);
+    startOfWeek.setDate(startOfToday.getDate() - startOfToday.getDay());
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
+    function getPeriodStats(since: Date) {
+      const filtered = revenue.filter(p => new Date(p.updatedAt) >= since);
+      let stripeTotal = 0, cryptoTotal = 0, stripeCount = 0, cryptoCount = 0;
+      for (const p of filtered) {
+        const usd = getUsdValue(p);
+        if (p.method?.includes("stripe")) { stripeTotal += usd; stripeCount++; }
+        else { cryptoTotal += usd; cryptoCount++; }
+      }
       return {
-        id: p.id,
-        username: userMap[p.userId]?.username ?? "Unknown",
-        discordId: userMap[p.userId]?.discordId ?? "",
-        avatar: userMap[p.userId]?.avatar ?? null,
-        method: p.method,
-        isStripe,
-        isCrypto,
-        currency: p.currency,
-        currencyUpper,
-        amountReceived: p.amount,
-        halfAmount: halfAmount.toString(),
-        partnerWallet: partnerAddr,
-        splitSent: p.splitSent,
-        purchaseType,
-        slotNumber: p.slotNumber,
-        completedAt: p.updatedAt?.toISOString() ?? null,
+        total: parseFloat((stripeTotal + cryptoTotal).toFixed(2)),
+        stripe: parseFloat(stripeTotal.toFixed(2)),
+        crypto: parseFloat(cryptoTotal.toFixed(2)),
+        stripeCount,
+        cryptoCount,
+        count: stripeCount + cryptoCount,
       };
-    });
+    }
+
+    const transactions = revenue.map(p => ({
+      id: p.id,
+      username: userMap[p.userId]?.username ?? "Unknown",
+      discordId: userMap[p.userId]?.discordId ?? "",
+      avatar: userMap[p.userId]?.avatar ?? null,
+      method: p.method,
+      isStripe: p.method?.includes("stripe") ?? false,
+      currency: p.currency,
+      rawAmount: p.amount,
+      usdAmount: getUsdValue(p).toFixed(2),
+      purchaseType: p.method?.startsWith("preorder") ? "preorder" : "slot",
+      slotNumber: p.slotNumber,
+      completedAt: p.updatedAt?.toISOString() ?? null,
+    }));
 
     res.json({
-      sales,
-      wallets: { partnerWallets, ownWalletLTC: ownLtc },
+      summary: {
+        today: getPeriodStats(startOfToday),
+        week: getPeriodStats(startOfWeek),
+        month: getPeriodStats(startOfMonth),
+        allTime: getPeriodStats(new Date(0)),
+      },
+      transactions,
     });
   } catch (err) {
-    req.log.error({ err }, "Failed to fetch admin sales");
-    res.status(500).json({ error: "server_error", message: "Failed to fetch sales" });
-  }
-});
-
-// POST /admin/sales/:id/mark-sent — manually mark a split as sent
-router.post("/sales/:id/mark-sent", async (req, res) => {
-  try {
-    const { id } = req.params;
-    const result = await db
-      .update(paymentsTable)
-      .set({ splitSent: true, updatedAt: new Date() })
-      .where(and(eq(paymentsTable.id, id), eq(paymentsTable.status, "completed")));
-
-    req.log.info({ adminId: req.session.userId, paymentId: id }, "Split manually marked as sent");
-    res.json({ success: true });
-  } catch (err) {
-    req.log.error({ err }, "Failed to mark split sent");
-    res.status(500).json({ error: "server_error", message: "Failed to update" });
+    req.log.error({ err }, "Failed to fetch admin transactions");
+    res.status(500).json({ error: "server_error", message: "Failed to fetch transactions" });
   }
 });
 

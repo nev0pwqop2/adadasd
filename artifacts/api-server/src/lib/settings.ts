@@ -8,11 +8,6 @@ const DEFAULTS: Record<string, string> = {
   hourlyPricingEnabled: "false",
   pricePerHour: "5.00",
   minHours: "2",
-  partnerWalletLTC: "LNK77h4592rL5Br59rkpgihqxLeqEiMcca",
-  partnerWalletBTC: "",
-  partnerWalletETH: "",
-  partnerWalletUSDT: "",
-  partnerWalletSOL: "",
   ownWalletLTC: "LRipFjnvu2tcHdasX7iALXMdEJbE9jpNNQ",
 };
 
@@ -29,11 +24,6 @@ export async function getSettings(): Promise<{
   hourlyPricingEnabled: boolean;
   pricePerHour: number;
   minHours: number;
-  partnerWalletLTC: string;
-  partnerWalletBTC: string;
-  partnerWalletETH: string;
-  partnerWalletUSDT: string;
-  partnerWalletSOL: string;
   ownWalletLTC: string;
 }> {
   const rows = await db.select().from(settingsTable);
@@ -46,11 +36,6 @@ export async function getSettings(): Promise<{
     hourlyPricingEnabled: g("hourlyPricingEnabled") === "true",
     pricePerHour: parseFloat(g("pricePerHour")),
     minHours: parseInt(g("minHours"), 10),
-    partnerWalletLTC: g("partnerWalletLTC"),
-    partnerWalletBTC: g("partnerWalletBTC"),
-    partnerWalletETH: g("partnerWalletETH"),
-    partnerWalletUSDT: g("partnerWalletUSDT"),
-    partnerWalletSOL: g("partnerWalletSOL"),
     ownWalletLTC: g("ownWalletLTC"),
   };
 }

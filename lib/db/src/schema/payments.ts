@@ -17,6 +17,7 @@ export const paymentsTable = pgTable("payments", {
   stripeSessionId: text("stripe_session_id"),
   expiresAt: timestamp("expires_at"),
   splitSent: boolean("split_sent").notNull().default(false),
+  usdAmount: text("usd_amount"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
