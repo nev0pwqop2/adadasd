@@ -4,7 +4,7 @@ import { eq, and, ne, sql } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { getSettings } from "../lib/settings.js";
 import { isLuarmorConfigured, createLuarmorUser } from "../lib/luarmor.js";
-import { sendPaymentWebhook } from "../lib/discord.js";
+import { sendPaymentWebhook, type PurchaseType } from "../lib/discord.js";
 import crypto from "crypto";
 
 const router = Router();
@@ -139,6 +139,7 @@ async function activateSlot(userId: string, slotNumber: number, paymentId: strin
       currency: p.currency,
       amount: p.amount,
       slotNumber,
+      purchaseType: "slot",
     });
   }
 }
@@ -276,6 +277,17 @@ router.post("/stripe-webhook", async (req: Request, res: Response) => {
             await db.update(usersTable)
               .set({ balance: sql`${usersTable.balance} + ${depositAmount.toFixed(2)}::numeric`, updatedAt: new Date() })
               .where(eq(usersTable.id, userId));
+            const userRows = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+            if (userRows.length) {
+              await sendPaymentWebhook({
+                username: userRows[0].username,
+                discordId: userRows[0].discordId,
+                method: pending[0].method,
+                currency: "USD",
+                amount: pending[0].amount,
+                purchaseType: "balance_deposit",
+              });
+            }
           }
         } else if (isPreorder === "true") {
           // Pre-order payment — mark payment completed + create preorder record
@@ -291,6 +303,17 @@ router.post("/stripe-webhook", async (req: Request, res: Response) => {
               paymentId: pending[0].id,
               status: "paid",
             });
+            const userRows = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+            if (userRows.length) {
+              await sendPaymentWebhook({
+                username: userRows[0].username,
+                discordId: userRows[0].discordId,
+                method: pending[0].method,
+                currency: "USD",
+                amount: pending[0].amount,
+                purchaseType: "preorder",
+              });
+            }
           }
         } else if (slotNumber) {
           const slotNum = parseInt(slotNumber, 10);
@@ -438,6 +461,17 @@ router.post("/nowpayments-ipn", async (req: Request, res: Response) => {
         .set({ balance: sql`${usersTable.balance} + ${depositAmount.toFixed(2)}::numeric`, updatedAt: new Date() })
         .where(eq(usersTable.id, payment.userId));
       req.log.info({ paymentId: payment.id, amount: depositAmount }, "NOWPayments IPN: balance credited");
+      const userRows = await db.select().from(usersTable).where(eq(usersTable.id, payment.userId)).limit(1);
+      if (userRows.length) {
+        await sendPaymentWebhook({
+          username: userRows[0].username,
+          discordId: userRows[0].discordId,
+          method: payment.method,
+          currency: payment.currency,
+          amount: payment.amount,
+          purchaseType: "balance_deposit",
+        });
+      }
     } else if (payment.method === "preorder-crypto") {
       // Pre-order: mark payment completed + create preorder record
       await db.update(paymentsTable).set({ status: "completed", updatedAt: new Date() }).where(eq(paymentsTable.id, payment.id));
@@ -449,6 +483,17 @@ router.post("/nowpayments-ipn", async (req: Request, res: Response) => {
         status: "paid",
       });
       req.log.info({ paymentId: payment.id }, "NOWPayments IPN: pre-order activated");
+      const userRows = await db.select().from(usersTable).where(eq(usersTable.id, payment.userId)).limit(1);
+      if (userRows.length) {
+        await sendPaymentWebhook({
+          username: userRows[0].username,
+          discordId: userRows[0].discordId,
+          method: payment.method,
+          currency: payment.currency,
+          amount: payment.amount,
+          purchaseType: "preorder",
+        });
+      }
     } else {
       await activateSlot(payment.userId, payment.slotNumber, payment.id, payment.derivationIndex ?? undefined);
       req.log.info({ paymentId: payment.id }, "NOWPayments IPN: slot activated");

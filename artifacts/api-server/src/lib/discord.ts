@@ -1,34 +1,70 @@
+export type PurchaseType = "slot" | "balance_deposit" | "preorder";
+
 export async function sendPaymentWebhook(data: {
   username: string;
   discordId: string;
   method: string;
   currency?: string | null;
   amount?: string | null;
-  slotNumber: number;
+  slotNumber?: number | null;
+  purchaseType?: PurchaseType;
 }): Promise<void> {
   const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
   if (!webhookUrl) return;
 
-  const methodLabel = data.method === "stripe" ? "Card (Stripe)" : `Crypto (${data.currency ?? "?"})`;
+  const purchaseType = data.purchaseType ?? "slot";
+
+  const methodLabel =
+    data.method === "stripe" || data.method === "balance-deposit-stripe" || data.method === "preorder-stripe"
+      ? "Card (Stripe)"
+      : `Crypto (${data.currency ?? "?"})`;
+
   const amountLabel = data.amount
-    ? data.method === "stripe"
+    ? data.method === "stripe" || data.method === "balance-deposit-stripe" || data.method === "preorder-stripe"
       ? `$${parseFloat(data.amount).toFixed(2)} USD`
       : `${data.amount} ${data.currency ?? ""}`
     : "—";
 
+  let title: string;
+  let typeLabel: string;
+  let color: number;
+
+  switch (purchaseType) {
+    case "balance_deposit":
+      title = "💳 Balance Deposit";
+      typeLabel = "Balance Deposit";
+      color = 0x5865f2;
+      break;
+    case "preorder":
+      title = "📋 Pre-order Placed";
+      typeLabel = "Pre-order";
+      color = 0xf5a623;
+      break;
+    default:
+      title = "💰 New Slot Purchase";
+      typeLabel = "Slot Purchase";
+      color = 0x00ff88;
+      break;
+  }
+
+  const fields: { name: string; value: string; inline: boolean }[] = [
+    { name: "User", value: `${data.username} (<@${data.discordId}>)`, inline: true },
+    { name: "Discord ID", value: data.discordId, inline: true },
+    { name: "Type", value: typeLabel, inline: true },
+    { name: "Method", value: methodLabel, inline: true },
+    { name: "Amount", value: amountLabel, inline: true },
+  ];
+
+  if (purchaseType === "slot" && data.slotNumber != null) {
+    fields.push({ name: "Slot #", value: String(data.slotNumber), inline: true });
+  }
+
   const payload = {
     embeds: [
       {
-        title: "💰 New Slot Purchase",
-        color: 0x00ff88,
-        fields: [
-          { name: "User", value: `${data.username} (<@${data.discordId}>)`, inline: true },
-          { name: "Discord ID", value: data.discordId, inline: true },
-          { name: "Slot #", value: String(data.slotNumber), inline: true },
-          { name: "Method", value: methodLabel, inline: true },
-          { name: "Amount", value: amountLabel, inline: true },
-          { name: "Type", value: "Deposit", inline: true },
-        ],
+        title,
+        color,
+        fields,
         timestamp: new Date().toISOString(),
       },
     ],
@@ -41,6 +77,6 @@ export async function sendPaymentWebhook(data: {
       body: JSON.stringify(payload),
     });
   } catch {
-    // Webhook failure should never block slot activation
+    // Webhook failure should never block payment processing
   }
 }
