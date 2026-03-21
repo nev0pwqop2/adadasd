@@ -48,7 +48,20 @@ export function DepositModal({ isOpen, onClose, onSuccess }: DepositModalProps) 
     setCopied(null);
   };
 
+  const cancelPendingDeposit = () => {
+    fetch(`${BASE}api/balance/deposit/cancel`, {
+      method: 'DELETE',
+      credentials: 'include',
+    }).catch(() => {});
+  };
+
   const handleClose = () => {
+    cancelPendingDeposit();
+    reset();
+    onClose();
+  };
+
+  const handleDone = () => {
     reset();
     onClose();
   };
@@ -291,7 +304,7 @@ export function DepositModal({ isOpen, onClose, onSuccess }: DepositModalProps) 
                   <Button
                     variant="outline"
                     className="w-full font-mono text-xs"
-                    onClick={handleClose}
+                    onClick={handleDone}
                   >
                     Done
                   </Button>
