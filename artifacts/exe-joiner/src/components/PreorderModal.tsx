@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Button } from './ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { X, CreditCard, Bitcoin, Copy, Check, Clock, Loader2 } from 'lucide-react';
+import { X, CreditCard, Bitcoin, Copy, Check, Clock, Loader2, Wallet } from 'lucide-react';
 
 interface PreorderModalProps {
   isOpen: boolean;
@@ -10,6 +10,7 @@ interface PreorderModalProps {
   slotDurationHours: number;
   nextExpiresAt: string | null;
   onSuccess: () => void;
+  balance?: number;
 }
 
 const CRYPTO_OPTIONS = [
@@ -22,15 +23,17 @@ const CRYPTO_OPTIONS = [
 
 type Step = 'choose' | 'crypto_address' | 'loading';
 
-export function PreorderModal({ isOpen, onClose, pricePerDay, slotDurationHours, nextExpiresAt, onSuccess }: PreorderModalProps) {
+export function PreorderModal({ isOpen, onClose, pricePerDay, slotDurationHours, nextExpiresAt, onSuccess, balance = 0 }: PreorderModalProps) {
   const { toast } = useToast();
   const [step, setStep] = useState<Step>('choose');
   const [selectedCrypto, setSelectedCrypto] = useState('');
   const [cryptoSession, setCryptoSession] = useState<{ address: string; amount: string; currency: string } | null>(null);
   const [copied, setCopied] = useState(false);
   const [isLoadingStripe, setIsLoadingStripe] = useState(false);
+  const [isLoadingBalance, setIsLoadingBalance] = useState(false);
 
   const BASE = import.meta.env.BASE_URL;
+  const hasEnoughBalance = balance >= pricePerDay;
 
   const handleClose = () => {
     setStep('choose');
@@ -53,6 +56,26 @@ export function PreorderModal({ isOpen, onClose, pricePerDay, slotDurationHours,
     } catch (e: any) {
       toast({ title: 'Error', description: e.message, variant: 'destructive' });
       setIsLoadingStripe(false);
+    }
+  };
+
+  const handleBalance = async () => {
+    setIsLoadingBalance(true);
+    try {
+      const res = await fetch(`${BASE}api/preorders/create-balance`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Failed');
+      toast({ title: 'Pre-order Placed!', description: "You'll automatically get the next slot when one opens.", className: 'bg-primary text-primary-foreground border-none' });
+      onSuccess();
+      handleClose();
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+    } finally {
+      setIsLoadingBalance(false);
     }
   };
 
@@ -120,7 +143,29 @@ export function PreorderModal({ isOpen, onClose, pricePerDay, slotDurationHours,
           </div>
 
           {step === 'choose' && (
-            <div className="space-y-4">
+            <div className="space-y-3">
+              {/* Balance */}
+              <button
+                onClick={handleBalance}
+                disabled={isLoadingBalance || !hasEnoughBalance}
+                className="w-full flex items-center gap-4 p-4 border border-border rounded-xl hover:border-primary/30 hover:bg-primary/5 transition-all text-left disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <div className="w-10 h-10 bg-secondary rounded-lg flex items-center justify-center shrink-0">
+                  {isLoadingBalance ? <Loader2 className="w-5 h-5 text-primary animate-spin" /> : <Wallet className="w-5 h-5 text-primary" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-sm text-foreground">Pay with Balance</p>
+                  <p className="text-xs text-muted-foreground font-mono">
+                    Your balance: <span className={hasEnoughBalance ? 'text-green-400' : 'text-red-400'}>${balance.toFixed(2)}</span>
+                    {!hasEnoughBalance && <span className="ml-1">(need ${pricePerDay.toFixed(2)})</span>}
+                  </p>
+                </div>
+                {hasEnoughBalance && (
+                  <span className="font-mono text-xs text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded-full shrink-0">Instant</span>
+                )}
+              </button>
+
+              {/* Stripe */}
               <button
                 onClick={handleStripe}
                 disabled={isLoadingStripe}
@@ -135,6 +180,7 @@ export function PreorderModal({ isOpen, onClose, pricePerDay, slotDurationHours,
                 </div>
               </button>
 
+              {/* Crypto */}
               <div className="border border-border rounded-xl p-4">
                 <div className="flex items-center gap-3 mb-3">
                   <div className="w-10 h-10 bg-secondary rounded-lg flex items-center justify-center shrink-0">

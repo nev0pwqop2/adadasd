@@ -1,8 +1,10 @@
 import { Router, Request, Response } from "express";
 import { db, preordersTable, paymentsTable, usersTable } from "@workspace/db";
 import { eq, and, desc, inArray } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { getSettings } from "../lib/settings.js";
+import { sendPaymentWebhook } from "../lib/discord.js";
 import crypto from "crypto";
 
 const router = Router();
@@ -220,6 +222,86 @@ router.post("/create-crypto", requireAuth, async (req: Request, res: Response) =
   } catch (err) {
     req.log.error({ err }, "Pre-order crypto session creation failed");
     res.status(500).json({ error: "server_error", message: "Failed to create crypto payment" });
+  }
+});
+
+// POST /api/preorders/create-balance — pay for a pre-order using account balance
+router.post("/create-balance", requireAuth, async (req: Request, res: Response) => {
+  const userId = req.session.userId!;
+
+  const existing = await db.select().from(preordersTable)
+    .where(and(eq(preordersTable.userId, userId), eq(preordersTable.status, "paid")))
+    .limit(1);
+  if (existing.length) {
+    res.status(400).json({ error: "already_preordered", message: "You already have an active pre-order." });
+    return;
+  }
+
+  const { pricePerDay, slotDurationHours } = await getSettings();
+
+  try {
+    const userRows = await db
+      .select({ balance: usersTable.balance, username: usersTable.username, discordId: usersTable.discordId })
+      .from(usersTable)
+      .where(eq(usersTable.id, userId))
+      .limit(1);
+
+    const currentBalance = parseFloat(userRows[0]?.balance ?? "0");
+    if (currentBalance < pricePerDay) {
+      res.status(400).json({
+        error: "insufficient_balance",
+        message: `Insufficient balance. Need $${pricePerDay.toFixed(2)}, have $${currentBalance.toFixed(2)}`,
+      });
+      return;
+    }
+
+    // Deduct balance
+    await db.update(usersTable)
+      .set({ balance: sql`${usersTable.balance} - ${pricePerDay.toFixed(2)}::numeric`, updatedAt: new Date() })
+      .where(eq(usersTable.id, userId));
+
+    // Create preorder record
+    const paymentId = crypto.randomUUID();
+    await db.insert(preordersTable).values({
+      userId,
+      amount: pricePerDay.toFixed(2),
+      currency: "USD",
+      paymentId,
+      status: "paid",
+    });
+
+    // Create payment log
+    await db.insert(paymentsTable).values({
+      id: paymentId,
+      userId,
+      slotNumber: 0,
+      method: "preorder-balance",
+      status: "completed",
+      amount: pricePerDay.toFixed(2),
+      currency: "USD",
+      derivationIndex: slotDurationHours,
+    });
+
+    // Discord webhook
+    try {
+      if (userRows[0]) {
+        await sendPaymentWebhook({
+          username: userRows[0].username,
+          discordId: userRows[0].discordId,
+          method: "balance",
+          currency: "USD",
+          amount: pricePerDay.toFixed(2),
+          purchaseType: "preorder",
+        });
+      }
+    } catch (webhookErr) {
+      req.log.warn({ webhookErr }, "Preorder balance webhook failed");
+    }
+
+    res.json({ success: true, newBalance: (currentBalance - pricePerDay).toFixed(2) });
+  } catch (err) {
+    req.log.error({ err }, "Pre-order balance payment failed");
+    res.status(500).json({ error: "server_error", message: "Failed to process balance payment" });
   }
 });
 

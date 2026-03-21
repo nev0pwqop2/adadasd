@@ -51,6 +51,7 @@ export default function Dashboard() {
   const { data: user, isError: isUserError, isLoading: isUserLoading } = useGetMe({ query: { retry: false } });
 
   const [bidAmount, setBidAmount] = useState('');
+  const [bidUseBalance, setBidUseBalance] = useState(false);
   const [showBidForm, setShowBidForm] = useState(false);
   const [showPreorderModal, setShowPreorderModal] = useState(false);
   const [showDepositModal, setShowDepositModal] = useState(false);
@@ -63,22 +64,22 @@ export default function Dashboard() {
     refetchIntervalInBackground: false,
   });
 
-  type BidEntry = { id: number; amount: number; username: string; discordId: string; avatar: string | null; isOwn: boolean; createdAt: string };
+  type BidEntry = { id: number; amount: number; username: string; discordId: string; avatar: string | null; isOwn: boolean; paidWithBalance: boolean; createdAt: string };
   const { data: bidsRes, refetch: refetchBids } = useQuery({
     queryKey: ['bids'],
-    queryFn: () => apiFetch<{ bids: BidEntry[]; myBid: { id: number; amount: number; rank: number } | null }>('api/bids'),
+    queryFn: () => apiFetch<{ bids: BidEntry[]; myBid: { id: number; amount: number; rank: number; paidWithBalance: boolean } | null }>('api/bids'),
     enabled: !!user,
     refetchInterval: 5000,
     refetchIntervalInBackground: false,
   });
 
   const { mutate: placeBid, isPending: isPlacingBid } = useMutation({
-    mutationFn: async (amount: number) => {
+    mutationFn: async ({ amount, useBalance }: { amount: number; useBalance: boolean }) => {
       const res = await fetch(`${import.meta.env.BASE_URL}api/bids`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount }),
+        body: JSON.stringify({ amount, useBalance }),
       });
       if (!res.ok) { const d = await res.json(); throw new Error(d.message || 'Failed'); }
       return res.json();
@@ -88,6 +89,7 @@ export default function Dashboard() {
       setShowBidForm(false);
       setBidAmount('');
       refetchBids();
+      refetchBalance();
     },
     onError: (e: any) => toast({ title: 'Error', description: e.message, variant: 'destructive' }),
   });
@@ -101,6 +103,7 @@ export default function Dashboard() {
     onSuccess: () => {
       toast({ title: 'Bid cancelled', description: 'You have left the queue.' });
       refetchBids();
+      refetchBalance();
     },
     onError: () => toast({ title: 'Error', description: 'Could not cancel bid.', variant: 'destructive' }),
   });
@@ -360,8 +363,11 @@ export default function Dashboard() {
                                 #{myBid.rank}
                               </span>
                             </div>
+                            {myBid.paidWithBalance && (
+                              <p className="font-mono text-xs text-primary/70 mb-1">Paid with balance · cancelling will refund ${myBid.amount.toFixed(2)}</p>
+                            )}
                             <div className="flex gap-2">
-                              <Button size="sm" variant="outline" className="border-primary/30 text-primary text-xs flex-1" onClick={() => { setBidAmount(String(myBid.amount)); setShowBidForm(true); }}>
+                              <Button size="sm" variant="outline" className="border-primary/30 text-primary text-xs flex-1" onClick={() => { setBidAmount(String(myBid.amount)); setBidUseBalance(myBid.paidWithBalance); setShowBidForm(true); }}>
                                 Raise Bid
                               </Button>
                               <Button size="sm" variant="outline" className="border-red-500/25 text-red-400 text-xs" disabled={isCancellingBid} onClick={() => cancelBid()}>
@@ -387,11 +393,35 @@ export default function Dashboard() {
                                 autoFocus
                               />
                             </div>
+                            {/* Balance toggle */}
+                            <button
+                              type="button"
+                              onClick={() => setBidUseBalance(v => !v)}
+                              className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border text-xs font-mono transition-all ${bidUseBalance ? 'border-primary/50 bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:border-primary/20'}`}
+                            >
+                              <span>Pay with Balance</span>
+                              <span className={bidUseBalance ? 'text-primary' : 'text-muted-foreground'}>
+                                ${(balanceRes?.balanceNum ?? 0).toFixed(2)} available
+                              </span>
+                            </button>
+                            {bidUseBalance && bidAmount && parseFloat(bidAmount) > (balanceRes?.balanceNum ?? 0) && (
+                              <p className="font-mono text-xs text-red-400">Insufficient balance for this bid amount.</p>
+                            )}
                             <div className="flex gap-2">
-                              <Button size="sm" className="flex-1 text-xs" disabled={isPlacingBid || !bidAmount || parseFloat(bidAmount) <= (myBid?.amount ?? 0)} onClick={() => placeBid(parseFloat(bidAmount))}>
+                              <Button
+                                size="sm"
+                                className="flex-1 text-xs"
+                                disabled={
+                                  isPlacingBid ||
+                                  !bidAmount ||
+                                  parseFloat(bidAmount) <= (myBid?.amount ?? 0) ||
+                                  (bidUseBalance && parseFloat(bidAmount) > (balanceRes?.balanceNum ?? 0))
+                                }
+                                onClick={() => placeBid({ amount: parseFloat(bidAmount), useBalance: bidUseBalance })}
+                              >
                                 {isPlacingBid ? (myBid ? 'Updating…' : 'Placing…') : (myBid ? 'Update Bid' : 'Place Bid')}
                               </Button>
-                              <Button size="sm" variant="outline" className="border-border text-xs" onClick={() => { setShowBidForm(false); setBidAmount(''); }}>
+                              <Button size="sm" variant="outline" className="border-border text-xs" onClick={() => { setShowBidForm(false); setBidAmount(''); setBidUseBalance(false); }}>
                                 Cancel
                               </Button>
                             </div>
@@ -730,7 +760,8 @@ export default function Dashboard() {
         pricePerDay={pricePerDay}
         slotDurationHours={slotDurationHours}
         nextExpiresAt={nextExpiresAt}
-        onSuccess={() => { refetchPreorders(); }}
+        onSuccess={() => { refetchPreorders(); refetchBalance(); }}
+        balance={balanceRes?.balanceNum ?? 0}
       />
     </div>
   );
