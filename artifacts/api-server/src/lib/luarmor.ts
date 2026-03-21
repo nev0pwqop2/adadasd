@@ -59,10 +59,28 @@ export async function createLuarmorUser(
     body.auth_expire = Math.floor(expiresAt.getTime() / 1000);
   }
 
-  return request<{ user_key: string }>(`/projects/${config.projectId}/users`, {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
+  try {
+    return await request<{ user_key: string }>(`/projects/${config.projectId}/users`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    // If creation failed, the user may already exist in Luarmor (same discord_id).
+    // Try to find them by discord_id and update their expiry instead.
+    const errMsg = err instanceof Error ? err.message : String(err);
+    const existingUsers = await getLuarmorUsers();
+    const existing = existingUsers.find((u) => u.discord_id === discordId);
+    if (existing) {
+      if (expiresAt) {
+        await updateLuarmorUser(existing.user_key, {
+          auth_expire: Math.floor(expiresAt.getTime() / 1000),
+          note: username,
+        });
+      }
+      return { user_key: existing.user_key };
+    }
+    throw new Error(`Luarmor user creation failed and no existing user found: ${errMsg}`);
+  }
 }
 
 export async function deleteLuarmorUser(userKey: string): Promise<void> {
