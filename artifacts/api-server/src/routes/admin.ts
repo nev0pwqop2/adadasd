@@ -212,13 +212,21 @@ router.post("/users/:discordId/slots", async (req, res) => {
       const shouldBeActive = slot.slotNumber <= count;
       if (slot.isActive !== shouldBeActive) {
         let luarmorUserId: string | null = null;
-        if (shouldBeActive && isLuarmorConfigured()) {
-          try {
-            const expiresAt = new Date(Date.now() + expiryMs);
-            const lu = await createLuarmorUser(users[0].discordId, users[0].username, expiresAt);
-            luarmorUserId = lu.user_key;
-          } catch (e) {
-            req.log.warn({ e }, "Luarmor user creation failed (admin slot grant)");
+        if (isLuarmorConfigured()) {
+          if (shouldBeActive) {
+            try {
+              const expiresAt = new Date(Date.now() + expiryMs);
+              const lu = await createLuarmorUser(users[0].discordId, users[0].username, expiresAt);
+              luarmorUserId = lu.user_key;
+            } catch (e) {
+              req.log.warn({ e }, "Luarmor user creation failed (admin slot grant)");
+            }
+          } else if (slot.luarmorUserId) {
+            try {
+              await deleteLuarmorUser(slot.luarmorUserId);
+            } catch (e) {
+              req.log.warn({ e }, "Luarmor user deletion failed (admin slot removal)");
+            }
           }
         }
         await db.update(slotsTable).set({

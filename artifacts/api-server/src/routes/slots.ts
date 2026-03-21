@@ -3,7 +3,7 @@ import { db, slotsTable, usersTable, paymentsTable, preordersTable } from "@work
 import { eq, and, sql, inArray, lte, desc } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { getSettings } from "../lib/settings.js";
-import { isLuarmorConfigured, createLuarmorUser } from "../lib/luarmor.js";
+import { isLuarmorConfigured, createLuarmorUser, deleteLuarmorUser } from "../lib/luarmor.js";
 
 const router = Router();
 
@@ -56,10 +56,19 @@ router.get("/", requireAuth, async (req, res) => {
 
     const now = new Date();
 
-    // Step 1: Expire any slots whose time is up
-    await db.update(slotsTable)
-      .set({ isActive: false, expiresAt: null, purchasedAt: null, label: null, luarmorUserId: null })
+    // Step 1: Expire any slots whose time is up — delete Luarmor keys first
+    const expiring = await db.select().from(slotsTable)
       .where(and(eq(slotsTable.isActive, true), lte(slotsTable.expiresAt, now)));
+    if (isLuarmorConfigured() && expiring.length > 0) {
+      await Promise.allSettled(
+        expiring.filter(s => s.luarmorUserId).map(s => deleteLuarmorUser(s.luarmorUserId!))
+      );
+    }
+    if (expiring.length > 0) {
+      await db.update(slotsTable)
+        .set({ isActive: false, expiresAt: null, purchasedAt: null, label: null, luarmorUserId: null })
+        .where(and(eq(slotsTable.isActive, true), lte(slotsTable.expiresAt, now)));
+    }
 
     // Step 2: Fetch all currently active slots
     let allActiveSlots = await db
