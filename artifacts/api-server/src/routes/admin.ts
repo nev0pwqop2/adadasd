@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db, slotsTable, usersTable, paymentsTable } from "@workspace/db";
 import { eq, sql, inArray, and, lte, isNotNull } from "drizzle-orm";
-import { requireAdmin } from "../middlewares/requireAdmin.js";
+import { requireAdmin, isSuperAdmin, SUPER_ADMIN_DISCORD_ID } from "../middlewares/requireAdmin.js";
 import { getSettings, setSetting } from "../lib/settings.js";
 import { isLuarmorConfigured, deleteLuarmorUser } from "../lib/luarmor.js";
 
@@ -92,6 +92,8 @@ router.get("/users", async (req, res) => {
         discordId: u.discordId,
         username: u.username,
         avatar: u.avatar,
+        isAdmin: u.isAdmin || isSuperAdmin(u.discordId),
+        isSuperAdmin: isSuperAdmin(u.discordId),
         activeSlots: userSlots.filter((s) => s.isActive).length,
         totalSlots: slotCount,
       };
@@ -101,6 +103,37 @@ router.get("/users", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to get admin users");
     res.status(500).json({ error: "server_error", message: "Failed to get users" });
+  }
+});
+
+router.post("/users/:discordId/toggle-admin", async (req, res) => {
+  try {
+    if (!isSuperAdmin(req.session.discordId!)) {
+      res.status(403).json({ error: "forbidden", message: "Only the super admin can manage admin roles" });
+      return;
+    }
+
+    const { discordId } = req.params;
+
+    if (isSuperAdmin(discordId)) {
+      res.status(400).json({ error: "invalid_request", message: "Cannot change a super admin's role" });
+      return;
+    }
+
+    const users = await db.select().from(usersTable).where(eq(usersTable.discordId, discordId)).limit(1);
+    if (!users.length) {
+      res.status(404).json({ error: "not_found", message: "User not found" });
+      return;
+    }
+
+    const newIsAdmin = !users[0].isAdmin;
+    await db.update(usersTable).set({ isAdmin: newIsAdmin }).where(eq(usersTable.discordId, discordId));
+
+    req.log.info({ adminId: req.session.userId, targetDiscordId: discordId, newIsAdmin }, "Admin role toggled");
+    res.json({ success: true, isAdmin: newIsAdmin, message: `${users[0].username} is now ${newIsAdmin ? 'an admin' : 'a regular user'}` });
+  } catch (err) {
+    req.log.error({ err }, "Failed to toggle admin role");
+    res.status(500).json({ error: "server_error", message: "Failed to update admin role" });
   }
 });
 

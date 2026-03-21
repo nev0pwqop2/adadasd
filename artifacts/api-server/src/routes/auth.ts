@@ -3,7 +3,7 @@ import { db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import crypto from "crypto";
 import { requireAuth } from "../middlewares/requireAuth.js";
-import { isAdminDiscordId } from "../middlewares/requireAdmin.js";
+import { isAdminDiscordId, isSuperAdmin } from "../middlewares/requireAdmin.js";
 
 const router = Router();
 
@@ -103,15 +103,19 @@ router.get("/discord/callback", async (req, res) => {
 
     const existingUsers = await db.select().from(usersTable).where(eq(usersTable.discordId, discordUser.id)).limit(1);
 
+    const seedAdmin = isSuperAdmin(discordUser.id);
+
     let userId: string;
     if (existingUsers.length > 0) {
       userId = existingUsers[0].id;
-      await db.update(usersTable).set({
+      const updateData: Record<string, unknown> = {
         username: displayName,
         avatar: discordUser.avatar,
         email: discordUser.email,
         updatedAt: new Date(),
-      }).where(eq(usersTable.discordId, discordUser.id));
+      };
+      if (seedAdmin && !existingUsers[0].isAdmin) updateData.isAdmin = true;
+      await db.update(usersTable).set(updateData as any).where(eq(usersTable.discordId, discordUser.id));
     } else {
       userId = crypto.randomUUID();
       await db.insert(usersTable).values({
@@ -120,6 +124,7 @@ router.get("/discord/callback", async (req, res) => {
         username: displayName,
         avatar: discordUser.avatar,
         email: discordUser.email,
+        isAdmin: seedAdmin,
       });
     }
 
@@ -143,13 +148,14 @@ router.get("/me", requireAuth, async (req, res) => {
       return;
     }
     const user = users[0];
+    const isAdmin = user.isAdmin || isSuperAdmin(user.discordId);
     res.json({
       id: user.id,
       discordId: user.discordId,
       username: user.username,
       avatar: user.avatar,
       email: user.email,
-      isAdmin: isAdminDiscordId(user.discordId),
+      isAdmin,
     });
   } catch (err) {
     req.log.error({ err }, "Failed to fetch user");

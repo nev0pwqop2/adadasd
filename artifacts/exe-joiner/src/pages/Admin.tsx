@@ -5,7 +5,7 @@ import { useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Save, Users, Settings, Shield, Loader2, RotateCcw, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Save, Users, Settings, Shield, ShieldOff, Loader2, RotateCcw, AlertTriangle, Crown } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export default function Admin() {
@@ -16,8 +16,29 @@ export default function Admin() {
   const { data: settings, isLoading: isSettingsLoading, refetch: refetchSettings } = useGetAdminSettings({ query: { enabled: !!user?.isAdmin } });
   const { data: usersData, isLoading: isUsersLoading, refetch: refetchUsers } = useGetAdminUsers({ query: { enabled: !!user?.isAdmin } });
 
+  const SUPER_ADMIN_IDS = new Set(['905033435817586749', '1279091875378368595']);
+  const isSuperAdmin = SUPER_ADMIN_IDS.has(user?.discordId ?? '');
+
   const { mutate: updateSettings, isPending: isSaving } = useUpdateAdminSettings();
   const { mutate: updateUserSlots, isPending: isUpdatingSlots } = useAdminUpdateUserSlots();
+
+  const [togglingAdmin, setTogglingAdmin] = useState<string | null>(null);
+  const { mutate: toggleAdmin } = useMutation({
+    mutationFn: async (discordId: string) => {
+      const res = await fetch(`${import.meta.env.BASE_URL}api/admin/users/${discordId}/toggle-admin`, { method: 'POST', credentials: 'include' });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.message || 'Failed'); }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "Role updated", description: data.message, className: "bg-primary text-primary-foreground" });
+      setTogglingAdmin(null);
+      refetchUsers();
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+      setTogglingAdmin(null);
+    },
+  });
 
   const { mutate: resetAllSlots, isPending: isResetting } = useMutation({
     mutationFn: async () => {
@@ -294,24 +315,53 @@ export default function Admin() {
                 {usersData?.users.length === 0 && (
                   <div className="p-8 text-center font-mono text-muted-foreground text-sm">No users yet.</div>
                 )}
-                {usersData?.users.map((u) => (
+                {usersData?.users.map((u: any) => (
                   <div key={u.discordId} className="p-4 flex flex-col sm:flex-row sm:items-center gap-4">
-                    <div className="flex items-center gap-3 flex-1">
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
                       {u.avatar ? (
-                        <img src={`https://cdn.discordapp.com/avatars/${u.discordId}/${u.avatar}.png`} alt="" className="w-9 h-9 border border-primary/30" />
+                        <img src={`https://cdn.discordapp.com/avatars/${u.discordId}/${u.avatar}.png`} alt="" className="w-9 h-9 border border-primary/30 shrink-0" />
                       ) : (
-                        <div className="w-9 h-9 bg-secondary border border-primary/30" />
+                        <div className="w-9 h-9 bg-secondary border border-primary/30 shrink-0" />
                       )}
-                      <div>
-                        <p className="font-mono text-sm text-foreground font-bold">{u.username}</p>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-mono text-sm text-foreground font-bold truncate">{u.username}</p>
+                          {u.isSuperAdmin && (
+                            <span className="flex items-center gap-1 text-xs font-mono px-2 py-0.5 bg-yellow-500/10 border border-yellow-500/30 text-yellow-400">
+                              <Crown className="w-3 h-3" /> Super Admin
+                            </span>
+                          )}
+                          {u.isAdmin && !u.isSuperAdmin && (
+                            <span className="flex items-center gap-1 text-xs font-mono px-2 py-0.5 bg-primary/10 border border-primary/30 text-primary">
+                              <Shield className="w-3 h-3" /> Admin
+                            </span>
+                          )}
+                        </div>
                         <p className="font-mono text-xs text-muted-foreground">{u.discordId}</p>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-3">
-                      <span className={`font-mono text-sm px-3 py-1 border chamfered ${u.activeSlots > 0 ? 'border-primary/40 text-primary bg-primary/10' : 'border-primary/10 text-muted-foreground'}`}>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`font-mono text-sm px-3 py-1 border chamfered shrink-0 ${u.activeSlots > 0 ? 'border-primary/40 text-primary bg-primary/10' : 'border-primary/10 text-muted-foreground'}`}>
                         {u.activeSlots} / {u.totalSlots} active
                       </span>
+
+                      {isSuperAdmin && !u.isSuperAdmin && (
+                        togglingAdmin === u.discordId ? (
+                          <Button size="sm" variant="outline" disabled className="border-primary/20 font-mono text-xs">
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => { setTogglingAdmin(u.discordId); toggleAdmin(u.discordId); }}
+                            className={`font-mono text-xs border-primary/20 ${u.isAdmin ? 'text-red-400 hover:text-red-300' : 'text-primary hover:text-primary/80'}`}
+                          >
+                            {u.isAdmin ? <><ShieldOff className="w-3 h-3 mr-1" />Remove Admin</> : <><Shield className="w-3 h-3 mr-1" />Make Admin</>}
+                          </Button>
+                        )
+                      )}
 
                       {editingUser === u.discordId ? (
                         <div className="flex items-center gap-2">
