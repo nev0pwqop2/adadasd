@@ -3,7 +3,7 @@ import { db, slotsTable, usersTable, paymentsTable, preordersTable } from "@work
 import { eq, and, sql, inArray, lte, desc } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { getSettings } from "../lib/settings.js";
-import { isLuarmorConfigured, createLuarmorUser, deleteLuarmorUser, resetLuarmorHwid } from "../lib/luarmor.js";
+import { isLuarmorConfigured, createLuarmorUser, deleteLuarmorUser, getLuarmorUsers, resetLuarmorHwid } from "../lib/luarmor.js";
 
 const router = Router();
 
@@ -118,9 +118,24 @@ router.get("/", requireAuth, async (req, res) => {
     const expiring = await db.select().from(slotsTable)
       .where(and(eq(slotsTable.isActive, true), lte(slotsTable.expiresAt, now)));
     if (isLuarmorConfigured() && expiring.length > 0) {
+      // Delete keys we have stored
       await Promise.allSettled(
         expiring.filter(s => s.luarmorUserId).map(s => deleteLuarmorUser(s.luarmorUserId!))
       );
+      // For expired slots with no stored key, fall back to discord_id lookup
+      const noKey = expiring.filter(s => !s.luarmorUserId);
+      if (noKey.length) {
+        const ownerIds = [...new Set(noKey.map(s => s.userId))];
+        const ownerRows = await db.select({ id: usersTable.id, discordId: usersTable.discordId })
+          .from(usersTable).where(inArray(usersTable.id, ownerIds));
+        const discordIds = new Set(ownerRows.map(o => o.discordId));
+        if (discordIds.size) {
+          const allLuarmorUsers = await getLuarmorUsers();
+          await Promise.allSettled(
+            allLuarmorUsers.filter(u => discordIds.has(u.discord_id)).map(u => deleteLuarmorUser(u.user_key))
+          );
+        }
+      }
     }
     if (expiring.length > 0) {
       await db.update(slotsTable)
