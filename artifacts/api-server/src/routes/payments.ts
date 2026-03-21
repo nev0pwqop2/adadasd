@@ -2,9 +2,10 @@ import { Router, Request, Response } from "express";
 import { db, slotsTable, paymentsTable, usersTable, preordersTable } from "@workspace/db";
 import { eq, and, ne, sql } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
-import { getSettings } from "../lib/settings.js";
+import { getSettings, getSetting } from "../lib/settings.js";
 import { isLuarmorConfigured, createLuarmorUser } from "../lib/luarmor.js";
 import { sendPaymentWebhook, type PurchaseType } from "../lib/discord.js";
+import { triggerAutoSplit } from "../lib/nowpayments-payout.js";
 import crypto from "crypto";
 
 const router = Router();
@@ -441,7 +442,13 @@ router.post("/nowpayments-ipn", async (req: Request, res: Response) => {
   }
 
   try {
-    const { order_id, payment_status } = req.body as { order_id: string; payment_status: string };
+    const ipnBody = req.body as {
+      order_id: string;
+      payment_status: string;
+      actually_paid?: number;
+      pay_currency?: string;
+    };
+    const { order_id, payment_status, actually_paid, pay_currency } = ipnBody;
 
     if (!isPaymentSuccessful(payment_status)) {
       res.json({ received: true });
@@ -458,11 +465,12 @@ router.post("/nowpayments-ipn", async (req: Request, res: Response) => {
     }
 
     const payment = payments[0];
+    const isBalanceDeposit = payment.method === "balance-deposit-crypto";
 
-    if (payment.method === "balance-deposit-crypto") {
-      // Balance deposit — credit user balance
+    if (isBalanceDeposit) {
+      // Balance deposit — credit user balance (no split, this is the user's own funds)
       const depositAmount = parseFloat(payment.amount ?? "0");
-      await db.update(paymentsTable).set({ status: "completed", updatedAt: new Date() }).where(eq(paymentsTable.id, payment.id));
+      await db.update(paymentsTable).set({ status: "completed", splitSent: true, updatedAt: new Date() }).where(eq(paymentsTable.id, payment.id));
       await db.update(usersTable)
         .set({ balance: sql`${usersTable.balance} + ${depositAmount.toFixed(2)}::numeric`, updatedAt: new Date() })
         .where(eq(usersTable.id, payment.userId));
@@ -500,9 +508,13 @@ router.post("/nowpayments-ipn", async (req: Request, res: Response) => {
           purchaseType: "preorder",
         });
       }
+      // Attempt auto-split for preorder
+      await attemptAutoSplit(payment.id, actually_paid, pay_currency, req.log);
     } else {
       await activateSlot(payment.userId, payment.slotNumber, payment.id, payment.derivationIndex ?? undefined);
       req.log.info({ paymentId: payment.id }, "NOWPayments IPN: slot activated");
+      // Attempt auto-split for slot purchase
+      await attemptAutoSplit(payment.id, actually_paid, pay_currency, req.log);
     }
 
     res.json({ received: true });
@@ -511,6 +523,37 @@ router.post("/nowpayments-ipn", async (req: Request, res: Response) => {
     res.status(500).json({ error: "server_error" });
   }
 });
+
+async function attemptAutoSplit(
+  paymentId: string,
+  actuallyPaid: number | undefined,
+  payCurrency: string | undefined,
+  log: any
+): Promise<void> {
+  if (!actuallyPaid || !payCurrency || actuallyPaid <= 0) {
+    log.warn({ paymentId }, "Auto-split skipped: missing actually_paid or pay_currency in IPN");
+    return;
+  }
+
+  const baseUrl = process.env.BASE_URL ?? "https://exenotifier.com";
+  // Look up the partner wallet address for this currency (stored as setting partnerWallet_<CURRENCY_UPPER>)
+  const currencyKey = payCurrency.toUpperCase();
+  const partnerAddress = await getSetting(`partnerWallet${currencyKey}`);
+
+  if (!partnerAddress) {
+    log.warn({ paymentId, payCurrency }, "Auto-split skipped: no partner wallet configured for currency");
+    return;
+  }
+
+  const result = await triggerAutoSplit({ payCurrency, actuallyPaid, paymentId, partnerAddress, baseUrl });
+
+  if (result.success) {
+    await db.update(paymentsTable).set({ splitSent: true, updatedAt: new Date() }).where(eq(paymentsTable.id, paymentId));
+    log.info({ paymentId, payCurrency, amount: actuallyPaid * 0.5 }, "Auto-split payout sent successfully");
+  } else {
+    log.warn({ paymentId, error: result.error }, "Auto-split payout failed — will appear in admin sales tracker");
+  }
+}
 
 router.delete("/cancel-pending", requireAuth, async (req: Request, res: Response) => {
   try {

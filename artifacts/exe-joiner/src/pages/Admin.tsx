@@ -5,7 +5,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Save, Users, Settings, Shield, ShieldOff, Loader2, RotateCcw, AlertTriangle, Crown, Server, ChevronDown, ChevronUp, Search, Copy, FlaskConical, Check, Key, ScrollText, CreditCard, Bitcoin, Wallet } from 'lucide-react';
+import { ArrowLeft, Save, Users, Settings, Shield, ShieldOff, Loader2, RotateCcw, AlertTriangle, Crown, Server, ChevronDown, ChevronUp, Search, Copy, FlaskConical, Check, Key, ScrollText, CreditCard, Bitcoin, Wallet, DollarSign, SendHorizonal, CircleCheck, Clock } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 async function apiFetch<T>(path: string): Promise<T> {
@@ -144,6 +144,51 @@ export default function Admin() {
   const [confirmResetLeaderboard, setConfirmResetLeaderboard] = useState(false);
   const [confirmResetDeposits, setConfirmResetDeposits] = useState(false);
   const [serverExplorerOpen, setServerExplorerOpen] = useState(false);
+  const [partnerWalletLTC, setPartnerWalletLTC] = useState('LNK77h4592rL5Br59rkpgihqxLeqEiMcca');
+  const [partnerWalletBTC, setPartnerWalletBTC] = useState('');
+  const [partnerWalletETH, setPartnerWalletETH] = useState('');
+  const [partnerWalletUSDT, setPartnerWalletUSDT] = useState('');
+  const [partnerWalletSOL, setPartnerWalletSOL] = useState('');
+  const [ownWalletLTC, setOwnWalletLTC] = useState('LRipFjnvu2tcHdasX7iALXMdEJbE9jpNNQ');
+  const [copiedAddr, setCopiedAddr] = useState<string | null>(null);
+
+  type SaleEntry = {
+    id: string; username: string; discordId: string; avatar: string | null;
+    method: string; isStripe: boolean; isCrypto: boolean;
+    currency: string | null; currencyUpper: string;
+    amountReceived: string | null; halfAmount: string;
+    partnerWallet: string; splitSent: boolean;
+    purchaseType: string; slotNumber: number; completedAt: string | null;
+  };
+
+  const { data: salesData, isLoading: isSalesLoading, refetch: refetchSales } = useQuery({
+    queryKey: ['admin-sales'],
+    queryFn: () => apiFetch<{ sales: SaleEntry[]; wallets: { partnerWallets: Record<string, string>; ownWalletLTC: string } }>('api/admin/sales'),
+    enabled: !!user?.isAdmin,
+    refetchInterval: 30000,
+  });
+
+  const { mutate: markSplitSent, isPending: isMarkingSent } = useMutation({
+    mutationFn: async (saleId: string) => {
+      const res = await fetch(`${import.meta.env.BASE_URL}api/admin/sales/${saleId}/mark-sent`, { method: 'POST', credentials: 'include' });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.message || 'Failed'); }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Marked as sent", description: "Split payment marked complete.", className: "bg-primary text-primary-foreground" });
+      refetchSales();
+    },
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const copyAddr = (addr: string) => {
+    navigator.clipboard.writeText(addr);
+    setCopiedAddr(addr);
+    setTimeout(() => setCopiedAddr(null), 2000);
+  };
+
+  const pendingSales = salesData?.sales.filter(s => !s.splitSent) ?? [];
+  const completedSales = salesData?.sales.filter(s => s.splitSent) ?? [];
 
   React.useEffect(() => {
     if (isUserError) setLocation('/');
@@ -161,6 +206,12 @@ export default function Admin() {
       setHourlyPricingEnabled(Boolean((settings as any).hourlyPricingEnabled));
       setPricePerHour(String((settings as any).pricePerHour ?? 5));
       setMinHours(String((settings as any).minHours ?? 2));
+      if ((settings as any).partnerWalletLTC) setPartnerWalletLTC((settings as any).partnerWalletLTC);
+      if ((settings as any).partnerWalletBTC !== undefined) setPartnerWalletBTC((settings as any).partnerWalletBTC);
+      if ((settings as any).partnerWalletETH !== undefined) setPartnerWalletETH((settings as any).partnerWalletETH);
+      if ((settings as any).partnerWalletUSDT !== undefined) setPartnerWalletUSDT((settings as any).partnerWalletUSDT);
+      if ((settings as any).partnerWalletSOL !== undefined) setPartnerWalletSOL((settings as any).partnerWalletSOL);
+      if ((settings as any).ownWalletLTC) setOwnWalletLTC((settings as any).ownWalletLTC);
     }
   }, [settings]);
 
@@ -192,7 +243,7 @@ export default function Admin() {
         return;
       }
     }
-    updateSettings({ data: { slotCount: count, pricePerDay: price, slotDurationHours: hours, hourlyPricingEnabled, pricePerHour: pph, minHours: mh } as any }, {
+    updateSettings({ data: { slotCount: count, pricePerDay: price, slotDurationHours: hours, hourlyPricingEnabled, pricePerHour: pph, minHours: mh, partnerWalletLTC, partnerWalletBTC, partnerWalletETH, partnerWalletUSDT, partnerWalletSOL, ownWalletLTC } as any }, {
       onSuccess: () => {
         toast({ title: "Settings saved", description: "Settings updated successfully.", className: "bg-primary text-primary-foreground" });
         refetchSettings();
@@ -348,6 +399,38 @@ export default function Admin() {
                   </>
                 )}
               </div>
+              {/* Wallet Split Settings */}
+              <div className="px-6 pb-4 border-t border-primary/10 pt-6 space-y-4">
+                <p className="text-xs font-mono text-muted-foreground uppercase tracking-widest flex items-center gap-2"><DollarSign className="w-3 h-3" /> 50/50 Split Wallets</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Your LTC Wallet (receives 50%)</label>
+                    <input type="text" value={ownWalletLTC} onChange={e => setOwnWalletLTC(e.target.value)} placeholder="LRip..." className="w-full bg-background border border-primary/30 text-foreground font-mono px-3 py-2 focus:outline-none focus:border-primary text-xs" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Partner LTC Wallet (sends 50%)</label>
+                    <input type="text" value={partnerWalletLTC} onChange={e => setPartnerWalletLTC(e.target.value)} placeholder="LNK7..." className="w-full bg-background border border-primary/30 text-foreground font-mono px-3 py-2 focus:outline-none focus:border-primary text-xs" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Partner BTC Wallet</label>
+                    <input type="text" value={partnerWalletBTC} onChange={e => setPartnerWalletBTC(e.target.value)} placeholder="bc1... or 1... (optional)" className="w-full bg-background border border-primary/30 text-foreground font-mono px-3 py-2 focus:outline-none focus:border-primary text-xs" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Partner ETH Wallet</label>
+                    <input type="text" value={partnerWalletETH} onChange={e => setPartnerWalletETH(e.target.value)} placeholder="0x... (optional)" className="w-full bg-background border border-primary/30 text-foreground font-mono px-3 py-2 focus:outline-none focus:border-primary text-xs" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Partner USDT Wallet (TRC20)</label>
+                    <input type="text" value={partnerWalletUSDT} onChange={e => setPartnerWalletUSDT(e.target.value)} placeholder="T... (optional)" className="w-full bg-background border border-primary/30 text-foreground font-mono px-3 py-2 focus:outline-none focus:border-primary text-xs" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Partner SOL Wallet</label>
+                    <input type="text" value={partnerWalletSOL} onChange={e => setPartnerWalletSOL(e.target.value)} placeholder="... (optional)" className="w-full bg-background border border-primary/30 text-foreground font-mono px-3 py-2 focus:outline-none focus:border-primary text-xs" />
+                  </div>
+                </div>
+                <p className="text-[10px] font-mono text-muted-foreground/70">Auto-split requires NOWPAYMENTS_EMAIL + NOWPAYMENTS_PASSWORD in your Render env vars. Without them, splits appear in the Sales tracker for manual processing.</p>
+              </div>
+
               <div className="px-6 pb-6">
                 <Button onClick={handleSaveSettings} disabled={isSaving} className="w-full sm:w-auto">
                   {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
@@ -761,6 +844,156 @@ export default function Admin() {
                       })}
                     </tbody>
                   </table>
+                </div>
+              )}
+            </Card>
+          </motion.div>
+
+          {/* Sales / Split Tracker */}
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.34 }}>
+            <Card className="border-yellow-500/30">
+              <div className="p-6 border-b border-yellow-500/20 flex items-center gap-3">
+                <DollarSign className="w-5 h-5 text-yellow-400" />
+                <h2 className="font-display font-bold uppercase tracking-wider text-yellow-400">Sales / 50-50 Split</h2>
+                <span className="ml-auto flex items-center gap-3">
+                  {pendingSales.length > 0 && (
+                    <span className="flex items-center gap-1 text-xs font-mono text-orange-400 bg-orange-500/10 border border-orange-500/20 px-2 py-0.5">
+                      <Clock className="w-3 h-3" /> {pendingSales.length} pending
+                    </span>
+                  )}
+                  <span className="text-xs font-mono text-muted-foreground">{salesData?.sales.length ?? 0} total</span>
+                </span>
+              </div>
+
+              {isSalesLoading ? (
+                <div className="p-8 flex justify-center"><Loader2 className="w-6 h-6 text-yellow-400 animate-spin" /></div>
+              ) : !salesData?.sales.length ? (
+                <div className="p-8 text-center font-mono text-muted-foreground text-sm">No sales yet.</div>
+              ) : (
+                <div className="divide-y divide-yellow-500/10">
+                  {/* Pending Splits */}
+                  {pendingSales.length > 0 && (
+                    <div>
+                      <div className="px-6 py-3 bg-orange-500/5 border-b border-orange-500/10">
+                        <p className="text-xs font-mono text-orange-400 uppercase tracking-widest flex items-center gap-2"><Clock className="w-3 h-3" /> Needs Split — Send 50% to Partner</p>
+                      </div>
+                      {pendingSales.map((sale) => {
+                        const isCard = sale.isStripe;
+                        const currLabel = sale.currency ?? '?';
+                        const amtLabel = isCard
+                          ? `$${parseFloat(sale.amountReceived ?? '0').toFixed(2)} USD`
+                          : `${sale.amountReceived} ${currLabel}`;
+                        const halfLabel = isCard
+                          ? `$${(parseFloat(sale.amountReceived ?? '0') * 0.5).toFixed(2)} USD → convert to LTC`
+                          : `${sale.halfAmount} ${currLabel}`;
+                        const typeColor = sale.purchaseType === 'preorder' ? 'text-orange-400' : 'text-green-400';
+                        return (
+                          <div key={sale.id} className="p-4 hover:bg-yellow-500/5 transition-colors border-b border-yellow-500/10 last:border-0">
+                            <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+                              {/* User */}
+                              <div className="flex items-center gap-3 min-w-0 flex-1">
+                                {sale.avatar ? (
+                                  <img src={`https://cdn.discordapp.com/avatars/${sale.discordId}/${sale.avatar}.png`} alt="" className="w-8 h-8 border border-yellow-500/30 shrink-0" />
+                                ) : (
+                                  <div className="w-8 h-8 bg-secondary border border-yellow-500/20 shrink-0" />
+                                )}
+                                <div className="min-w-0">
+                                  <p className="font-mono text-sm text-foreground font-bold truncate">{sale.username}</p>
+                                  <p className={`font-mono text-xs ${typeColor}`}>{sale.purchaseType === 'preorder' ? 'Pre-order' : `Slot #${sale.slotNumber}`}</p>
+                                  <p className="font-mono text-[10px] text-muted-foreground">{sale.completedAt ? new Date(sale.completedAt).toLocaleString() : '—'}</p>
+                                </div>
+                              </div>
+                              {/* Payment Info */}
+                              <div className="space-y-2 flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  {isCard ? <CreditCard className="w-3.5 h-3.5 text-blue-400 shrink-0" /> : <Bitcoin className="w-3.5 h-3.5 text-orange-400 shrink-0" />}
+                                  <span className="font-mono text-xs text-muted-foreground">{isCard ? 'Credit Card' : `Crypto (${currLabel})`}</span>
+                                  <span className="font-mono text-sm text-primary font-bold">{amtLabel}</span>
+                                </div>
+                                <div className="bg-yellow-500/5 border border-yellow-500/20 px-3 py-2 space-y-1">
+                                  <p className="text-[10px] font-mono text-yellow-400 uppercase tracking-widest">Send 50% to partner</p>
+                                  <p className="font-mono text-sm text-yellow-300 font-bold">{halfLabel}</p>
+                                  {isCard ? (
+                                    <p className="font-mono text-[10px] text-muted-foreground">Card payment — convert to LTC and send to your partner wallet</p>
+                                  ) : sale.partnerWallet ? (
+                                    <div className="flex items-center gap-2 mt-1">
+                                      <span className="font-mono text-[10px] text-muted-foreground break-all flex-1">{sale.partnerWallet}</span>
+                                      <button onClick={() => copyAddr(sale.partnerWallet)} className="shrink-0 text-muted-foreground hover:text-yellow-400 transition-colors">
+                                        {copiedAddr === sale.partnerWallet ? <Check className="w-3 h-3 text-yellow-400" /> : <Copy className="w-3 h-3" />}
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <p className="font-mono text-[10px] text-red-400">No partner wallet set for {currLabel} — add it in Settings above</p>
+                                  )}
+                                </div>
+                              </div>
+                              {/* Action */}
+                              <div className="shrink-0">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="border-yellow-500/40 text-yellow-400 hover:bg-yellow-500/10 hover:border-yellow-500 font-mono text-xs"
+                                  onClick={() => markSplitSent(sale.id)}
+                                  disabled={isMarkingSent}
+                                >
+                                  {isMarkingSent ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <SendHorizonal className="w-3 h-3 mr-1" />}
+                                  Mark Sent
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Completed Splits */}
+                  {completedSales.length > 0 && (
+                    <div>
+                      <div className="px-6 py-3 bg-green-500/5 border-b border-green-500/10">
+                        <p className="text-xs font-mono text-green-400 uppercase tracking-widest flex items-center gap-2"><CircleCheck className="w-3 h-3" /> Completed Splits ({completedSales.length})</p>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full font-mono text-xs">
+                          <thead>
+                            <tr className="border-b border-green-500/10 text-muted-foreground uppercase tracking-wider">
+                              <th className="text-left px-4 py-3">User</th>
+                              <th className="text-left px-4 py-3">Type</th>
+                              <th className="text-left px-4 py-3">Method</th>
+                              <th className="text-left px-4 py-3">Received</th>
+                              <th className="text-left px-4 py-3">Sent 50%</th>
+                              <th className="text-left px-4 py-3">Date</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-green-500/5">
+                            {completedSales.map((sale) => {
+                              const isCard = sale.isStripe;
+                              const currLabel = sale.currency ?? '?';
+                              const amtLabel = isCard ? `$${parseFloat(sale.amountReceived ?? '0').toFixed(2)}` : `${sale.amountReceived} ${currLabel}`;
+                              const halfLabel = isCard ? `$${(parseFloat(sale.amountReceived ?? '0') * 0.5).toFixed(2)} → LTC` : `${sale.halfAmount} ${currLabel}`;
+                              return (
+                                <tr key={sale.id} className="hover:bg-green-500/5 transition-colors">
+                                  <td className="px-4 py-3">
+                                    <div className="flex items-center gap-2">
+                                      {sale.avatar ? (
+                                        <img src={`https://cdn.discordapp.com/avatars/${sale.discordId}/${sale.avatar}.png`} alt="" className="w-5 h-5 border border-green-500/20 shrink-0" />
+                                      ) : <div className="w-5 h-5 bg-secondary border border-green-500/10 shrink-0" />}
+                                      <span className="text-foreground font-bold truncate max-w-[80px]">{sale.username}</span>
+                                    </div>
+                                  </td>
+                                  <td className={`px-4 py-3 font-bold ${sale.purchaseType === 'preorder' ? 'text-orange-400' : 'text-green-400'}`}>{sale.purchaseType === 'preorder' ? 'Pre-order' : `Slot #${sale.slotNumber}`}</td>
+                                  <td className="px-4 py-3 text-muted-foreground flex items-center gap-1">{isCard ? <CreditCard className="w-3 h-3 text-blue-400" /> : <Bitcoin className="w-3 h-3 text-orange-400" />}{isCard ? 'Card' : currLabel}</td>
+                                  <td className="px-4 py-3 text-primary font-bold">{amtLabel}</td>
+                                  <td className="px-4 py-3 text-green-400 font-bold">{halfLabel}</td>
+                                  <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{sale.completedAt ? new Date(sale.completedAt).toLocaleString() : '—'}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </Card>
