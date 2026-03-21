@@ -144,8 +144,9 @@ router.post("/deposit/crypto", requireAuth, async (req: Request, res: Response) 
 
     let minAmount = 2;
     try {
-      const minData = await nowpaymentsRequest(`/min-amount?currency_from=usd&currency_to=${nowCurrency}`);
-      if (minData?.min_amount) minAmount = parseFloat(minData.min_amount) * 1.05;
+      const minData = await nowpaymentsRequest(`/min-amount?currency_from=${nowCurrency}&currency_to=usd&fiat_equivalent=usd`) as { min_amount?: number; fiat_equivalent?: number };
+      const minUsd = minData.fiat_equivalent ?? minData.min_amount ?? 0;
+      if (minUsd > 0) minAmount = minUsd * 1.05;
     } catch {}
 
     if (amount < minAmount) {
