@@ -60,6 +60,16 @@ async function getNowPaymentsStatus(nowpaymentsPaymentId: string): Promise<{ pay
   return nowpaymentsRequest(`/payment/${nowpaymentsPaymentId}`);
 }
 
+async function getNowPaymentsMinAmount(currency: string): Promise<number> {
+  try {
+    const payCurrency = NOWPAYMENTS_CURRENCY_MAP[currency];
+    const data = await nowpaymentsRequest(`/min-amount?currency_from=usd&currency_to=${payCurrency}`);
+    return data.min_amount ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
 function isPaymentSuccessful(status: string): boolean {
   return status === "finished" || status === "confirmed";
 }
@@ -312,6 +322,15 @@ router.post("/create-crypto-session", requireAuth, async (req: Request, res: Res
       ? `https://${process.env.REPLIT_DEV_DOMAIN}`
       : process.env.BASE_URL || "http://localhost:80";
     const ipnCallbackUrl = `${baseUrl}/api/payments/nowpayments-ipn`;
+
+    const minUsd = await getNowPaymentsMinAmount(currency);
+    if (minUsd > 0 && chargeAmount < minUsd) {
+      res.status(400).json({
+        error: "below_minimum",
+        message: `${currency === 'USDT' ? 'USDT TRC20' : currency} requires a minimum payment of $${minUsd.toFixed(2)} USD. Your current price ($${chargeAmount.toFixed(2)}) is too low for this currency.`,
+      });
+      return;
+    }
 
     const nowPayment = await createNowPaymentsPayment(paymentId, chargeAmount, currency, ipnCallbackUrl);
 
