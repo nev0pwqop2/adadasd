@@ -112,19 +112,6 @@ export default function Dashboard() {
     refetchIntervalInBackground: false,
   });
 
-  const { mutate: cancelPreorder, isPending: isCancellingPreorder } = useMutation({
-    mutationFn: async (id: number) => {
-      const res = await fetch(`${import.meta.env.BASE_URL}api/preorders/${id}`, { method: 'DELETE', credentials: 'include' });
-      if (!res.ok) throw new Error('Failed');
-      return res.json();
-    },
-    onSuccess: () => {
-      toast({ title: 'Pre-order cancelled', description: 'Your pre-order has been removed.' });
-      refetchPreorders();
-    },
-    onError: () => toast({ title: 'Error', description: 'Could not cancel pre-order.', variant: 'destructive' }),
-  });
-
   const { data: leaderboardRes, isLoading: isLeaderboardLoading } = useQuery({
     queryKey: ['leaderboard'],
     queryFn: () => apiFetch<{ leaderboard: { rank: number; username: string; discordId: string; avatar: string | null; totalSpent: number; totalHours: number }[] }>('api/slots/leaderboard'),
@@ -496,15 +483,6 @@ export default function Dashboard() {
                                 #{myPreorder.rank}
                               </span>
                             </div>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="border-red-500/25 text-red-400 text-xs w-full"
-                              disabled={isCancellingPreorder}
-                              onClick={() => cancelPreorder(myPreorder.id)}
-                            >
-                              <X className="w-3 h-3 mr-1" /> Cancel Pre-order
-                            </Button>
                           </div>
                         ) : (
                           <div className="border border-border p-4 rounded-xl text-center">
