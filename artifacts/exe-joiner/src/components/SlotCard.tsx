@@ -1,8 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
-import { format } from 'date-fns';
-import { Zap, Lock, Plus } from 'lucide-react';
+import { Zap, Lock, Plus, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export interface PublicSlot {
@@ -22,9 +21,33 @@ interface SlotCardProps {
   onManage: (slot: PublicSlot) => void;
 }
 
+function useTimeLeft(expiresAt: string | null) {
+  const getMs = () => expiresAt ? Math.max(0, new Date(expiresAt).getTime() - Date.now()) : 0;
+  const [ms, setMs] = useState(getMs);
+
+  useEffect(() => {
+    if (!expiresAt) return;
+    const id = setInterval(() => setMs(getMs()), 1000);
+    return () => clearInterval(id);
+  }, [expiresAt]);
+
+  if (!expiresAt || ms === 0) return null;
+
+  const totalSecs = Math.floor(ms / 1000);
+  const d = Math.floor(totalSecs / 86400);
+  const h = Math.floor((totalSecs % 86400) / 3600);
+  const m = Math.floor((totalSecs % 3600) / 60);
+  const s = totalSecs % 60;
+
+  if (d > 0) return `${d}d ${h}h ${String(m).padStart(2, '0')}m`;
+  if (h > 0) return `${h}h ${String(m).padStart(2, '0')}m ${String(s).padStart(2, '0')}s`;
+  return `${String(m).padStart(2, '0')}m ${String(s).padStart(2, '0')}s`;
+}
+
 export function SlotCard({ slotData, onPurchase, onManage }: SlotCardProps) {
   const { slotNumber, isActive, isOwner, owner } = slotData;
   const takenByOther = isActive && !isOwner;
+  const timeLeft = useTimeLeft(isActive ? slotData.expiresAt : null);
 
   return (
     <Card className={cn(
@@ -68,14 +91,15 @@ export function SlotCard({ slotData, onPurchase, onManage }: SlotCardProps) {
                 <div className="absolute inset-0 bg-primary/20 blur-2xl rounded-full" />
                 <Zap className="w-10 h-10 text-primary relative z-10 mx-auto drop-shadow-[0_0_8px_rgba(218,165,32,0.6)]" />
               </div>
-              <div className="w-full space-y-1.5">
+              <div className="w-full space-y-2">
                 <p className="text-primary font-display font-bold uppercase tracking-wide text-sm">
                   {slotData.label || 'Running'}
                 </p>
-                {slotData.expiresAt && (
-                  <p className="text-xs font-mono text-muted-foreground">
-                    Expires <span className="text-foreground/70">{format(new Date(slotData.expiresAt), 'MMM d, HH:mm')}</span>
-                  </p>
+                {timeLeft && (
+                  <div className="flex items-center justify-center gap-1.5 text-xs font-mono text-muted-foreground">
+                    <Clock className="w-3 h-3 text-primary/60" />
+                    <span>{timeLeft} left</span>
+                  </div>
                 )}
               </div>
             </div>
@@ -88,7 +112,6 @@ export function SlotCard({ slotData, onPurchase, onManage }: SlotCardProps) {
             <div className="flex-1 flex flex-col items-center justify-center gap-3">
               <Lock className="w-9 h-9 text-red-400/40 mx-auto" />
               <div className="space-y-2">
-                <p className="text-red-400/80 text-xs font-mono uppercase tracking-wide">Reserved</p>
                 {owner && (
                   <div className="flex items-center justify-center gap-2">
                     {owner.avatar ? (
@@ -101,6 +124,12 @@ export function SlotCard({ slotData, onPurchase, onManage }: SlotCardProps) {
                       <div className="w-5 h-5 rounded-full bg-secondary border border-red-500/20" />
                     )}
                     <span className="font-mono text-xs text-muted-foreground">{owner.username}</span>
+                  </div>
+                )}
+                {timeLeft && (
+                  <div className="flex items-center justify-center gap-1.5 text-xs font-mono text-red-400/60">
+                    <Clock className="w-3 h-3" />
+                    <span>{timeLeft} left</span>
                   </div>
                 )}
               </div>
