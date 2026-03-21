@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Card } from './ui/card';
 import { Button } from './ui/button';
-import { Zap, Lock, Plus, Clock } from 'lucide-react';
+import { Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export interface PublicSlot {
@@ -24,131 +23,122 @@ interface SlotCardProps {
 function useTimeLeft(expiresAt: string | null) {
   const getMs = () => expiresAt ? Math.max(0, new Date(expiresAt).getTime() - Date.now()) : 0;
   const [ms, setMs] = useState(getMs);
-
   useEffect(() => {
     if (!expiresAt) return;
     const id = setInterval(() => setMs(getMs()), 1000);
     return () => clearInterval(id);
   }, [expiresAt]);
-
   if (!expiresAt || ms === 0) return null;
-
-  const totalSecs = Math.floor(ms / 1000);
-  const d = Math.floor(totalSecs / 86400);
-  const h = Math.floor((totalSecs % 86400) / 3600);
-  const m = Math.floor((totalSecs % 3600) / 60);
-  const s = totalSecs % 60;
-
-  if (d > 0) return `${d}d ${h}h ${String(m).padStart(2, '0')}m`;
-  if (h > 0) return `${h}h ${String(m).padStart(2, '0')}m ${String(s).padStart(2, '0')}s`;
-  return `${String(m).padStart(2, '0')}m ${String(s).padStart(2, '0')}s`;
+  const s = Math.floor(ms / 1000);
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  if (d > 0) return `${d}d ${h}h`;
+  if (h > 0) return `${h}h ${String(m).padStart(2, '0')}m`;
+  return `${String(m).padStart(2, '0')}m ${String(sec).padStart(2, '0')}s`;
 }
 
 export function SlotCard({ slotData, onPurchase, onManage }: SlotCardProps) {
   const { slotNumber, isActive, isOwner, owner } = slotData;
-  const takenByOther = isActive && !isOwner;
+  const taken = isActive && !isOwner;
   const timeLeft = useTimeLeft(isActive ? slotData.expiresAt : null);
 
   return (
-    <Card className={cn(
-      'transition-all duration-300 overflow-hidden h-full flex flex-col rounded-xl',
+    <div className={cn(
+      'flex flex-col rounded-xl border transition-all duration-200 overflow-hidden',
       isOwner
-        ? 'border-primary/40 glow-box-active bg-primary/5'
-        : takenByOther
-          ? 'border-red-500/20 bg-red-500/5'
-          : 'border-border hover:border-primary/20 hover:bg-secondary/30 opacity-80 hover:opacity-100'
+        ? 'border-primary/35 bg-primary/[0.04]'
+        : taken
+          ? 'border-border bg-secondary/20'
+          : 'border-border/60 bg-transparent hover:border-border hover:bg-secondary/10'
     )}>
-
-      {/* Card header */}
+      {/* Slot number + status */}
       <div className={cn(
-        'px-4 py-2.5 flex justify-between items-center border-b text-xs font-mono tracking-wider',
-        isOwner
-          ? 'border-primary/20 bg-primary/10 text-primary'
-          : takenByOther
-            ? 'border-red-500/15 bg-red-500/8 text-red-400/80'
-            : 'border-border bg-secondary/30 text-muted-foreground'
+        'flex items-center justify-between px-4 py-3 border-b',
+        isOwner ? 'border-primary/20' : 'border-border/50'
       )}>
-        <span className="font-semibold">Slot {String(slotNumber).padStart(2, '0')}</span>
         <span className={cn(
-          'px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-widest uppercase',
-          isOwner
-            ? 'bg-primary/20 text-primary'
-            : takenByOther
-              ? 'bg-red-500/15 text-red-400'
-              : 'bg-secondary text-muted-foreground'
+          'font-mono text-xs font-semibold tracking-widest',
+          isOwner ? 'text-primary' : taken ? 'text-muted-foreground' : 'text-muted-foreground/60'
         )}>
-          {isOwner ? 'Active' : takenByOther ? 'Taken' : 'Open'}
+          #{String(slotNumber).padStart(2, '0')}
+        </span>
+        <span className={cn(
+          'text-[10px] font-mono font-bold tracking-widest uppercase px-2 py-0.5 rounded-full',
+          isOwner
+            ? 'text-primary bg-primary/15'
+            : taken
+              ? 'text-muted-foreground bg-secondary'
+              : 'text-muted-foreground/40 bg-secondary/50'
+        )}>
+          {isOwner ? 'Active' : taken ? 'Taken' : 'Open'}
         </span>
       </div>
 
-      {/* Card body */}
-      <div className="p-5 flex-1 flex flex-col justify-between items-center text-center gap-5">
-
+      {/* Body */}
+      <div className="flex-1 flex flex-col items-center justify-center px-4 py-5 gap-4">
         {isOwner ? (
           <>
-            <div className="flex-1 flex flex-col items-center justify-center gap-3">
-              <div className="relative">
-                <div className="absolute inset-0 bg-primary/20 blur-2xl rounded-full" />
-                <Zap className="w-10 h-10 text-primary relative z-10 mx-auto drop-shadow-[0_0_8px_rgba(218,165,32,0.6)]" />
-              </div>
-              <div className="w-full space-y-2">
-                <p className="text-primary font-display font-bold uppercase tracking-wide text-sm">
-                  {slotData.label || 'Running'}
-                </p>
-                {timeLeft && (
-                  <div className="flex items-center justify-center gap-1.5 text-xs font-mono text-muted-foreground">
-                    <Clock className="w-3 h-3 text-primary/60" />
-                    <span>{timeLeft} left</span>
-                  </div>
-                )}
-              </div>
+            <div className="text-center space-y-1.5 w-full">
+              <p className="font-semibold text-sm text-primary tracking-wide">
+                {slotData.label || 'Running'}
+              </p>
+              {timeLeft && (
+                <div className="flex items-center justify-center gap-1.5 text-xs font-mono text-muted-foreground">
+                  <Clock className="w-3 h-3 text-primary/50" />
+                  <span>{timeLeft} left</span>
+                </div>
+              )}
             </div>
-            <Button variant="outline" size="sm" className="w-full border-primary/25 text-primary/80 hover:text-primary hover:border-primary/50 text-xs font-mono" onClick={() => onManage(slotData)}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full h-8 border-primary/25 text-primary hover:border-primary/50 hover:bg-primary/5 text-xs font-mono"
+              onClick={() => onManage(slotData)}
+            >
               Manage
             </Button>
           </>
-        ) : takenByOther ? (
+        ) : taken ? (
           <>
-            <div className="flex-1 flex flex-col items-center justify-center gap-3">
-              <Lock className="w-9 h-9 text-red-400/40 mx-auto" />
-              <div className="space-y-2">
-                {owner && (
-                  <div className="flex items-center justify-center gap-2">
-                    {owner.avatar ? (
-                      <img
-                        src={`https://cdn.discordapp.com/avatars/${owner.discordId}/${owner.avatar}.png`}
-                        alt=""
-                        className="w-5 h-5 rounded-full border border-red-500/20"
-                      />
-                    ) : (
-                      <div className="w-5 h-5 rounded-full bg-secondary border border-red-500/20" />
-                    )}
-                    <span className="font-mono text-xs text-muted-foreground">{owner.username}</span>
-                  </div>
-                )}
-                {timeLeft && (
-                  <div className="flex items-center justify-center gap-1.5 text-xs font-mono text-red-400/60">
-                    <Clock className="w-3 h-3" />
-                    <span>{timeLeft} left</span>
-                  </div>
-                )}
-              </div>
+            <div className="flex flex-col items-center gap-1.5 w-full">
+              {owner && (
+                <div className="flex items-center gap-2">
+                  {owner.avatar ? (
+                    <img
+                      src={`https://cdn.discordapp.com/avatars/${owner.discordId}/${owner.avatar}.png`}
+                      alt=""
+                      className="w-6 h-6 rounded-full border border-border"
+                    />
+                  ) : (
+                    <div className="w-6 h-6 rounded-full bg-secondary border border-border" />
+                  )}
+                  <span className="font-mono text-xs text-muted-foreground truncate max-w-[100px]">{owner.username}</span>
+                </div>
+              )}
+              {timeLeft && (
+                <div className="flex items-center gap-1 text-[11px] font-mono text-muted-foreground/50">
+                  <Clock className="w-2.5 h-2.5" />
+                  <span>{timeLeft}</span>
+                </div>
+              )}
             </div>
-            <Button disabled variant="outline" size="sm" className="w-full border-red-500/15 text-red-400/40 cursor-not-allowed text-xs font-mono">
-              Unavailable
+            <Button
+              disabled
+              size="sm"
+              variant="outline"
+              className="w-full h-8 border-border/40 text-muted-foreground/30 cursor-not-allowed text-xs font-mono"
+            >
+              Taken
             </Button>
           </>
         ) : (
           <>
-            <div className="flex-1 flex flex-col items-center justify-center gap-3">
-              <div className="w-10 h-10 rounded-full border-2 border-dashed border-border flex items-center justify-center mx-auto">
-                <Plus className="w-4 h-4 text-muted-foreground/50" />
-              </div>
-              <p className="text-muted-foreground font-mono text-xs">Available slot</p>
-            </div>
+            <p className="text-muted-foreground/40 font-mono text-xs">Available</p>
             <Button
               size="sm"
-              className="w-full text-xs font-semibold tracking-wide"
+              className="w-full h-8 text-xs font-semibold"
               onClick={() => onPurchase(slotNumber)}
             >
               Purchase
@@ -156,6 +146,6 @@ export function SlotCard({ slotData, onPurchase, onManage }: SlotCardProps) {
           </>
         )}
       </div>
-    </Card>
+    </div>
   );
 }

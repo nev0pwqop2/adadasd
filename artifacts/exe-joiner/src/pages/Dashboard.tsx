@@ -161,9 +161,8 @@ export default function Dashboard() {
 
   if (isUserLoading || isSlotsLoading) {
     return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4">
-        <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-        <p className="font-mono text-primary animate-pulse tracking-widest uppercase text-sm">Initializing Interface...</p>
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
@@ -194,42 +193,39 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-background relative overflow-x-hidden">
       <div className="flex flex-col min-h-screen">
-        <header className="border-b border-border/60 bg-background/80 backdrop-blur-md sticky top-0 z-40">
+        <header className="border-b border-border/50 bg-background/90 backdrop-blur-md sticky top-0 z-40">
           <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3 shrink-0">
-              <img src={`${import.meta.env.BASE_URL}exe-logo.png`} alt="EXE" className="w-7 h-7 drop-shadow-[0_0_8px_rgba(218,165,32,0.4)]" />
-              <span className="font-display font-bold text-foreground tracking-tight hidden sm:block">Exe Joiner</span>
+            <div className="flex items-center gap-2.5 shrink-0">
+              <img src={`${import.meta.env.BASE_URL}exe-logo.png`} alt="EXE" className="w-6 h-6" />
+              <span className="font-display font-bold text-sm text-foreground hidden sm:block">Exe Joiner</span>
             </div>
 
-            <div className="flex items-center gap-3 ml-auto">
-              <div className="hidden sm:flex items-center gap-2 text-xs font-mono text-muted-foreground">
+            <div className="flex items-center gap-2">
+              <div className="hidden sm:flex items-center gap-1.5 text-xs font-mono text-muted-foreground mr-1">
                 <span className="relative flex h-1.5 w-1.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-60" />
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-50" />
                   <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-primary" />
                 </span>
-                {activeCount}/{totalSlots} active
-              </div>
-
-              <div className="h-5 w-px bg-border hidden sm:block" />
-
-              <div className="flex items-center gap-2">
-                {user.avatar ? (
-                  <img src={`https://cdn.discordapp.com/avatars/${user.discordId}/${user.avatar}.png`} alt="Avatar" className="w-7 h-7 rounded-full border border-border" />
-                ) : (
-                  <div className="w-7 h-7 rounded-full bg-secondary border border-border" />
-                )}
-                <span className="font-mono text-sm hidden md:block text-foreground">{user.username}</span>
+                {activeCount}/{totalSlots}
               </div>
 
               {user.isAdmin && (
-                <Button variant="outline" size="sm" onClick={() => setLocation('/admin')} className="border-primary/30 text-primary hover:bg-primary/10 text-xs h-8">
-                  <Settings className="w-3.5 h-3.5 sm:mr-1.5" />
-                  <span className="hidden sm:inline">Admin</span>
+                <Button variant="ghost" size="sm" onClick={() => setLocation('/admin')} className="text-muted-foreground hover:text-foreground text-xs h-8 px-2.5">
+                  <Settings className="w-3.5 h-3.5" />
                 </Button>
               )}
-              <Button variant="outline" size="sm" onClick={handleLogout} className="border-border text-muted-foreground hover:text-foreground text-xs h-8">
-                <LogOut className="w-3.5 h-3.5 sm:mr-1.5" />
-                <span className="hidden sm:inline">Logout</span>
+
+              <div className="flex items-center gap-2 border border-border/50 rounded-lg px-2.5 py-1.5">
+                {user.avatar ? (
+                  <img src={`https://cdn.discordapp.com/avatars/${user.discordId}/${user.avatar}.png`} alt="Avatar" className="w-5 h-5 rounded-full" />
+                ) : (
+                  <div className="w-5 h-5 rounded-full bg-secondary" />
+                )}
+                <span className="font-mono text-xs text-muted-foreground hidden sm:block">{user.username}</span>
+              </div>
+
+              <Button variant="ghost" size="sm" onClick={handleLogout} className="text-muted-foreground hover:text-foreground h-8 px-2.5">
+                <LogOut className="w-3.5 h-3.5" />
               </Button>
             </div>
           </div>
@@ -260,17 +256,16 @@ export default function Dashboard() {
           {/* SLOTS TAB */}
           {activeTab === 'slots' && (
             <>
-              <div className="mb-6">
-                <h2 className="text-xl font-display font-bold text-foreground flex items-center gap-2.5">
-                  <LayoutGrid className="w-5 h-5 text-primary" /> Slots
-                </h2>
-                <p className="text-muted-foreground font-mono mt-1 text-sm">
-                  {hourlyPricingEnabled ? (
-                    <><span className="text-primary">${pricePerHour.toFixed(2)}/hr</span> · min {minHours}h per slot</>
-                  ) : (
-                    <><span className="text-primary">${pricePerDay.toFixed(2)}</span> / {slotDurationHours}h per slot</>
-                  )}
-                </p>
+              <div className="mb-6 flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-display font-bold text-foreground">Slots</h2>
+                  <p className="text-muted-foreground font-mono text-xs mt-0.5">
+                    {hourlyPricingEnabled
+                      ? <><span className="text-primary">${pricePerHour.toFixed(2)}/hr</span> · min {minHours}h</>
+                      : <><span className="text-primary">${pricePerDay.toFixed(2)}</span> for {slotDurationHours}h</>}
+                  </p>
+                </div>
+                <span className="font-mono text-xs text-muted-foreground/50">{activeCount}/{totalSlots} active</span>
               </div>
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
