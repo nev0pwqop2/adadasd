@@ -4,6 +4,7 @@ import { eq, sql, inArray, and, lte, isNotNull } from "drizzle-orm";
 import { requireAdmin, isSuperAdmin, SUPER_ADMIN_DISCORD_ID } from "../middlewares/requireAdmin.js";
 import { getSettings, setSetting } from "../lib/settings.js";
 import { isLuarmorConfigured, createLuarmorUser, deleteLuarmorUser, getLuarmorUsers } from "../lib/luarmor.js";
+import { sendPaymentWebhook } from "../lib/discord.js";
 
 const router = Router();
 
@@ -300,6 +301,33 @@ router.post("/test-script", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to generate test script");
     res.status(500).json({ error: "server_error", message: "Failed to generate test script" });
+  }
+});
+
+router.post("/test-webhook", async (req, res) => {
+  try {
+    const adminId = req.session.userId!;
+    const adminUser = await db.select().from(usersTable).where(eq(usersTable.id, adminId)).limit(1);
+    const username = adminUser[0]?.username ?? "Admin";
+    const discordId = adminUser[0]?.discordId ?? "000000000000000000";
+
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    await sendPaymentWebhook({
+      username,
+      discordId,
+      method: "balance",
+      currency: "USD",
+      amount: "9.99",
+      slotNumber: 1,
+      purchaseType: "slot",
+      durationHours: 24,
+      expiresAt,
+    });
+
+    res.json({ success: true, message: "Test webhook sent" });
+  } catch (err) {
+    req.log.error({ err }, "Failed to send test webhook");
+    res.status(500).json({ error: "server_error", message: "Failed to send test webhook" });
   }
 });
 

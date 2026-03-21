@@ -112,6 +112,16 @@ export default function Admin() {
     onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
 
+  const { mutate: sendTestWebhook, isPending: isSendingTestWebhook } = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`${import.meta.env.BASE_URL}api/admin/test-webhook`, { method: 'POST', credentials: 'include' });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.message || 'Failed'); }
+      return res.json();
+    },
+    onSuccess: () => toast({ title: 'Webhook Sent', description: 'Check your Discord channel for the test message.', className: 'bg-primary text-primary-foreground' }),
+    onError: (err: any) => toast({ title: 'Webhook Failed', description: err.message, variant: 'destructive' }),
+  });
+
   type ServerEntry = { id: string; name: string; icon: string | null; userCount: number; users: { username: string; discordId: string }[] };
   const { data: serversData, isLoading: isServersLoading } = useQuery({
     queryKey: ['admin-servers'],
@@ -681,7 +691,7 @@ export default function Admin() {
                 <FlaskConical className="w-5 h-5 text-blue-400" />
                 <h2 className="font-display font-bold uppercase tracking-wider text-blue-400">Developer Tools</h2>
               </div>
-              <div className="p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-blue-500/10">
                 <div>
                   <p className="font-mono text-sm text-foreground font-bold">Test Script (1 Minute)</p>
                   <p className="text-xs text-muted-foreground font-mono mt-1">Generates a real Luarmor key for yourself that expires in 60 seconds. Use it to verify expiry and loader delivery.</p>
@@ -695,6 +705,22 @@ export default function Admin() {
                 >
                   {isGeneratingTestScript ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <FlaskConical className="w-4 h-4 mr-2" />}
                   Generate Test Script
+                </Button>
+              </div>
+              <div className="p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <p className="font-mono text-sm text-foreground font-bold">Test Webhook</p>
+                  <p className="text-xs text-muted-foreground font-mono mt-1">Fires a fake slot purchase webhook to your Discord channel to verify the webhook URL and embed format.</p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-blue-500/40 text-blue-400 hover:bg-blue-500/10 hover:border-blue-500 font-mono shrink-0"
+                  onClick={() => sendTestWebhook()}
+                  disabled={isSendingTestWebhook}
+                >
+                  {isSendingTestWebhook ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <FlaskConical className="w-4 h-4 mr-2" />}
+                  Send Test Webhook
                 </Button>
               </div>
 

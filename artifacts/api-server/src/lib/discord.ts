@@ -90,12 +90,16 @@ export async function sendPaymentWebhook(data: {
   };
 
   try {
-    await fetch(webhookUrl, {
+    const res = await fetch(webhookUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-  } catch {
-    // Webhook failure should never block payment processing
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      console.error(`[discord webhook] failed ${res.status}: ${text}`);
+    }
+  } catch (err) {
+    console.error("[discord webhook] fetch error:", err);
   }
 }

@@ -400,7 +400,9 @@ router.post("/use", requireAuth, async (req: Request, res: Response) => {
           expiresAt,
         });
       }
-    } catch {}
+    } catch (webhookErr) {
+      req.log.warn({ webhookErr }, "Balance purchase webhook failed");
+    }
 
     res.json({ success: true, slotNumber, expiresAt: expiresAt.toISOString(), balance: (currentBalance - chargeAmount).toFixed(2) });
   } catch (err) {
