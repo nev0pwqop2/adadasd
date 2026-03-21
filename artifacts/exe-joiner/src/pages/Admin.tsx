@@ -5,7 +5,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Save, Users, Settings, Shield, ShieldOff, Loader2, RotateCcw, AlertTriangle, Crown, Server, ChevronDown, ChevronUp, Search, Copy, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Save, Users, Settings, Shield, ShieldOff, Loader2, RotateCcw, AlertTriangle, Crown, Server, ChevronDown, ChevronUp, Search, Copy } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 async function apiFetch<T>(path: string): Promise<T> {
@@ -652,14 +652,6 @@ export default function Admin() {
                             ) : (
                               <><Copy className="w-3 h-3 mr-1" /> Copy ID</>
                             )}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="border-border text-muted-foreground hover:text-primary hover:border-primary/50 font-mono text-xs"
-                            onClick={() => window.open(`https://discord.com/channels/${s.id}`, '_blank')}
-                          >
-                            <ExternalLink className="w-3 h-3 mr-1" /> Open
                           </Button>
                         </div>
                       </div>
