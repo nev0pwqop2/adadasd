@@ -9,16 +9,16 @@ export interface ButtonProps extends HTMLMotionProps<"button"> {
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = "default", size = "default", children, disabled, ...props }, ref) => {
-    
-    const baseStyles = "inline-flex items-center justify-center font-mono text-sm font-medium uppercase tracking-wider transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary disabled:pointer-events-none disabled:opacity-50 chamfered-btn"
-    
+
+    const baseStyles = "inline-flex items-center justify-center rounded-xl font-mono text-sm font-medium uppercase tracking-wider transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary disabled:pointer-events-none disabled:opacity-50"
+
     const variants = {
-      default: "bg-primary text-primary-foreground hover:bg-primary/90 glow-box hover:glow-box-active",
-      outline: "border border-primary text-primary hover:bg-primary/10",
-      ghost: "text-foreground hover:bg-primary/10 hover:text-primary",
-      danger: "bg-destructive/10 text-destructive border border-destructive hover:bg-destructive hover:text-destructive-foreground"
+      default: "bg-primary text-primary-foreground hover:brightness-110 shadow-[0_0_16px_hsla(43,96%,56%,0.2)] hover:shadow-[0_0_24px_hsla(43,96%,56%,0.35)]",
+      outline: "border border-border text-foreground hover:border-primary/40 hover:text-primary hover:bg-primary/5",
+      ghost: "text-muted-foreground hover:bg-secondary hover:text-foreground",
+      danger: "border border-destructive/40 text-destructive hover:bg-destructive hover:text-destructive-foreground"
     }
-    
+
     const sizes = {
       default: "h-10 px-6 py-2",
       sm: "h-8 px-4 text-xs",
