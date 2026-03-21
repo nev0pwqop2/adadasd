@@ -152,7 +152,7 @@ export function PreorderModal({ isOpen, onClose, pricePerDay, slotDurationHours,
                       onClick={() => setSelectedCrypto(c.id)}
                       className={`flex-1 py-1.5 rounded-lg font-mono text-xs border transition-all ${selectedCrypto === c.id ? 'border-primary/50 bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:border-primary/20'}`}
                     >
-                      {c.symbol}
+                      {c.label}
                     </button>
                   ))}
                 </div>
