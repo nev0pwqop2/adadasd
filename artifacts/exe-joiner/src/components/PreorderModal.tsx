@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Button } from './ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { X, CreditCard, Bitcoin, Copy, Check, Clock, Loader2, Wallet } from 'lucide-react';
+import { X, CreditCard, Bitcoin, Copy, Check, Clock, Loader2, Wallet, CheckCircle } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 
 interface PreorderModalProps {
   isOpen: boolean;
@@ -14,11 +15,11 @@ interface PreorderModalProps {
 }
 
 const CRYPTO_OPTIONS = [
-  { id: 'BTC', label: 'Bitcoin', symbol: 'BTC' },
-  { id: 'LTC', label: 'Litecoin', symbol: 'LTC' },
-  { id: 'USDT', label: 'Tether', symbol: 'USDT' },
-  { id: 'ETH', label: 'Ethereum', symbol: 'ETH' },
-  { id: 'SOL', label: 'Solana', symbol: 'SOL' },
+  { id: 'BTC', label: 'Bitcoin' },
+  { id: 'LTC', label: 'Litecoin' },
+  { id: 'USDT', label: 'Tether' },
+  { id: 'ETH', label: 'Ethereum' },
+  { id: 'SOL', label: 'Solana' },
 ];
 
 type Step = 'choose' | 'crypto_address' | 'loading';
@@ -27,10 +28,18 @@ export function PreorderModal({ isOpen, onClose, pricePerDay, slotDurationHours,
   const { toast } = useToast();
   const [step, setStep] = useState<Step>('choose');
   const [selectedCrypto, setSelectedCrypto] = useState('');
-  const [cryptoSession, setCryptoSession] = useState<{ address: string; amount: string; currency: string } | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [cryptoSession, setCryptoSession] = useState<{
+    paymentId: string;
+    address: string;
+    amount: string;
+    currency: string;
+    expiresAt: string;
+  } | null>(null);
+  const [copiedAmount, setCopiedAmount] = useState(false);
+  const [copiedAddress, setCopiedAddress] = useState(false);
   const [isLoadingStripe, setIsLoadingStripe] = useState(false);
   const [isLoadingBalance, setIsLoadingBalance] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
 
   const BASE = import.meta.env.BASE_URL;
   const hasEnoughBalance = balance >= pricePerDay;
@@ -91,7 +100,13 @@ export function PreorderModal({ isOpen, onClose, pricePerDay, slotDurationHours,
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Failed to create crypto session');
-      setCryptoSession({ address: data.address, amount: data.amount, currency: data.currency });
+      setCryptoSession({
+        paymentId: data.paymentId,
+        address: data.address,
+        amount: data.amount,
+        currency: data.currency,
+        expiresAt: data.expiresAt,
+      });
       setStep('crypto_address');
     } catch (e: any) {
       toast({ title: 'Error', description: e.message, variant: 'destructive' });
@@ -99,10 +114,40 @@ export function PreorderModal({ isOpen, onClose, pricePerDay, slotDurationHours,
     }
   };
 
-  const copy = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleVerify = async () => {
+    if (!cryptoSession) return;
+    setIsVerifying(true);
+    try {
+      const res = await fetch(`${BASE}api/preorders/verify-crypto`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paymentId: cryptoSession.paymentId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Verification failed');
+      toast({ title: 'Pre-order Confirmed!', description: "You'll automatically get the next slot when one opens.", className: 'bg-primary text-primary-foreground border-none' });
+      onSuccess();
+      handleClose();
+    } catch (e: any) {
+      toast({ title: 'Not Confirmed Yet', description: e.message || 'Payment not detected. Try again in a moment.', variant: 'destructive' });
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  const copyAmount = () => {
+    if (!cryptoSession) return;
+    navigator.clipboard.writeText(cryptoSession.amount);
+    setCopiedAmount(true);
+    setTimeout(() => setCopiedAmount(false), 2000);
+  };
+
+  const copyAddress = () => {
+    if (!cryptoSession) return;
+    navigator.clipboard.writeText(cryptoSession.address);
+    setCopiedAddress(true);
+    setTimeout(() => setCopiedAddress(false), 2000);
   };
 
   const timeUntil = nextExpiresAt ? (() => {
@@ -132,15 +177,17 @@ export function PreorderModal({ isOpen, onClose, pricePerDay, slotDurationHours,
         </div>
 
         <div className="p-6">
-          <div className="flex items-start gap-3 bg-primary/8 border border-primary/20 rounded-xl p-3.5 mb-5">
-            <Clock className="w-4 h-4 text-primary shrink-0 mt-0.5" />
-            <div>
-              <p className="font-mono text-xs text-primary font-semibold">How it works</p>
-              <p className="font-mono text-xs text-muted-foreground mt-1 leading-relaxed">
-                Pay now. When the next slot expires{timeUntil ? ` (${timeUntil})` : ''}, you automatically get it for a full {slotDurationHours}h — no action needed.
-              </p>
+          {step !== 'crypto_address' && (
+            <div className="flex items-start gap-3 bg-primary/8 border border-primary/20 rounded-xl p-3.5 mb-5">
+              <Clock className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+              <div>
+                <p className="font-mono text-xs text-primary font-semibold">How it works</p>
+                <p className="font-mono text-xs text-muted-foreground mt-1 leading-relaxed">
+                  Pay now. When the next slot expires{timeUntil ? ` (${timeUntil})` : ''}, you automatically get it for a full {slotDurationHours}h — no action needed.
+                </p>
+              </div>
             </div>
-          </div>
+          )}
 
           {step === 'choose' && (
             <div className="space-y-3">
@@ -217,33 +264,68 @@ export function PreorderModal({ isOpen, onClose, pricePerDay, slotDurationHours,
           )}
 
           {step === 'crypto_address' && cryptoSession && (
-            <div className="space-y-4">
-              <div className="bg-secondary/40 rounded-xl p-4 space-y-3">
-                <div>
-                  <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Send exactly</p>
-                  <div className="flex items-center gap-2">
-                    <p className="font-mono font-bold text-primary text-lg">{cryptoSession.amount} {cryptoSession.currency}</p>
-                    <button onClick={() => copy(cryptoSession.amount)} className="text-muted-foreground hover:text-primary transition-colors">
-                      {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                    </button>
-                  </div>
+            <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
+              {/* QR Code */}
+              <div className="flex justify-center p-4 bg-white chamfered">
+                <QRCodeSVG
+                  value={`${cryptoSession.currency.toLowerCase()}:${cryptoSession.address}?amount=${cryptoSession.amount}`}
+                  size={180}
+                  level="H"
+                  includeMargin
+                />
+              </div>
+
+              {/* Amount */}
+              <div className="bg-secondary p-3 border border-primary/20 chamfered">
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-xs font-mono text-muted-foreground uppercase">Amount ({cryptoSession.currency})</span>
+                  <button onClick={copyAmount} className="text-primary hover:text-primary/80">
+                    {copiedAmount ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
+                  </button>
                 </div>
-                <div>
-                  <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground mb-1">To address</p>
-                  <div className="flex items-start gap-2">
-                    <p className="font-mono text-xs text-foreground break-all flex-1">{cryptoSession.address}</p>
-                    <button onClick={() => copy(cryptoSession.address)} className="text-muted-foreground hover:text-primary transition-colors shrink-0 mt-0.5">
-                      {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                    </button>
-                  </div>
+                <div className="font-mono text-lg text-foreground font-bold break-all">
+                  {cryptoSession.amount}
                 </div>
               </div>
-              <p className="font-mono text-xs text-muted-foreground text-center leading-relaxed">
-                Send the exact amount. Your pre-order activates automatically once the payment is confirmed.
+
+              {/* Address */}
+              <div className="bg-secondary p-3 border border-primary/20 chamfered">
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-xs font-mono text-muted-foreground uppercase">Address</span>
+                  <button onClick={copyAddress} className="text-primary hover:text-primary/80">
+                    {copiedAddress ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
+                  </button>
+                </div>
+                <div className="font-mono text-sm text-primary break-all">
+                  {cryptoSession.address}
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => { setCryptoSession(null); setStep('choose'); }}
+                  disabled={isVerifying}
+                >
+                  Back
+                </Button>
+                <Button
+                  className="flex-[2]"
+                  onClick={handleVerify}
+                  disabled={isVerifying}
+                >
+                  {isVerifying
+                    ? <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                    : <CheckCircle className="w-5 h-5 mr-2" />}
+                  Verify Payment
+                </Button>
+              </div>
+
+              <p className="text-center text-xs text-muted-foreground font-mono">
+                Send the exact amount, then click Verify.<br />Session expires in 1 hour.
               </p>
-              <Button variant="outline" size="sm" className="w-full border-border text-xs" onClick={handleClose}>
-                Done — I've sent the payment
-              </Button>
             </div>
           )}
         </div>

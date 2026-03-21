@@ -308,4 +308,98 @@ router.post("/create-balance", requireAuth, async (req: Request, res: Response) 
   }
 });
 
+// POST /api/preorders/verify-crypto — check NOWPayments status and confirm a crypto preorder
+router.post("/verify-crypto", requireAuth, async (req: Request, res: Response) => {
+  const { paymentId } = req.body as { paymentId?: string };
+  if (!paymentId) {
+    res.status(400).json({ error: "invalid_request", message: "paymentId required" });
+    return;
+  }
+
+  try {
+    const payments = await db
+      .select()
+      .from(paymentsTable)
+      .where(and(eq(paymentsTable.id, paymentId), eq(paymentsTable.userId, req.session.userId!)))
+      .limit(1);
+
+    if (!payments.length) {
+      res.status(404).json({ error: "not_found", message: "Payment not found" });
+      return;
+    }
+
+    const payment = payments[0];
+
+    if (payment.status === "completed") {
+      res.json({ success: true, message: "Payment already confirmed" });
+      return;
+    }
+
+    if (payment.expiresAt && payment.expiresAt < new Date()) {
+      res.status(400).json({ error: "expired", message: "Payment session has expired" });
+      return;
+    }
+
+    if (!payment.txHash) {
+      res.status(400).json({ error: "invalid_payment", message: "No NOWPayments reference found" });
+      return;
+    }
+
+    // Poll NOWPayments for status
+    const nowStatus = await nowpaymentsRequest(`/payment/${payment.txHash}`) as { payment_status: string };
+    const CONFIRMED = new Set(["finished", "confirmed", "complete", "partially_paid"]);
+    if (!CONFIRMED.has(nowStatus.payment_status)) {
+      res.status(402).json({
+        error: "not_confirmed",
+        message: `Payment status: ${nowStatus.payment_status}. Please wait and try again.`,
+      });
+      return;
+    }
+
+    // Check user doesn't already have an active preorder
+    const existing = await db
+      .select()
+      .from(preordersTable)
+      .where(and(eq(preordersTable.userId, req.session.userId!), eq(preordersTable.status, "paid")))
+      .limit(1);
+    if (existing.length) {
+      res.status(400).json({ error: "already_preordered", message: "You already have an active pre-order." });
+      return;
+    }
+
+    // Mark payment completed and create preorder
+    await db.update(paymentsTable).set({ status: "completed", updatedAt: new Date() }).where(eq(paymentsTable.id, payment.id));
+    await db.insert(preordersTable).values({
+      userId: payment.userId,
+      amount: payment.amount,
+      currency: payment.currency ?? "USD",
+      paymentId: payment.id,
+      status: "paid",
+    });
+
+    // Discord webhook
+    try {
+      const userRows = await db.select({ username: usersTable.username, discordId: usersTable.discordId })
+        .from(usersTable).where(eq(usersTable.id, payment.userId)).limit(1);
+      if (userRows[0]) {
+        await sendPaymentWebhook({
+          username: userRows[0].username,
+          discordId: userRows[0].discordId,
+          method: "crypto",
+          currency: payment.currency ?? undefined,
+          amount: payment.amount ?? undefined,
+          purchaseType: "preorder",
+        });
+      }
+    } catch (webhookErr) {
+      req.log.warn({ webhookErr }, "Preorder verify webhook failed");
+    }
+
+    res.json({ success: true, message: "Pre-order confirmed!" });
+  } catch (err) {
+    req.log.error({ err }, "Preorder crypto verification failed");
+    res.status(500).json({ error: "server_error", message: "Verification failed" });
+  }
+});
+
 export default router;
