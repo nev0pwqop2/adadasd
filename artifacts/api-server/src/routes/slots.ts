@@ -138,7 +138,8 @@ router.get("/leaderboard", requireAuth, async (req, res) => {
     const totals: Record<string, { userId: string; totalSpent: number; totalHours: number }> = {};
     for (const p of completedPayments) {
       if (!totals[p.userId]) totals[p.userId] = { userId: p.userId, totalSpent: 0, totalHours: 0 };
-      totals[p.userId].totalSpent += parseFloat(p.amount ?? "0");
+      const amt = parseFloat(p.amount ?? "0");
+      totals[p.userId].totalSpent += isNaN(amt) ? 0 : amt;
       totals[p.userId].totalHours += slotDurationHours;
     }
 

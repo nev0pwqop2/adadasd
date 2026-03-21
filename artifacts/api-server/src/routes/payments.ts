@@ -188,6 +188,8 @@ router.post("/create-stripe-session", requireAuth, async (req: Request, res: Res
       slotNumber,
       method: "stripe",
       status: "pending",
+      amount: pricePerDay.toFixed(2),
+      currency: "USD",
       stripeSessionId: session.id,
       expiresAt: new Date(Date.now() + 30 * 60 * 1000),
     });

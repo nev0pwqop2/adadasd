@@ -10,7 +10,11 @@ export async function sendPaymentWebhook(data: {
   if (!webhookUrl) return;
 
   const methodLabel = data.method === "stripe" ? "Card (Stripe)" : `Crypto (${data.currency ?? "?"})`;
-  const amountLabel = data.amount ? `$${parseFloat(data.amount).toFixed(2)}` : "—";
+  const amountLabel = data.amount
+    ? data.method === "stripe"
+      ? `$${parseFloat(data.amount).toFixed(2)} USD`
+      : `${data.amount} ${data.currency ?? ""}`
+    : "—";
 
   const payload = {
     embeds: [
