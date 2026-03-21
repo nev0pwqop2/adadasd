@@ -14,13 +14,17 @@ export async function sendPaymentWebhook(data: {
 
   const purchaseType = data.purchaseType ?? "slot";
 
-  const methodLabel =
-    data.method === "stripe" || data.method === "balance-deposit-stripe" || data.method === "preorder-stripe"
-      ? "Card (Stripe)"
+  const isStripe = data.method === "stripe" || data.method === "balance-deposit-stripe" || data.method === "preorder-stripe";
+  const isBalance = data.method === "balance";
+
+  const methodLabel = isStripe
+    ? "Card (Stripe)"
+    : isBalance
+      ? "Account Balance"
       : `Crypto (${data.currency ?? "?"})`;
 
   const amountLabel = data.amount
-    ? data.method === "stripe" || data.method === "balance-deposit-stripe" || data.method === "preorder-stripe"
+    ? isStripe || isBalance
       ? `$${parseFloat(data.amount).toFixed(2)} USD`
       : `${data.amount} ${data.currency ?? ""}`
     : "—";
