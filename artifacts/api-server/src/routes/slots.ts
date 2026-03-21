@@ -3,6 +3,7 @@ import { db, slotsTable, usersTable, paymentsTable, preordersTable } from "@work
 import { eq, and, sql, inArray, lte, desc } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { getSettings } from "../lib/settings.js";
+import { isLuarmorConfigured, createLuarmorUser } from "../lib/luarmor.js";
 
 const router = Router();
 
@@ -82,15 +83,29 @@ router.get("/", requireAuth, async (req, res) => {
           const slotNum = freeSlotNums[i];
           const expiresAt = new Date(now.getTime() + slotDurationHours * 60 * 60 * 1000);
 
+          // Create Luarmor key for this user
+          let luarmorUserId: string | null = null;
+          if (isLuarmorConfigured()) {
+            try {
+              const preorderUser = await db.select().from(usersTable).where(eq(usersTable.id, preorder.userId)).limit(1);
+              if (preorderUser.length) {
+                const lu = await createLuarmorUser(preorderUser[0].discordId, preorderUser[0].username, expiresAt);
+                luarmorUserId = lu.user_key;
+              }
+            } catch (e) {
+              // Non-fatal — slot still activates
+            }
+          }
+
           const existingRow = await db.select().from(slotsTable)
             .where(and(eq(slotsTable.userId, preorder.userId), eq(slotsTable.slotNumber, slotNum)))
             .limit(1);
           if (existingRow.length) {
             await db.update(slotsTable)
-              .set({ isActive: true, purchasedAt: now, expiresAt, label: null })
+              .set({ isActive: true, purchasedAt: now, expiresAt, label: null, luarmorUserId })
               .where(and(eq(slotsTable.userId, preorder.userId), eq(slotsTable.slotNumber, slotNum)));
           } else {
-            await db.insert(slotsTable).values({ userId: preorder.userId, slotNumber: slotNum, isActive: true, purchasedAt: now, expiresAt });
+            await db.insert(slotsTable).values({ userId: preorder.userId, slotNumber: slotNum, isActive: true, purchasedAt: now, expiresAt, luarmorUserId });
           }
           await db.update(preordersTable).set({ status: "fulfilled" }).where(eq(preordersTable.id, preorder.id));
         }
@@ -115,11 +130,29 @@ router.get("/", requireAuth, async (req, res) => {
     }
 
     // Get current user's own slot rows for private details
-    const mySlots = await db
+    let mySlots = await db
       .select()
       .from(slotsTable)
       .where(eq(slotsTable.userId, currentUserId))
       .orderBy(slotsTable.slotNumber);
+
+    // Retroactively create Luarmor keys for active slots missing one
+    if (isLuarmorConfigured()) {
+      const currentUser = await db.select().from(usersTable).where(eq(usersTable.id, currentUserId)).limit(1);
+      if (currentUser.length) {
+        for (const slot of mySlots) {
+          if (slot.isActive && !slot.luarmorUserId) {
+            try {
+              const lu = await createLuarmorUser(currentUser[0].discordId, currentUser[0].username, slot.expiresAt ?? undefined);
+              await db.update(slotsTable).set({ luarmorUserId: lu.user_key }).where(eq(slotsTable.id, slot.id));
+              slot.luarmorUserId = lu.user_key;
+            } catch (e) {
+              // Non-fatal
+            }
+          }
+        }
+      }
+    }
 
     const mySlotMap = Object.fromEntries(mySlots.map((s) => [s.slotNumber, s]));
 

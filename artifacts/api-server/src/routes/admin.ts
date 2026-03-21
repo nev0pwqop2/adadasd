@@ -3,7 +3,7 @@ import { db, slotsTable, usersTable, paymentsTable } from "@workspace/db";
 import { eq, sql, inArray, and, lte, isNotNull } from "drizzle-orm";
 import { requireAdmin, isSuperAdmin, SUPER_ADMIN_DISCORD_ID } from "../middlewares/requireAdmin.js";
 import { getSettings, setSetting } from "../lib/settings.js";
-import { isLuarmorConfigured, deleteLuarmorUser } from "../lib/luarmor.js";
+import { isLuarmorConfigured, createLuarmorUser, deleteLuarmorUser } from "../lib/luarmor.js";
 
 const router = Router();
 
@@ -211,10 +211,21 @@ router.post("/users/:discordId/slots", async (req, res) => {
       if (slot.slotNumber > slotCount) continue;
       const shouldBeActive = slot.slotNumber <= count;
       if (slot.isActive !== shouldBeActive) {
+        let luarmorUserId: string | null = null;
+        if (shouldBeActive && isLuarmorConfigured()) {
+          try {
+            const expiresAt = new Date(Date.now() + expiryMs);
+            const lu = await createLuarmorUser(users[0].discordId, users[0].username, expiresAt);
+            luarmorUserId = lu.user_key;
+          } catch (e) {
+            req.log.warn({ e }, "Luarmor user creation failed (admin slot grant)");
+          }
+        }
         await db.update(slotsTable).set({
           isActive: shouldBeActive,
           purchasedAt: shouldBeActive ? new Date() : null,
           expiresAt: shouldBeActive ? new Date(Date.now() + expiryMs) : null,
+          luarmorUserId: shouldBeActive ? luarmorUserId : null,
         }).where(eq(slotsTable.id, slot.id));
       }
     }
