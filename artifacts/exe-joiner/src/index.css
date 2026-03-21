@@ -9,6 +9,13 @@
   --font-mono: 'JetBrains Mono', monospace;
   --font-display: 'Space Grotesk', sans-serif;
 
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 4px);
+  --radius-xl: calc(var(--radius) + 8px);
+  --radius-2xl: calc(var(--radius) + 12px);
+  --radius-3xl: calc(var(--radius) + 20px);
+
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));
 
@@ -61,7 +68,7 @@
   --card: 240 8% 5.5%;
   --card-foreground: 220 15% 88%;
 
-  --radius: 0.75rem;
+  --radius: 1.25rem;
 }
 
 @layer base {
