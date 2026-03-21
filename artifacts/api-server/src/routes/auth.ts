@@ -33,7 +33,16 @@ router.get("/discord", (req, res) => {
     prompt: "consent",
   });
 
-  res.redirect(`https://discord.com/api/oauth2/authorize?${params.toString()}`);
+  const redirectUrl = `https://discord.com/api/oauth2/authorize?${params.toString()}`;
+
+  req.session.save((err) => {
+    if (err) {
+      req.log.error({ err }, "Failed to save session before Discord redirect");
+      res.redirect("/?error=session_error");
+      return;
+    }
+    res.redirect(redirectUrl);
+  });
 });
 
 router.get("/discord/callback", async (req, res) => {
