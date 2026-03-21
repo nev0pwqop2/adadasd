@@ -3,7 +3,7 @@ import { db, slotsTable, usersTable, paymentsTable, preordersTable } from "@work
 import { eq, and, sql, inArray, lte, desc } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { getSettings } from "../lib/settings.js";
-import { isLuarmorConfigured, createLuarmorUser, deleteLuarmorUser } from "../lib/luarmor.js";
+import { isLuarmorConfigured, createLuarmorUser, deleteLuarmorUser, resetLuarmorHwid } from "../lib/luarmor.js";
 
 const router = Router();
 
@@ -29,6 +29,64 @@ router.patch("/:id/label", requireAuth, async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to update slot label");
     res.status(500).json({ error: "server_error", message: "Failed to update slot" });
+  }
+});
+
+router.post("/:id/reset-hwid", requireAuth, async (req, res) => {
+  const slotId = parseInt(req.params.id, 10);
+  if (isNaN(slotId)) {
+    res.status(400).json({ error: "invalid_slot", message: "Invalid slot ID" });
+    return;
+  }
+
+  try {
+    const existing = await db.select().from(slotsTable).where(eq(slotsTable.id, slotId)).limit(1);
+
+    if (!existing.length || existing[0].userId !== req.session.userId) {
+      res.status(404).json({ error: "not_found", message: "Slot not found" });
+      return;
+    }
+
+    const slot = existing[0];
+
+    if (!slot.isActive) {
+      res.status(400).json({ error: "slot_inactive", message: "Slot is not active" });
+      return;
+    }
+
+    if (!slot.luarmorUserId) {
+      res.status(400).json({ error: "no_key", message: "No script key assigned to this slot" });
+      return;
+    }
+
+    // Enforce 1 reset per 24 hours
+    if (slot.hwidResetAt) {
+      const msAgo = Date.now() - new Date(slot.hwidResetAt).getTime();
+      const hoursAgo = msAgo / (1000 * 60 * 60);
+      if (hoursAgo < 24) {
+        const nextReset = new Date(new Date(slot.hwidResetAt).getTime() + 24 * 60 * 60 * 1000);
+        res.status(429).json({
+          error: "on_cooldown",
+          message: `HWID reset is on cooldown. Next reset available at ${nextReset.toISOString()}`,
+          nextResetAt: nextReset.toISOString(),
+        });
+        return;
+      }
+    }
+
+    if (!isLuarmorConfigured()) {
+      res.status(503).json({ error: "luarmor_not_configured", message: "Luarmor is not configured on this server" });
+      return;
+    }
+
+    await resetLuarmorHwid(slot.luarmorUserId);
+    await db.update(slotsTable).set({ hwidResetAt: new Date() }).where(eq(slotsTable.id, slotId));
+
+    res.json({ success: true, message: "HWID reset successfully" });
+  } catch (err: any) {
+    req.log.error({ err }, "Failed to reset HWID");
+    const msg = err?.message ?? "Failed to reset HWID";
+    res.status(500).json({ error: "server_error", message: msg });
   }
 });
 
@@ -189,6 +247,7 @@ router.get("/", requireAuth, async (req, res) => {
           label: mySlot.label,
           scriptKey,
           script,
+          hwidResetAt: mySlot.hwidResetAt?.toISOString() ?? null,
         };
       } else if (activeSlot) {
         // Someone else owns this slot

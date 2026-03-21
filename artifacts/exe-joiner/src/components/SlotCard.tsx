@@ -14,6 +14,7 @@ export interface PublicSlot {
   label: string | null;
   scriptKey?: string | null;
   script?: string | null;
+  hwidResetAt?: string | null;
 }
 
 interface SlotCardProps {

@@ -85,6 +85,24 @@ export async function updateLuarmorUser(
   });
 }
 
+export async function resetLuarmorHwid(userKey: string): Promise<{ success: boolean; message?: string }> {
+  const config = getConfig();
+  if (!config) throw new Error("Luarmor not configured");
+  const res = await fetch(`${LUARMOR_BASE}/projects/${config.projectId}/users/resethwid`, {
+    method: "POST",
+    headers: {
+      Authorization: config.apiKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ user_key: userKey }),
+  });
+  const data = await res.json() as { success: boolean; message?: string };
+  if (!res.ok && !data.success) {
+    throw new Error(data.message ?? `Luarmor HWID reset failed (${res.status})`);
+  }
+  return data;
+}
+
 export async function getLuarmorUsers(): Promise<LuarmorUser[]> {
   const config = getConfig();
   if (!config) throw new Error("Luarmor not configured");

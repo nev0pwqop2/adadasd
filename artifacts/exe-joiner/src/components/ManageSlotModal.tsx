@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Settings, Loader2, Tag, Key, Copy, Check } from 'lucide-react';
+import { X, Settings, Loader2, Tag, Key, Copy, Check, RefreshCw, AlertCircle } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
 import { useToast } from '@/hooks/use-toast';
@@ -17,7 +17,32 @@ export function ManageSlotModal({ slot, onClose, onSuccess }: ManageSlotModalPro
   const [isSaving, setIsSaving] = useState(false);
   const [keyCopied, setKeyCopied] = useState(false);
   const [scriptCopied, setScriptCopied] = useState(false);
+  const [isResettingHwid, setIsResettingHwid] = useState(false);
   const { toast } = useToast();
+
+  const hwidResetAt = slot?.hwidResetAt ? new Date(slot.hwidResetAt) : null;
+  const nextHwidReset = hwidResetAt ? new Date(hwidResetAt.getTime() + 24 * 60 * 60 * 1000) : null;
+  const hwidOnCooldown = nextHwidReset ? nextHwidReset > new Date() : false;
+
+  const handleResetHwid = async () => {
+    if (!slot?.id || hwidOnCooldown) return;
+    setIsResettingHwid(true);
+    try {
+      const res = await fetch(`/api/slots/${slot.id}/reset-hwid`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || 'Failed to reset HWID');
+      toast({ title: 'HWID Reset', description: 'Your HWID has been reset successfully.', className: 'bg-primary text-primary-foreground' });
+      onSuccess();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Something went wrong';
+      toast({ title: 'Error', description: message, variant: 'destructive' });
+    } finally {
+      setIsResettingHwid(false);
+    }
+  };
 
   const handleCopyKey = async () => {
     if (!slot?.scriptKey) return;
@@ -168,6 +193,38 @@ export function ManageSlotModal({ slot, onClose, onSuccess }: ManageSlotModalPro
               ) : (
                 <div className="bg-secondary/30 border border-border/30 p-3 rounded text-center">
                   <p className="text-xs font-mono text-muted-foreground/40">No script key — Luarmor not configured</p>
+                </div>
+              )}
+
+              {slot.scriptKey && (
+                <div className="space-y-2">
+                  <label className="text-xs font-mono uppercase text-muted-foreground flex items-center gap-2">
+                    <RefreshCw className="w-3 h-3" /> HWID Reset
+                  </label>
+                  <div className="bg-secondary/50 border border-primary/10 p-3 space-y-2">
+                    {hwidOnCooldown && nextHwidReset ? (
+                      <div className="flex items-start gap-2 text-xs font-mono text-yellow-400/80">
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                        <span>On cooldown — next reset available {nextHwidReset.toLocaleString()}</span>
+                      </div>
+                    ) : hwidResetAt ? (
+                      <p className="text-xs font-mono text-muted-foreground/60">Last reset: {hwidResetAt.toLocaleString()}</p>
+                    ) : (
+                      <p className="text-xs font-mono text-muted-foreground/60">No resets used today.</p>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full border-primary/20 text-primary hover:bg-primary/5 font-mono text-xs"
+                      onClick={handleResetHwid}
+                      disabled={isResettingHwid || hwidOnCooldown}
+                    >
+                      {isResettingHwid
+                        ? <><Loader2 className="w-3.5 h-3.5 animate-spin mr-2" />Resetting...</>
+                        : <><RefreshCw className="w-3.5 h-3.5 mr-2" />Reset HWID</>}
+                    </Button>
+                    <p className="text-[10px] font-mono text-muted-foreground/40">1 reset per 24 hours. Use this if you changed your PC.</p>
+                  </div>
                 </div>
               )}
 

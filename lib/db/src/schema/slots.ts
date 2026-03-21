@@ -12,6 +12,7 @@ export const slotsTable = pgTable("slots", {
   expiresAt: timestamp("expires_at"),
   label: text("label"),
   luarmorUserId: text("luarmor_user_id"),
+  hwidResetAt: timestamp("hwid_reset_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
