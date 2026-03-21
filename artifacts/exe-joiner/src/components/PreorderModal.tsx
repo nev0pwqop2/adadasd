@@ -16,6 +16,8 @@ const CRYPTO_OPTIONS = [
   { id: 'BTC', label: 'Bitcoin', symbol: 'BTC' },
   { id: 'LTC', label: 'Litecoin', symbol: 'LTC' },
   { id: 'USDT', label: 'USDT TRC20', symbol: 'USDT' },
+  { id: 'ETH', label: 'Ethereum', symbol: 'ETH' },
+  { id: 'SOL', label: 'Solana', symbol: 'SOL' },
 ];
 
 type Step = 'choose' | 'crypto_address' | 'loading';
@@ -140,7 +142,7 @@ export function PreorderModal({ isOpen, onClose, pricePerDay, slotDurationHours,
                   </div>
                   <div>
                     <p className="font-semibold text-sm text-foreground">Pay with Crypto</p>
-                    <p className="text-xs text-muted-foreground font-mono">BTC, LTC, USDT TRC20</p>
+                    <p className="text-xs text-muted-foreground font-mono">BTC, LTC, USDT TRC20, ETH, SOL</p>
                   </div>
                 </div>
                 <div className="flex gap-2 mb-3">

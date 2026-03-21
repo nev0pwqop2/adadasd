@@ -12,7 +12,7 @@ interface DepositModalProps {
 }
 
 type Method = 'stripe' | 'crypto';
-type Currency = 'BTC' | 'LTC' | 'USDT';
+type Currency = 'BTC' | 'LTC' | 'USDT' | 'ETH' | 'SOL';
 
 const PRESET_AMOUNTS = [10, 25, 50, 100];
 
@@ -246,7 +246,7 @@ export function DepositModal({ isOpen, onClose, onSuccess }: DepositModalProps) 
                         <Bitcoin className="w-4 h-4 shrink-0" />
                         <div className="text-left">
                           <p className="font-mono text-xs font-semibold">Crypto</p>
-                          <p className="font-mono text-[10px] text-muted-foreground">BTC · LTC · USDT</p>
+                          <p className="font-mono text-[10px] text-muted-foreground">BTC · LTC · USDT · ETH · SOL</p>
                         </div>
                       </button>
                     </div>
@@ -257,7 +257,7 @@ export function DepositModal({ isOpen, onClose, onSuccess }: DepositModalProps) 
                     <div>
                       <p className="text-xs font-mono text-muted-foreground mb-2.5 uppercase tracking-wider">Currency</p>
                       <div className="grid grid-cols-3 gap-2">
-                        {(['BTC', 'LTC', 'USDT'] as Currency[]).map(c => (
+                        {(['BTC', 'LTC', 'USDT', 'ETH', 'SOL'] as Currency[]).map(c => (
                           <button
                             key={c}
                             onClick={() => setCurrency(c)}
@@ -268,7 +268,7 @@ export function DepositModal({ isOpen, onClose, onSuccess }: DepositModalProps) 
                                 : 'border-border bg-card/50 text-muted-foreground hover:border-primary/50 hover:text-foreground'
                             )}
                           >
-                            {c === 'USDT' ? 'USDT TRC20' : c}
+                            {c === 'USDT' ? 'USDT TRC20' : c === 'ETH' ? 'Ethereum' : c === 'SOL' ? 'Solana' : c}
                           </button>
                         ))}
                       </div>

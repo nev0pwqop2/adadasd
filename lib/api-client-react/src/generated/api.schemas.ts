@@ -89,6 +89,8 @@ export const CreateCryptoSessionRequestCurrency = {
   BTC: "BTC",
   LTC: "LTC",
   USDT: "USDT",
+  ETH: "ETH",
+  SOL: "SOL",
 } as const;
 
 export interface CreateCryptoSessionRequest {

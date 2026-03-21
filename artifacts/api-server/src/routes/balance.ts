@@ -34,9 +34,11 @@ const NOWPAYMENTS_CURRENCY_MAP: Record<string, string> = {
   BTC: "btc",
   LTC: "ltc",
   USDT: "usdttrc20",
+  ETH: "eth",
+  SOL: "sol",
 };
 
-const VALID_CURRENCIES = ["BTC", "LTC", "USDT"];
+const VALID_CURRENCIES = ["BTC", "LTC", "USDT", "ETH", "SOL"];
 
 // GET /api/balance — get current balance
 router.get("/", requireAuth, async (req: Request, res: Response) => {
