@@ -123,7 +123,13 @@ export function ManageSlotModal({ slot, onClose, onSuccess }: ManageSlotModalPro
                 {slot.expiresAt && (
                   <div className="flex justify-between text-muted-foreground">
                     <span>EXPIRES</span>
-                    <span className="text-primary">{new Date(slot.expiresAt).toLocaleDateString()}</span>
+                    <span className="text-primary">{(() => {
+                      const diff = new Date(slot.expiresAt).getTime() - Date.now();
+                      if (diff <= 0) return 'Expired';
+                      const h = Math.floor(diff / 3600000);
+                      const m = Math.floor((diff % 3600000) / 60000);
+                      return h > 0 ? `${h}h ${m}m` : `${m}m`;
+                    })()}</span>
                   </div>
                 )}
               </div>
@@ -174,38 +180,6 @@ export function ManageSlotModal({ slot, onClose, onSuccess }: ManageSlotModalPro
               ) : (
                 <div className="bg-secondary/30 border border-border/30 p-3 rounded text-center">
                   <p className="text-xs font-mono text-muted-foreground/40">No script key — Luarmor not configured</p>
-                </div>
-              )}
-
-              {slot.scriptKey && (
-                <div className="space-y-2">
-                  <label className="text-xs font-mono uppercase text-muted-foreground flex items-center gap-2">
-                    <RefreshCw className="w-3 h-3" /> HWID Reset
-                  </label>
-                  <div className="bg-secondary/50 border border-primary/10 p-3 space-y-2">
-                    {hwidOnCooldown && nextHwidReset ? (
-                      <div className="flex items-start gap-2 text-xs font-mono text-yellow-400/80">
-                        <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                        <span>On cooldown — next reset available {nextHwidReset.toLocaleString()}</span>
-                      </div>
-                    ) : hwidResetAt ? (
-                      <p className="text-xs font-mono text-muted-foreground/60">Last reset: {hwidResetAt.toLocaleString()}{slot?.hwidUnlimited ? ' — unlimited resets' : ''}</p>
-                    ) : (
-                      <p className="text-xs font-mono text-muted-foreground/60">{slot?.hwidUnlimited ? 'Unlimited resets enabled.' : 'No resets used today.'}</p>
-                    )}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full border-primary/20 text-primary hover:bg-primary/5 font-mono text-xs"
-                      onClick={handleResetHwid}
-                      disabled={isResettingHwid || hwidOnCooldown}
-                    >
-                      {isResettingHwid
-                        ? <><Loader2 className="w-3.5 h-3.5 animate-spin mr-2" />Resetting...</>
-                        : <><RefreshCw className="w-3.5 h-3.5 mr-2" />Reset HWID</>}
-                    </Button>
-                    <p className="text-[10px] font-mono text-muted-foreground/40">1 reset per 24 hours. Use this if you changed your PC.</p>
-                  </div>
                 </div>
               )}
 
