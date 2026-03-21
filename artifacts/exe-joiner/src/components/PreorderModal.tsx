@@ -15,7 +15,7 @@ interface PreorderModalProps {
 const CRYPTO_OPTIONS = [
   { id: 'BTC', label: 'Bitcoin', symbol: 'BTC' },
   { id: 'LTC', label: 'Litecoin', symbol: 'LTC' },
-  { id: 'USDT', label: 'USDT', symbol: 'USDT' },
+  { id: 'USDT', label: 'Tether', symbol: 'USDT' },
   { id: 'ETH', label: 'Ethereum', symbol: 'ETH' },
   { id: 'SOL', label: 'Solana', symbol: 'SOL' },
 ];
@@ -142,7 +142,7 @@ export function PreorderModal({ isOpen, onClose, pricePerDay, slotDurationHours,
                   </div>
                   <div>
                     <p className="font-semibold text-sm text-foreground">Pay with Crypto</p>
-                    <p className="text-xs text-muted-foreground font-mono">BTC, LTC, USDT, ETH, SOL</p>
+                    <p className="text-xs text-muted-foreground font-mono">Bitcoin, Litecoin, Tether, Ethereum, Solana</p>
                   </div>
                 </div>
                 <div className="flex gap-2 mb-3">

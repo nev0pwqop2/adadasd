@@ -297,7 +297,7 @@ export function PaymentModal({
                               : "border-primary/20 bg-transparent text-muted-foreground hover:border-primary/50"
                           )}
                         >
-                          {c === 'BTC' ? 'Bitcoin' : c === 'LTC' ? 'Litecoin' : c === 'USDT' ? 'USDT' : c}
+                          {c === 'BTC' ? 'Bitcoin' : c === 'LTC' ? 'Litecoin' : c === 'USDT' ? 'Tether' : c === 'ETH' ? 'Ethereum' : c === 'SOL' ? 'Solana' : c}
                         </button>
                       ))}
                     </div>

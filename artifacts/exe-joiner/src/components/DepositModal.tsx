@@ -246,7 +246,7 @@ export function DepositModal({ isOpen, onClose, onSuccess }: DepositModalProps) 
                         <Bitcoin className="w-4 h-4 shrink-0" />
                         <div className="text-left">
                           <p className="font-mono text-xs font-semibold">Crypto</p>
-                          <p className="font-mono text-[10px] text-muted-foreground">BTC · LTC · USDT · ETH · SOL</p>
+                          <p className="font-mono text-[10px] text-muted-foreground">Bitcoin · Litecoin · Tether · Ethereum · Solana</p>
                         </div>
                       </button>
                     </div>
@@ -268,7 +268,7 @@ export function DepositModal({ isOpen, onClose, onSuccess }: DepositModalProps) 
                                 : 'border-border bg-card/50 text-muted-foreground hover:border-primary/50 hover:text-foreground'
                             )}
                           >
-                            {c === 'BTC' ? 'Bitcoin' : c === 'LTC' ? 'Litecoin' : c === 'USDT' ? 'USDT' : c === 'ETH' ? 'Ethereum' : c === 'SOL' ? 'Solana' : c}
+                            {c === 'BTC' ? 'Bitcoin' : c === 'LTC' ? 'Litecoin' : c === 'USDT' ? 'Tether' : c === 'ETH' ? 'Ethereum' : c === 'SOL' ? 'Solana' : c}
                           </button>
                         ))}
                       </div>
