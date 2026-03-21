@@ -36,6 +36,14 @@ router.get("/", requireAuth, async (req, res) => {
     const { slotCount, pricePerDay, slotDurationHours } = await getSettings();
     const currentUserId = req.session.userId!;
 
+    // Verify the user still exists in the database (session may be stale after data resets)
+    const userExists = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.id, currentUserId)).limit(1);
+    if (!userExists.length) {
+      req.session.destroy(() => {});
+      res.status(401).json({ error: "session_invalid", message: "Session is no longer valid. Please log in again." });
+      return;
+    }
+
     // Ensure current user has slot rows
     const userSlots = await db.select().from(slotsTable).where(eq(slotsTable.userId, currentUserId));
     const existingNums = new Set(userSlots.map((s) => s.slotNumber));
