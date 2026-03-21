@@ -3,7 +3,7 @@ import { db, slotsTable, usersTable, paymentsTable } from "@workspace/db";
 import { eq, sql, inArray, and, lte, isNotNull } from "drizzle-orm";
 import { requireAdmin, isSuperAdmin, SUPER_ADMIN_DISCORD_ID } from "../middlewares/requireAdmin.js";
 import { getSettings, setSetting } from "../lib/settings.js";
-import { isLuarmorConfigured, createLuarmorUser, deleteLuarmorUser } from "../lib/luarmor.js";
+import { isLuarmorConfigured, createLuarmorUser, deleteLuarmorUser, getLuarmorUsers } from "../lib/luarmor.js";
 
 const router = Router();
 
@@ -221,9 +221,17 @@ router.post("/users/:discordId/slots", async (req, res) => {
             } catch (e) {
               req.log.warn({ e }, "Luarmor user creation failed (admin slot grant)");
             }
-          } else if (slot.luarmorUserId) {
+          } else {
+            // Remove Luarmor key — use stored key if available, otherwise look up by discord_id
             try {
-              await deleteLuarmorUser(slot.luarmorUserId);
+              if (slot.luarmorUserId) {
+                await deleteLuarmorUser(slot.luarmorUserId);
+              } else {
+                // DB has no key stored (creation may have failed before), search Luarmor by discord_id
+                const allLuarmorUsers = await getLuarmorUsers();
+                const match = allLuarmorUsers.find((u) => u.discord_id === users[0].discordId);
+                if (match) await deleteLuarmorUser(match.user_key);
+              }
             } catch (e) {
               req.log.warn({ e }, "Luarmor user deletion failed (admin slot removal)");
             }
@@ -298,10 +306,24 @@ router.post("/test-script", async (req, res) => {
 router.post("/reset-all-slots", async (req, res) => {
   try {
     if (isLuarmorConfigured()) {
-      const activeSlots = await db.select().from(slotsTable).where(and(eq(slotsTable.isActive, true), isNotNull(slotsTable.luarmorUserId)));
-      await Promise.allSettled(
-        activeSlots.filter((s) => s.luarmorUserId).map((s) => deleteLuarmorUser(s.luarmorUserId!))
-      );
+      const activeSlots = await db.select().from(slotsTable).where(eq(slotsTable.isActive, true));
+
+      // Delete keys we have stored in DB
+      const storedKeys = activeSlots.filter((s) => s.luarmorUserId).map((s) => s.luarmorUserId!);
+      await Promise.allSettled(storedKeys.map((key) => deleteLuarmorUser(key)));
+
+      // For slots where luarmorUserId is null, fall back to matching by discord_id in Luarmor
+      const slotsWithoutKey = activeSlots.filter((s) => !s.luarmorUserId);
+      if (slotsWithoutKey.length) {
+        const ownerIds = [...new Set(slotsWithoutKey.map((s) => s.userId))];
+        const ownerRows = await db.select({ id: usersTable.id, discordId: usersTable.discordId }).from(usersTable).where(inArray(usersTable.id, ownerIds));
+        const discordIds = new Set(ownerRows.map((o) => o.discordId));
+        if (discordIds.size) {
+          const allLuarmorUsers = await getLuarmorUsers();
+          const toDelete = allLuarmorUsers.filter((u) => discordIds.has(u.discord_id));
+          await Promise.allSettled(toDelete.map((u) => deleteLuarmorUser(u.user_key)));
+        }
+      }
     }
 
     await db.update(slotsTable).set({ isActive: false, purchasedAt: null, expiresAt: null, luarmorUserId: null });
