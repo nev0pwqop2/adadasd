@@ -203,7 +203,6 @@ export default function Dashboard() {
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'slots', label: 'Slots', icon: <LayoutGrid className="w-4 h-4" /> },
     { id: 'leaderboard', label: 'Leaderboard', icon: <Trophy className="w-4 h-4" /> },
-    { id: 'deposit', label: 'Deposit', icon: <History className="w-4 h-4" /> },
   ];
 
   return (
