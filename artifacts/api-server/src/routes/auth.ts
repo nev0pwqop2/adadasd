@@ -77,7 +77,8 @@ router.get("/discord/callback", async (req, res) => {
   }
 
   try {
-    const tokenResponse = await fetch("https://discord.com/api/oauth2/token", {
+    const tokenEndpoint = process.env.DISCORD_TOKEN_PROXY_URL || "https://discord.com/api/oauth2/token";
+    const tokenResponse = await fetch(tokenEndpoint, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
