@@ -1,0 +1,733 @@
+Luarmor API Documentation
+⚠️⚠️ ! IMPORTANT ! ⚠️⚠️
+
+Luarmor http API is not a public API. It's accessible by Luarmor customers and script developers only.
+
+👉 You must whitelist your server's IP address 👈 on luarmor dashboard in order to make API calls. Otherwise, your requests will be blocked by cloudflare.
+
+Top things to always remember: ✅
+Content-Type header must be set to application/json in all of your requests
+
+Each endpoint has it's own ratelimits, but in general you can make 60 requests per minute. Exceeding this limit will result a 429
+
+Parameter Types:
+
+Path: https://site.com/data/PARAMETER_HERE/stuff
+
+Query: https://site.com/data/things/stuff?paramName=PARAMETER_HERE
+
+Body: (In Request body): { "fieldName": "PARAMETER_HERE" }
+
+Header: (In Request headers): { "headerName": "HEADER VALUE" }
+
+API/Key Management
+Getting API status
+GET https://api.luarmor.net/status
+
+This will return you the version information about the API.
+
+200: OK
+
+Copy
+{
+    "version": "v3",
+    "active": true,
+    "message": "API is up and working!",
+    "warning": false,
+    "warning_message": "No warning"
+}
+Getting API key details
+GET https://api.luarmor.net/v3/keys/:api_key/details
+
+You can get details of your API key. Project/Script IDs, execution amounts, script names etc..
+
+Example URL: https://api.luarmor.net/v3/keys/300058fb1987f0e019b0c980ad01/details
+
+Path Parameters
+Name
+Type
+Description
+api_key*
+
+String
+
+API key to get details of
+
+200: OK Success
+403: Forbidden Incorrect API key
+400: Bad Request Invalid API key
+
+Copy
+{
+    "success": true,
+    "message": "Success!",
+    "email": "federal@fbi.gov",
+    "discord_id": "493827492379239857",
+    "expires_at": 1674606328,
+    "registered_at": 1672014328,
+    "plan": "r",
+    "enabled": 1,
+    "projects": [
+        {
+            "platform": "roblox",
+            "id": "2923c450865b60f65a5d06bb39ff1335",
+            "name": "Alka-Seltzer Hub",
+            "settings": {
+                "reset_hwid_cooldown": -1
+            },
+            "scripts": [
+                {
+                    "script_name": "server crasher (free)",
+                    "script_id": "ef67bc7f7bd0948f4fff336274a4a345",
+                    "script_version": "0008",
+                    "ffa": true,
+                    "silent": false
+                },
+                {
+                    "script_name": "premium one",
+                    "script_id": "df3a1b7d79ceb911f8ffa762b0bd0596",
+                    "script_version": "0000",
+                    "ffa": false,
+                    "silent": false
+                }
+            ]
+        }
+    ]
+}
+Getting API key stats
+GET https://api.luarmor.net/v3/keys/:api_key/stats
+
+You can fetch the stats of your API key. This includes usage details, remaining obfuscations, max obfuscations, max users, execution amounts, monthly execution graph values etc..
+
+Example URL: https://api.luarmor.net/v3/keys/300058fb1987f0e019b0c980ad01/stats?noUsers=true
+
+Query Parameters
+Name
+Type
+Description
+noUsers
+
+Boolean
+
+If "true", it will return the info about user limits. (e.g how many users there are, # of banned, # of whitelisted)
+
+This parameter is optional, you don't have to include it at all. If included, server might respond 0.001s faster
+
+200: OK Success
+
+Copy
+{
+    "success": true,
+    "message": "Success!",
+    "execution_data": {
+        "frequency": 86400,
+        "executions": [
+            5, 20, 0, 0, 0, 0, 0, 1900
+        ]
+    },
+    "stats": {
+        "obfuscations": 10,
+        "scripts": 3,
+        "users": 3,
+        "attacks_blocked": 0,
+        "default": {
+            "scripts": 18,
+            "users": 10000,
+            "obfuscations": 3000
+        },
+        "reset_at": 1672014328
+    }
+}
+User & Key Management
+Basics
+Every user you add by making POST requests will automatically have a random "key" generated specifically for that user. If you don't provide the details about the user (such as hwid, discord id), key will still be generated.
+
+If there's no HWID assigned for the key, it will automatically get assigned when user executes the script with script_key = "key here"; on top of their script.
+
+If there's no Discord ID assigned for the key, user can claim the key by using the discord bot's "Redeem" button. Once their discord ID is linked to the key, user will be able to click on "Reset HWID" button on discord bot if it's enabled in project settings.
+
+User must add script_key = "KEY HERE"; on top of the loader script. Otherwise it will not work unless FFA mode is on. 
+
+Each project has it's own separate database for user/key pairs. If a user is whitelisted in a project, they will be automatically able to run all scripts created inside that project. This is also known as "script hub logic"
+
+You can set custom notes for each client by including note field in your request body. It will make it easier do identify the user.
+
+Expiry dates & Time limited keys:
+There are 2 ways to restrict a key based on the time:
+
+1) key_days
+2) auth_expire
+
+The difference is that "key_days" indicates the number of days a key will have once it has been redeemed or executed for the very first time. This allows you to generate unused time-locked keys without their timer starting right away so you can stock them.
+
+Meanwhile "auth_expire" is the actual timestamp of the expiry date. If you generate keys via key_days, once that key has been activated, it will automatically adjust auth_expire according to current time + (key_days * 86400).
+
+If you don't provide key_days and provide auth_expire directly, you must include one of identifier or discord_id parameters to tell the server that it is a claimed key, so it will start counting towards their remaining days instantly. If you don't provide identifier or discord_id fields, it will automatically convert the offset between current time and auth_expire to key_days.
+
+You can pre-define discord_id / identifier values while generating a key. If you don't provide them, they will get automatically assigned when user runs the script or uses "Redeem" button on discord bot interface.
+
+Creating a key / user
+POST https://api.luarmor.net/v3/projects/:project_id/users
+
+This endpoint will generate a key. If you don't specify the parameters, key will be 'unassigned' which means a user with the key can claim it and automatically assign their HWID / Discord ID to the key.
+
+Users who have their HWIDs linked to the keys will be able to run the script. If they don't include script_key on top of their script, they will not be able to run the script as long as the FFA mode isn't on.
+
+Path Parameters
+Name
+Type
+Description
+project_id*
+
+String
+
+ID of the project that you want to add the user key to.
+
+Headers
+Name
+Type
+Description
+Authorization*
+
+String
+
+API key.
+
+Request Body
+Name
+Type
+Description
+identifier <optional>
+
+String
+
+Identifier of the user to whitelist. Could be a HWID.
+
+auth_expire <optional>
+
+Int32
+
+Unix timestamp (seconds) of expiry date. If you don't provide this field, it will never expire.
+
+Read here for more info.
+
+note <optional>
+
+String
+
+Custom note for client. This might make it easier to identify the user.
+
+discord_id <optional>
+
+String
+
+Discord ID of the user. If not specified, user won't be able to resethwid on their own. They can still link their discord id to their key using Redeem button on the discord bot (if you configured the bot)
+
+key_days <optional>
+
+Number
+
+Number of days a key will have once it has been activated by user. Read here for more info.
+
+200: OK Key has been added successfully
+400: Bad Request Bad request
+
+
+Copy
+{
+    "success": true,
+    "message": "Success!",
+    "user_key": "awIUiHenZzfScOsqkXwGHyRAOsTTcPMR"
+}
+Updating an existing user
+PATCH https://api.luarmor.net/v3/projects/:project_id/users
+
+You can use this endpoint to edit an already existing user. If you don't provide a specific field, API will assume that you don't want to change that property, so it's going to stay the same. 
+
+Path Parameters
+Name
+Type
+Description
+project_id*
+
+String
+
+ID of the project that user belongs to
+
+Headers
+Name
+Type
+Description
+Authorization*
+
+String
+
+API Key
+
+Request Body
+Name
+Type
+Description
+identifier <optional>
+
+String
+
+Identifier of the user to whitelist. Could be a HWID.
+
+auth_expire <optional>
+
+Int32
+
+Unix timestamp (seconds) of expiry date. If you don't want it to expire, use negative one (-1) as value.
+
+note <optional>
+
+String
+
+Custom note for client. This might make it easier to identify the user.
+
+discord_id <optional>
+
+String
+
+Discord ID of the user. 
+
+user_key*
+
+String
+
+Unique user_key to edit. 
+
+200: OK Edited successfully
+400: Bad Request
+403: Forbidden
+
+Copy
+{
+    "success": true,
+    "message": "Success!"
+}
+Deleting the key
+DELETE https://api.luarmor.net/v3/projects/:project_id/users
+
+You can delete a key from your script, this will also remove the access of the user who has their hwid/discord id linked to that key.
+
+Example URL: https://api.luarmor.net/v3/projects/3f98888f9999c9999e99a2/users?user_key=n1gG3Rs3CkmYd1Ck64gg0t
+
+Path Parameters
+Name
+Type
+Description
+project_id*
+
+String
+
+ID of the project to remove user's access from
+
+Query Parameters
+Name
+Type
+Description
+user_key*
+
+String
+
+Key to delete
+
+Headers
+Name
+Type
+Description
+Authorization*
+
+String
+
+API Key
+
+200: OK Key has been deleted
+404: Not Found Wrong project id / user key
+
+
+Copy
+{ 
+    "success": true, 
+    "message": "User has been deleted!" 
+}
+Getting users
+GET https://api.luarmor.net/v3/projects/:project_id/users
+
+You can fetch all users from a script, and you can specify filters too. (such as discord_id, identifier etc.) If you want to get someone's user_key from their discord_id, the key must have it linked first.
+
+Note that response body will be an object array containing users. If you specified a filter value (e.g discord_id=124345) the array will contain one user so you just have to read users[0];
+
+Query Parameters
+Name
+Type
+Description
+discord_id <optional>
+
+String
+
+Discord ID to get the connected user
+
+user_key <optional>
+
+String
+
+Key to get the connected user
+
+identifier <opitonal>
+
+String
+
+HWID to get the connected user
+
+from <optional>
+
+Number
+
+Start offset of the results. Useful for paging users and not fetching all at once.
+
+until <optional>
+
+Number
+
+Finish index of the results. Useful for limiting the results to a specific range between "from" and "until" parameters.
+
+search <optional>
+
+String
+
+Useful for filtering results that contains the value of "search" anywhere in one of their "identifier", "user_key", "discord_id" or "note" properties.
+
+Headers
+Name
+Type
+Description
+Authorization*
+
+String
+
+API key
+
+200: OK Success
+403: Forbidden Invalid API key
+404: Not Found Project not found
+Note: Each user will have a 'status' field. It can be either "active", "reset", or "banned".
+active means user has linked their hwid to key and its active.
+reset means user has reset their hwid and it's waiting to be assigned upon first execution
+banned means user doesn't have a key linked (aka. unknown ) and banned.
+
+If status equals to "active" but at the same time "banned" field is true, it means user has a key linked but still banned. Read examples below
+
+
+Copy
+{
+    "success": true,
+    "message": "Success!",
+    "users": [
+        {
+            "user_key": "zZAaGyLhHiwCJHYewdRFmzBLKYCfJBek",
+            "identifier": "hwid will be here if linked",
+            "identifier_type": "HWID",
+            "discord_id": "",
+            "status": "active",
+            "last_reset": 1672016017,
+            "total_resets": 3,
+            "auth_expire": -1,
+            "banned": 0,
+            "ban_reason": "",
+            "ban_expire": 0,
+            "unban_token": "",
+            "total_executions": 10,
+            "note": "",
+            "ban_ip": ""
+        },
+        {
+            "user_key": "ktwCSBSgmWtlTrignkPB3hglhqLyjqKm",
+            "identifier": "",
+            "identifier_type": "HWID",
+            "discord_id": "4157951988959",
+            "status": "reset",
+            "last_reset": 1672038004,
+            "total_resets": 0,
+            "auth_expire": -1,
+            "banned": 0,
+            "ban_reason": "",
+            "ban_expire": 0,
+            "unban_token": "",
+            "total_executions": 0,
+            "note": "",
+            "ban_ip": ""
+        },
+        {
+            "user_key": "",
+            "identifier": "",
+            "identifier_type": "",
+            "discord_id": "",
+            "status": "banned",
+            "last_reset": 0,
+            "total_resets": 0,
+            "auth_expire": 0,
+            "banned": 1,
+            "ban_reason": "Invalid signature",
+            "ban_expire": 1672629163,
+            "unban_token": "QvLJPYzdjBujMlkwembfPrwjIfpsnTkq",
+            "total_executions": 0,
+            "note": "",
+            "ban_ip": "129.20.20.20"
+        }
+    ]
+}
+Resetting the HWID of a key
+POST https://api.luarmor.net/v3/projects/:project_id/users/resethwid
+
+Path Parameters
+Name
+Type
+Description
+project_id*
+
+String
+
+Project ID that contains the key
+
+Headers
+Name
+Type
+Description
+Authorization*
+
+String
+
+API Key
+
+Request Body
+Name
+Type
+Description
+user_key*
+
+String
+
+Key to reset the hwid of.
+
+force <optional>
+
+Boolean
+
+Whether reset HWID is forced or not. If "true", it will ignore resethwid cooldown.
+
+200: OK Success!
+400: Bad Request Bad request
+404: Not Found Key or project not found
+There are few reasons you might be getting 400 error.
+- User reset their hwid too frequently. You can use "force":true parameter to bypass this
+- Reset hwid is disabled for this project. You can force it
+- User is banned. In this case, you need to unban it first.
+
+
+Copy
+{
+    "success": false,
+    "message": "User is on cooldown."
+}
+Linking discord ID to a key
+POST https://api.luarmor.net/v3/projects/:project_id/users/linkdiscord
+
+Path Parameters
+Name
+Type
+Description
+project_id*
+
+String
+
+Project ID that contains the key
+
+Headers
+Name
+Type
+Description
+Authorization*
+
+String
+
+API Key
+
+Request Body
+Name
+Type
+Description
+user_key*
+
+String
+
+Key to link the discord ID
+
+discord_id
+
+String
+
+Discord ID (1234578635849)
+
+force <optional>
+
+Boolean
+
+If true, it will overwrite the discord ID if key already has one linked. Optional
+
+200: OK Success
+400: Bad Request Bad request
+There are few reasons you might be getting 400 error.
+- There's already a discord ID linked to this key. You can use "force":true parameter to bypass this
+- There's another key that's linked to same discord ID. In this case, you need to delete the other key.
+- Invalid discord ID.
+
+
+Copy
+{
+    "success": false,
+    "message": "This key already has a discord linked to it"
+}
+Blacklisting a key
+POST https://api.luarmor.net/v3/projects/:project_id/users/blacklist
+
+This will blacklist an existing key, and the HWID linked to it (if any). 
+
+Path parameters
+
+Name
+Type
+Description
+project_id*
+
+String
+
+Project ID that contains the key
+
+Headers
+
+Name
+Type
+Description
+Authorization*
+
+String
+
+API Key
+
+Request Body
+
+Name
+Type
+Description
+user_key*
+
+String
+
+User key to blacklist.
+
+ban_reason
+
+String
+
+Blacklist reason. Will be shown to user when executed
+
+ban_expire
+
+Int32
+
+Exact unix timestamp of the ban expiry date. Leave -1 or undefined for infinite ban.
+
+Unblacklisting a key
+GET https://api.luarmor.net/v3/projects/:project_id/users/unban
+
+This endpoint doesn't need strict API key authentication. All you need is an "unban_token" of the key, it is a 32 character random string assigned automatically when you blacklist someone. It changes every time a key is blacklisted and is unique. You can find it in the user objects in the response body of "Getting users" endpoint.
+
+You can simply make any kind of GET request, or visit the URL on your browser. It should look like this:
+https://api.luarmor.net/v3/projects/123456abcdef/users/unban?unban_token=Xpsy9wegDpA5XS
+
+Query Parameters
+
+Name
+Type
+Description
+unban_token*
+
+String
+
+Unban token.
+
+Script Management
+You can programmatically edit scripts using these endpoints
+
+Updating a script
+PUT https://api.luarmor.net/v3/projects/:project_id/scripts/:script_id
+
+Path parameters
+
+Name
+Type
+Description
+project_id*
+
+String
+
+Project ID that contains the script
+
+script_id*
+
+String
+
+Script ID to edit
+
+Headers
+
+Name
+Type
+Description
+Authorization*
+
+String
+
+API key
+
+Request Body
+
+Name
+Type
+Description
+script*
+
+String
+
+Raw script
+
+silent
+
+Boolean
+
+Silent mode
+
+ffa
+
+Boolean
+
+FFA mode
+
+heartbeat
+
+Boolean
+
+Heartbeat
+
+lightning
+
+Boolean
+
+Lightning mode
+
+Next
+Luarmor User Manual & F.A.Q
+Last updated 1 year ago
