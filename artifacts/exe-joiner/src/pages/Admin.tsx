@@ -5,7 +5,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Save, Users, Settings, Shield, ShieldOff, Loader2, RotateCcw, AlertTriangle, Crown, Server, ChevronDown, ChevronUp, Search, Copy, FlaskConical, Check, Key } from 'lucide-react';
+import { ArrowLeft, Save, Users, Settings, Shield, ShieldOff, Loader2, RotateCcw, AlertTriangle, Crown, Server, ChevronDown, ChevronUp, Search, Copy, FlaskConical, Check, Key, ScrollText, CreditCard, Bitcoin, Wallet } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 async function apiFetch<T>(path: string): Promise<T> {
@@ -112,14 +112,18 @@ export default function Admin() {
     onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
 
-  const { mutate: sendTestWebhook, isPending: isSendingTestWebhook } = useMutation({
-    mutationFn: async () => {
-      const res = await fetch(`${import.meta.env.BASE_URL}api/admin/test-webhook`, { method: 'POST', credentials: 'include' });
-      if (!res.ok) { const d = await res.json(); throw new Error(d.message || 'Failed'); }
-      return res.json();
-    },
-    onSuccess: () => toast({ title: 'Webhook Sent', description: 'Check your Discord channel for the test message.', className: 'bg-primary text-primary-foreground' }),
-    onError: (err: any) => toast({ title: 'Webhook Failed', description: err.message, variant: 'destructive' }),
+  type LogEntry = {
+    id: string; username: string; discordId: string; avatar: string | null;
+    method: string; currency: string | null; amount: string | null;
+    slotNumber: number; hours: number | null; purchaseType: string;
+    createdAt: string | null; completedAt: string | null;
+  };
+
+  const { data: logsData, isLoading: isLogsLoading } = useQuery({
+    queryKey: ['admin-logs'],
+    queryFn: () => apiFetch<{ logs: LogEntry[] }>('api/admin/logs'),
+    enabled: !!user?.isAdmin,
+    refetchInterval: 30000,
   });
 
   type ServerEntry = { id: string; name: string; icon: string | null; userCount: number; users: { username: string; discordId: string }[] };
@@ -684,6 +688,75 @@ export default function Admin() {
             </Card>
           </motion.div>
 
+          {/* Purchase Logs */}
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.32 }}>
+            <Card className="border-primary/20">
+              <div className="p-6 border-b border-primary/20 flex items-center gap-3">
+                <ScrollText className="w-5 h-5 text-primary" />
+                <h2 className="font-display font-bold uppercase tracking-wider text-primary">Purchase Logs</h2>
+                <span className="ml-auto text-xs font-mono text-muted-foreground">{logsData?.logs.length ?? 0} records</span>
+              </div>
+              {isLogsLoading ? (
+                <div className="p-8 flex justify-center"><Loader2 className="w-6 h-6 text-primary animate-spin" /></div>
+              ) : !logsData?.logs.length ? (
+                <div className="p-8 text-center font-mono text-muted-foreground text-sm">No completed purchases yet.</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full font-mono text-xs">
+                    <thead>
+                      <tr className="border-b border-primary/10 text-muted-foreground uppercase tracking-wider">
+                        <th className="text-left px-4 py-3">User</th>
+                        <th className="text-left px-4 py-3">Type</th>
+                        <th className="text-left px-4 py-3">Method</th>
+                        <th className="text-left px-4 py-3">Amount</th>
+                        <th className="text-left px-4 py-3">Hours</th>
+                        <th className="text-left px-4 py-3">Slot</th>
+                        <th className="text-left px-4 py-3">Time</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-primary/5">
+                      {logsData.logs.map((log: LogEntry) => {
+                        const isStripe = log.method === 'stripe' || log.method?.includes('stripe');
+                        const isCrypto = log.method === 'crypto' || log.method?.includes('crypto');
+                        const isBalance = log.method === 'balance';
+                        const methodLabel = isStripe ? 'Card' : isCrypto ? `Crypto (${log.currency ?? '?'})` : isBalance ? 'Balance' : log.method;
+                        const typeLabel = log.purchaseType === 'preorder' ? 'Pre-order' : log.purchaseType === 'balance_deposit' ? 'Deposit' : 'Slot';
+                        const typeColor = log.purchaseType === 'preorder' ? 'text-orange-400' : log.purchaseType === 'balance_deposit' ? 'text-blue-400' : 'text-green-400';
+                        const amountLabel = log.amount ? (isStripe || isBalance ? `$${parseFloat(log.amount).toFixed(2)}` : `${log.amount} ${log.currency ?? ''}`) : '—';
+                        const timeLabel = log.completedAt ? new Date(log.completedAt).toLocaleString() : '—';
+                        return (
+                          <tr key={log.id} className="hover:bg-primary/5 transition-colors">
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2">
+                                {log.avatar ? (
+                                  <img src={`https://cdn.discordapp.com/avatars/${log.discordId}/${log.avatar}.png`} alt="" className="w-6 h-6 border border-primary/20 shrink-0" />
+                                ) : (
+                                  <div className="w-6 h-6 bg-secondary border border-primary/20 shrink-0" />
+                                )}
+                                <span className="text-foreground font-bold truncate max-w-[100px]">{log.username}</span>
+                              </div>
+                            </td>
+                            <td className={`px-4 py-3 font-bold ${typeColor}`}>{typeLabel}</td>
+                            <td className="px-4 py-3 text-muted-foreground">
+                              <div className="flex items-center gap-1">
+                                {isStripe ? <CreditCard className="w-3 h-3" /> : isCrypto ? <Bitcoin className="w-3 h-3" /> : <Wallet className="w-3 h-3" />}
+                                {methodLabel}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-primary font-bold">{amountLabel}</td>
+                            <td className="px-4 py-3 text-muted-foreground">{log.hours != null ? `${log.hours}h` : '—'}</td>
+                            <td className="px-4 py-3 text-muted-foreground">{log.slotNumber > 0 ? `#${log.slotNumber}` : '—'}</td>
+                            <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{timeLabel}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Card>
+          </motion.div>
+
           {/* Developer Tools */}
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}>
             <Card className="border-blue-500/30 bg-blue-500/5">
@@ -707,23 +780,6 @@ export default function Admin() {
                   Generate Test Script
                 </Button>
               </div>
-              <div className="p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <p className="font-mono text-sm text-foreground font-bold">Test Webhook</p>
-                  <p className="text-xs text-muted-foreground font-mono mt-1">Fires a fake slot purchase webhook to your Discord channel to verify the webhook URL and embed format.</p>
-                </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="border-blue-500/40 text-blue-400 hover:bg-blue-500/10 hover:border-blue-500 font-mono shrink-0"
-                  onClick={() => sendTestWebhook()}
-                  disabled={isSendingTestWebhook}
-                >
-                  {isSendingTestWebhook ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <FlaskConical className="w-4 h-4 mr-2" />}
-                  Send Test Webhook
-                </Button>
-              </div>
-
               {testScriptResult && (
                 <div className="px-6 pb-6 space-y-4">
                   <div className="border border-blue-500/20 bg-background/60 p-4 space-y-4">

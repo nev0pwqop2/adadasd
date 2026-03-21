@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, slotsTable, usersTable, paymentsTable } from "@workspace/db";
-import { eq, sql, inArray, and, lte, isNotNull } from "drizzle-orm";
+import { eq, sql, inArray, and, lte, isNotNull, desc } from "drizzle-orm";
 import { requireAdmin, isSuperAdmin, SUPER_ADMIN_DISCORD_ID } from "../middlewares/requireAdmin.js";
 import { getSettings, setSetting } from "../lib/settings.js";
 import { isLuarmorConfigured, createLuarmorUser, deleteLuarmorUser, getLuarmorUsers } from "../lib/luarmor.js";
@@ -301,6 +301,46 @@ router.post("/test-script", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to generate test script");
     res.status(500).json({ error: "server_error", message: "Failed to generate test script" });
+  }
+});
+
+router.get("/logs", async (req, res) => {
+  try {
+    const payments = await db
+      .select()
+      .from(paymentsTable)
+      .where(eq(paymentsTable.status, "completed"))
+      .orderBy(desc(paymentsTable.updatedAt))
+      .limit(200);
+
+    const userIds = [...new Set(payments.map(p => p.userId))];
+    const userMap: Record<string, { username: string; discordId: string; avatar: string | null }> = {};
+    if (userIds.length) {
+      const rows = await db.select({ id: usersTable.id, username: usersTable.username, discordId: usersTable.discordId, avatar: usersTable.avatar })
+        .from(usersTable)
+        .where(inArray(usersTable.id, userIds));
+      for (const u of rows) userMap[u.id] = { username: u.username, discordId: u.discordId, avatar: u.avatar };
+    }
+
+    const logs = payments.map(p => ({
+      id: p.id,
+      username: userMap[p.userId]?.username ?? "Unknown",
+      discordId: userMap[p.userId]?.discordId ?? "",
+      avatar: userMap[p.userId]?.avatar ?? null,
+      method: p.method,
+      currency: p.currency,
+      amount: p.amount,
+      slotNumber: p.slotNumber,
+      hours: p.derivationIndex ?? null,
+      purchaseType: p.method?.startsWith("preorder") ? "preorder" : p.method?.startsWith("balance-deposit") ? "balance_deposit" : "slot",
+      createdAt: p.createdAt?.toISOString() ?? null,
+      completedAt: p.updatedAt?.toISOString() ?? null,
+    }));
+
+    res.json({ logs });
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch admin logs");
+    res.status(500).json({ error: "server_error", message: "Failed to fetch logs" });
   }
 });
 
