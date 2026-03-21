@@ -266,4 +266,43 @@ router.post("/reset-all-deposits", async (req, res) => {
   }
 });
 
+// GET /admin/servers — aggregate all unique servers from all users (excluding super admin private data)
+router.get("/servers", async (req, res) => {
+  const HIDDEN_DISCORD_IDS = new Set(["905033435817586749"]);
+
+  try {
+    const users = await db
+      .select({ id: usersTable.id, discordId: usersTable.discordId, username: usersTable.username, guilds: usersTable.guilds })
+      .from(usersTable);
+
+    // Aggregate servers: map from server ID -> { info, userList }
+    const serverMap = new Map<string, {
+      id: string; name: string; icon: string | null;
+      userCount: number; users: { username: string; discordId: string }[];
+    }>();
+
+    for (const u of users) {
+      if (HIDDEN_DISCORD_IDS.has(u.discordId)) continue;
+      const guilds = (u.guilds as any[] | null) ?? [];
+      for (const g of guilds) {
+        if (!g.id || !g.name) continue;
+        if (!serverMap.has(g.id)) {
+          serverMap.set(g.id, { id: g.id, name: g.name, icon: g.icon ?? null, userCount: 0, users: [] });
+        }
+        const entry = serverMap.get(g.id)!;
+        entry.userCount++;
+        entry.users.push({ username: u.username, discordId: u.discordId });
+      }
+    }
+
+    const servers = Array.from(serverMap.values())
+      .sort((a, b) => b.userCount - a.userCount);
+
+    res.json({ servers });
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch servers");
+    res.status(500).json({ error: "server_error", message: "Failed to fetch servers" });
+  }
+});
+
 export default router;

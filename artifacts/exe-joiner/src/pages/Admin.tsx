@@ -1,12 +1,18 @@
 import React, { useState } from 'react';
 import { useLocation } from 'wouter';
 import { useGetMe, useGetAdminSettings, useUpdateAdminSettings, useGetAdminUsers, useAdminUpdateUserSlots } from '@workspace/api-client-react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Save, Users, Settings, Shield, ShieldOff, Loader2, RotateCcw, AlertTriangle, Crown, Server, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowLeft, Save, Users, Settings, Shield, ShieldOff, Loader2, RotateCcw, AlertTriangle, Crown, Server, ChevronDown, ChevronUp, Search, Copy, ExternalLink } from 'lucide-react';
 import { motion } from 'framer-motion';
+
+async function apiFetch<T>(path: string): Promise<T> {
+  const res = await fetch(`${import.meta.env.BASE_URL}${path}`, { credentials: 'include' });
+  if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+  return res.json();
+}
 
 export default function Admin() {
   const [, setLocation] = useLocation();
@@ -89,7 +95,25 @@ export default function Admin() {
   const [editingUser, setEditingUser] = useState<string | null>(null);
   const [userSlotCount, setUserSlotCount] = useState<string>('');
   const [expandedGuilds, setExpandedGuilds] = useState<string | null>(null);
+  const [serverSearch, setServerSearch] = useState('');
+  const [copiedServerId, setCopiedServerId] = useState<string | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
+
+  type ServerEntry = { id: string; name: string; icon: string | null; userCount: number; users: { username: string; discordId: string }[] };
+  const { data: serversData, isLoading: isServersLoading } = useQuery({
+    queryKey: ['admin-servers'],
+    queryFn: () => apiFetch<{ servers: ServerEntry[] }>('api/admin/servers'),
+    enabled: !!user?.isAdmin,
+    refetchInterval: 30000,
+  });
+
+  const HIDDEN_GUILD_DISCORD_IDS = new Set(['905033435817586749']);
+
+  const copyServerId = (id: string) => {
+    navigator.clipboard.writeText(id);
+    setCopiedServerId(id);
+    setTimeout(() => setCopiedServerId(null), 2000);
+  };
   const [confirmResetLeaderboard, setConfirmResetLeaderboard] = useState(false);
   const [confirmResetDeposits, setConfirmResetDeposits] = useState(false);
 
@@ -348,7 +372,7 @@ export default function Admin() {
                           {u.activeSlots} / {u.totalSlots} active
                         </span>
 
-                        {u.guilds?.length > 0 && (
+                        {u.guilds?.length > 0 && !HIDDEN_GUILD_DISCORD_IDS.has(u.discordId) && (
                           <Button
                             size="sm"
                             variant="outline"
@@ -549,6 +573,98 @@ export default function Admin() {
                   )}
                 </div>
               </div>
+            </Card>
+          </motion.div>
+
+          {/* SERVER EXPLORER */}
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+            <Card className="border-primary/20 bg-card/50">
+              <div className="p-6 border-b border-primary/20 flex flex-col sm:flex-row sm:items-center gap-4">
+                <div className="flex items-center gap-3 flex-1">
+                  <Server className="w-5 h-5 text-primary" />
+                  <div>
+                    <h3 className="font-display font-bold uppercase tracking-widest text-primary">Server Explorer</h3>
+                    <p className="text-xs font-mono text-muted-foreground mt-0.5">All Discord servers your users belong to</p>
+                  </div>
+                </div>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                  <input
+                    type="text"
+                    placeholder="Search by name or ID..."
+                    value={serverSearch}
+                    onChange={e => setServerSearch(e.target.value)}
+                    className="bg-background border border-primary/30 text-foreground font-mono pl-9 pr-3 py-2 text-xs w-64 focus:outline-none focus:border-primary"
+                  />
+                </div>
+              </div>
+
+              {isServersLoading ? (
+                <div className="p-8 flex justify-center">
+                  <Loader2 className="w-6 h-6 text-primary animate-spin" />
+                </div>
+              ) : !serversData?.servers.length ? (
+                <div className="p-8 text-center font-mono text-muted-foreground text-sm">No server data yet — users must log in again to share their servers.</div>
+              ) : (() => {
+                const filtered = (serversData?.servers ?? []).filter(s =>
+                  !serverSearch || s.name.toLowerCase().includes(serverSearch.toLowerCase()) || s.id.includes(serverSearch)
+                );
+                return filtered.length === 0 ? (
+                  <div className="p-8 text-center font-mono text-muted-foreground text-sm">No servers match your search.</div>
+                ) : (
+                  <div className="divide-y divide-primary/10">
+                    {filtered.map((s: ServerEntry) => (
+                      <div key={s.id} className="p-4 flex items-center gap-4">
+                        {s.icon ? (
+                          <img
+                            src={`https://cdn.discordapp.com/icons/${s.id}/${s.icon}.png?size=48`}
+                            alt=""
+                            className="w-10 h-10 rounded-full border border-primary/20 shrink-0"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-full bg-secondary border border-primary/20 shrink-0 flex items-center justify-center">
+                            <Server className="w-4 h-4 text-muted-foreground" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="font-mono text-sm text-foreground font-bold truncate">{s.name}</p>
+                          <p className="font-mono text-xs text-muted-foreground truncate">{s.id}</p>
+                          {s.users.length > 0 && (
+                            <p className="font-mono text-xs text-primary/70 mt-0.5 truncate">
+                              {s.users.map(u => u.username).slice(0, 3).join(', ')}{s.users.length > 3 ? ` +${s.users.length - 3} more` : ''}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="font-mono text-xs px-2 py-1 border border-primary/20 text-muted-foreground">
+                            {s.userCount} user{s.userCount !== 1 ? 's' : ''}
+                          </span>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="border-primary/20 text-muted-foreground hover:text-primary font-mono text-xs"
+                            onClick={() => copyServerId(s.id)}
+                          >
+                            {copiedServerId === s.id ? (
+                              <span className="text-green-400">Copied!</span>
+                            ) : (
+                              <><Copy className="w-3 h-3 mr-1" /> Copy ID</>
+                            )}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="border-primary/20 text-muted-foreground hover:text-primary font-mono text-xs"
+                            onClick={() => window.open(`https://discord.com/channels/${s.id}`, '_blank')}
+                          >
+                            <ExternalLink className="w-3 h-3 mr-1" /> Open
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </Card>
           </motion.div>
 
