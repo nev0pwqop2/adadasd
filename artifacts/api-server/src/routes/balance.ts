@@ -136,7 +136,10 @@ router.post("/deposit/crypto", requireAuth, async (req: Request, res: Response) 
 
   try {
     const paymentId = crypto.randomUUID();
-    const ipnCallbackUrl = process.env.NOWPAYMENTS_IPN_URL ?? "";
+    const baseUrl = process.env.REPLIT_DEV_DOMAIN
+      ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+      : process.env.BASE_URL || "http://localhost:80";
+    const ipnCallbackUrl = `${baseUrl}/api/payments/nowpayments-ipn`;
     const nowCurrency = NOWPAYMENTS_CURRENCY_MAP[currency];
 
     let minAmount = 2;
