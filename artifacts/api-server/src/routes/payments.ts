@@ -1,11 +1,40 @@
 import { Router, Request, Response } from "express";
-import { db, slotsTable, paymentsTable, usersTable, preordersTable } from "@workspace/db";
+import { db, slotsTable, paymentsTable, usersTable, preordersTable, couponsTable } from "@workspace/db";
 import { eq, and, ne, sql } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { getSettings } from "../lib/settings.js";
 import { isLuarmorConfigured, createLuarmorUser } from "../lib/luarmor.js";
 import { sendPaymentWebhook, type PurchaseType } from "../lib/discord.js";
 import crypto from "crypto";
+
+async function applyCouponDiscount(couponId: number | undefined, baseAmount: number): Promise<{ finalAmount: number; validCouponId: number | null }> {
+  if (!couponId) return { finalAmount: baseAmount, validCouponId: null };
+
+  const couponRows = await db
+    .select()
+    .from(couponsTable)
+    .where(and(eq(couponsTable.id, couponId), eq(couponsTable.isActive, true)))
+    .limit(1);
+
+  if (!couponRows.length) return { finalAmount: baseAmount, validCouponId: null };
+
+  const coupon = couponRows[0];
+  const now = new Date();
+  const notExpired = !coupon.expiresAt || coupon.expiresAt > now;
+  const notExhausted = coupon.maxUses === null || coupon.usedCount < coupon.maxUses;
+
+  if (!notExpired || !notExhausted) return { finalAmount: baseAmount, validCouponId: null };
+
+  const discountValue = parseFloat(coupon.discountValue);
+  let finalAmount: number;
+  if (coupon.discountType === "percent") {
+    finalAmount = parseFloat(Math.max(0, baseAmount - baseAmount * (discountValue / 100)).toFixed(2));
+  } else {
+    finalAmount = parseFloat(Math.max(0, baseAmount - discountValue).toFixed(2));
+  }
+
+  return { finalAmount, validCouponId: coupon.id };
+}
 
 const router = Router();
 
@@ -157,7 +186,7 @@ router.post("/create-stripe-session", requireAuth, async (req: Request, res: Res
     return;
   }
 
-  const { slotNumber, hours } = req.body;
+  const { slotNumber, hours, couponId } = req.body;
   const { slotCount, pricePerDay, slotDurationHours, hourlyPricingEnabled, pricePerHour, minHours } = await getSettings();
   if (!slotNumber || slotNumber < 1 || slotNumber > slotCount) {
     res.status(400).json({ error: "invalid_slot", message: "Invalid slot number" });
@@ -166,7 +195,7 @@ router.post("/create-stripe-session", requireAuth, async (req: Request, res: Res
 
   // Validate hours when hourly pricing is enabled
   let purchasedHours: number = slotDurationHours;
-  let chargeAmount: number = pricePerDay;
+  let baseAmount: number = pricePerDay;
   let description: string = `${slotDurationHours}h activation for Exe Joiner slot at $${pricePerDay.toFixed(2)}`;
 
   if (hourlyPricingEnabled) {
@@ -176,8 +205,14 @@ router.post("/create-stripe-session", requireAuth, async (req: Request, res: Res
       return;
     }
     purchasedHours = h;
-    chargeAmount = parseFloat((h * pricePerHour).toFixed(2));
+    baseAmount = parseFloat((h * pricePerHour).toFixed(2));
     description = `${h}h activation for Exe Joiner slot at $${pricePerHour.toFixed(2)}/hr`;
+  }
+
+  // Apply coupon discount
+  const { finalAmount: chargeAmount, validCouponId } = await applyCouponDiscount(couponId, baseAmount);
+  if (validCouponId && chargeAmount !== baseAmount) {
+    description += ` (coupon applied)`;
   }
 
   const slots = await db.select().from(slotsTable).where(
@@ -217,6 +252,7 @@ router.post("/create-stripe-session", requireAuth, async (req: Request, res: Res
       metadata: {
         userId: req.session.userId!,
         slotNumber: String(slotNumber),
+        ...(validCouponId ? { couponId: String(validCouponId) } : {}),
       },
       success_url: `${baseUrl}/dashboard?payment=success&slot=${slotNumber}`,
       cancel_url: `${baseUrl}/dashboard?payment=cancelled`,
@@ -235,6 +271,7 @@ router.post("/create-stripe-session", requireAuth, async (req: Request, res: Res
       stripeSessionId: session.id,
       expiresAt: new Date(Date.now() + 30 * 60 * 1000),
       derivationIndex: purchasedHours,
+      couponId: validCouponId,
     });
 
     res.json({ sessionId: session.id, url: session.url });
@@ -268,8 +305,8 @@ router.post("/stripe-webhook", async (req: Request, res: Response) => {
     }
 
     if (event.type === "checkout.session.completed") {
-      const session = event.data.object as { metadata?: { userId?: string; slotNumber?: string; isPreorder?: string; type?: string }; payment_status?: string };
-      const { userId, slotNumber, isPreorder, type } = session.metadata || {};
+      const session = event.data.object as { metadata?: { userId?: string; slotNumber?: string; isPreorder?: string; type?: string; couponId?: string }; payment_status?: string };
+      const { userId, slotNumber, isPreorder, type, couponId: metaCouponId } = session.metadata || {};
 
       if (userId && session.payment_status === "paid") {
         if (type === "balance_deposit") {
@@ -330,6 +367,14 @@ router.post("/stripe-webhook", async (req: Request, res: Response) => {
             .limit(1);
           if (pending.length) {
             await activateSlot(userId, slotNum, pending[0].id, pending[0].derivationIndex ?? undefined);
+            // Increment coupon usage
+            const couponIdToIncrement = pending[0].couponId ?? (metaCouponId ? parseInt(metaCouponId, 10) : null);
+            if (couponIdToIncrement) {
+              await db.update(couponsTable)
+                .set({ usedCount: sql`${couponsTable.usedCount} + 1` })
+                .where(eq(couponsTable.id, couponIdToIncrement))
+                .catch(() => {});
+            }
           }
         }
       }
@@ -343,7 +388,7 @@ router.post("/stripe-webhook", async (req: Request, res: Response) => {
 });
 
 router.post("/create-crypto-session", requireAuth, async (req: Request, res: Response) => {
-  const { slotNumber, currency, hours } = req.body;
+  const { slotNumber, currency, hours, couponId } = req.body;
   const { slotCount, pricePerDay, slotDurationHours, hourlyPricingEnabled, pricePerHour, minHours } = await getSettings();
 
   if (!slotNumber || slotNumber < 1 || slotNumber > slotCount) {
@@ -362,7 +407,7 @@ router.post("/create-crypto-session", requireAuth, async (req: Request, res: Res
   }
 
   let purchasedHours: number = slotDurationHours;
-  let chargeAmount: number = pricePerDay;
+  let baseAmount: number = pricePerDay;
 
   if (hourlyPricingEnabled) {
     const h = parseInt(hours, 10);
@@ -371,8 +416,11 @@ router.post("/create-crypto-session", requireAuth, async (req: Request, res: Res
       return;
     }
     purchasedHours = h;
-    chargeAmount = parseFloat((h * pricePerHour).toFixed(2));
+    baseAmount = parseFloat((h * pricePerHour).toFixed(2));
   }
+
+  // Apply coupon discount
+  const { finalAmount: chargeAmount, validCouponId } = await applyCouponDiscount(couponId, baseAmount);
 
   const slots = await db.select().from(slotsTable).where(
     and(eq(slotsTable.userId, req.session.userId!), eq(slotsTable.slotNumber, slotNumber))
@@ -418,6 +466,7 @@ router.post("/create-crypto-session", requireAuth, async (req: Request, res: Res
       txHash: nowPayment.payment_id,
       expiresAt,
       derivationIndex: purchasedHours,
+      couponId: validCouponId,
     });
 
     res.json({
@@ -507,6 +556,13 @@ router.post("/nowpayments-ipn", async (req: Request, res: Response) => {
     } else {
       await activateSlot(payment.userId, payment.slotNumber, payment.id, payment.derivationIndex ?? undefined);
       req.log.info({ paymentId: payment.id }, "NOWPayments IPN: slot activated");
+      // Increment coupon usage if applicable
+      if (payment.couponId) {
+        await db.update(couponsTable)
+          .set({ usedCount: sql`${couponsTable.usedCount} + 1` })
+          .where(eq(couponsTable.id, payment.couponId))
+          .catch(() => {});
+      }
     }
 
     res.json({ received: true });
@@ -581,6 +637,13 @@ router.post("/verify-crypto", requireAuth, async (req: Request, res: Response) =
     }
 
     await activateSlot(payment.userId, payment.slotNumber, payment.id, payment.derivationIndex ?? undefined);
+    // Increment coupon usage if applicable
+    if (payment.couponId) {
+      await db.update(couponsTable)
+        .set({ usedCount: sql`${couponsTable.usedCount} + 1` })
+        .where(eq(couponsTable.id, payment.couponId))
+        .catch(() => {});
+    }
     res.json({ success: true, message: "Payment verified and slot activated" });
   } catch (err) {
     req.log.error({ err }, "Crypto payment verification failed");
