@@ -31,9 +31,25 @@ app.use(
   }),
 );
 
+const allowedOrigins = new Set(
+  [
+    process.env.BASE_URL,
+    process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : null,
+    process.env.NODE_ENV !== "production" ? "http://localhost:80" : null,
+    process.env.NODE_ENV !== "production" ? "http://localhost:3000" : null,
+  ].filter(Boolean) as string[]
+);
+
 app.use(
   cors({
-    origin: true,
+    origin: (origin, callback) => {
+      // Allow same-origin requests (no origin header) and whitelisted origins
+      if (!origin || allowedOrigins.has(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     credentials: true,
   })
 );
