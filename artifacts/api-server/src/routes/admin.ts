@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, slotsTable, usersTable, paymentsTable, couponsTable } from "@workspace/db";
-import { eq, sql, inArray, and, lte, desc } from "drizzle-orm";
+import { eq, sql, inArray, and, lte, desc, ne } from "drizzle-orm";
 import { requireAdmin, isSuperAdmin } from "../middlewares/requireAdmin.js";
 import { getSettings, setSetting } from "../lib/settings.js";
 import { isLuarmorConfigured, createLuarmorUser, deleteLuarmorUser, getLuarmorUsers } from "../lib/luarmor.js";
@@ -197,21 +197,36 @@ router.post("/users/:discordId/slots", async (req, res) => {
     const { slotCount, slotDurationHours } = await getSettings();
     const expiryMs = slotDurationHours * 60 * 60 * 1000;
 
+    // Find slot numbers currently active for OTHER users (busy slots)
+    const otherActiveSlots = await db.select({ slotNumber: slotsTable.slotNumber })
+      .from(slotsTable)
+      .where(and(eq(slotsTable.isActive, true), ne(slotsTable.userId, userId)));
+    const busySlotNumbers = new Set(otherActiveSlots.map((s) => s.slotNumber));
+
+    // Find available slot numbers (not occupied by another user), in order
+    const availableSlotNumbers: number[] = [];
+    for (let i = 1; i <= slotCount; i++) {
+      if (!busySlotNumbers.has(i)) availableSlotNumbers.push(i);
+    }
+
+    const count = Math.min(activeSlotCount, availableSlotNumbers.length);
+    // Only activate the first `count` available slot numbers
+    const slotsToActivate = new Set(availableSlotNumbers.slice(0, count));
+
+    // Ensure the user has a row for every slot number we need to activate
     const existingSlots = await db.select().from(slotsTable).where(eq(slotsTable.userId, userId));
     const existingNumbers = new Set(existingSlots.map((s) => s.slotNumber));
-
-    for (let i = 1; i <= slotCount; i++) {
-      if (!existingNumbers.has(i)) {
-        await db.insert(slotsTable).values({ userId, slotNumber: i, isActive: false });
+    for (const slotNum of slotsToActivate) {
+      if (!existingNumbers.has(slotNum)) {
+        await db.insert(slotsTable).values({ userId, slotNumber: slotNum, isActive: false });
       }
     }
 
-    const count = Math.min(activeSlotCount, slotCount);
     const slots = await db.select().from(slotsTable).where(eq(slotsTable.userId, userId));
 
     for (const slot of slots) {
       if (slot.slotNumber > slotCount) continue;
-      const shouldBeActive = slot.slotNumber <= count;
+      const shouldBeActive = slotsToActivate.has(slot.slotNumber);
       if (slot.isActive !== shouldBeActive) {
         let luarmorUserId: string | null = null;
         if (isLuarmorConfigured()) {
