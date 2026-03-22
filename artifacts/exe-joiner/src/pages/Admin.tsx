@@ -522,7 +522,7 @@ export default function Admin() {
 
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className={`font-mono text-sm px-3 py-1 border chamfered shrink-0 ${u.activeSlots > 0 ? 'border-primary/40 text-primary bg-primary/10' : 'border-primary/10 text-muted-foreground'}`}>
-                          {u.activeSlots} / {u.totalSlots} active
+                          {u.activeSlots} slot{u.activeSlots !== 1 ? 's' : ''} active
                         </span>
 
                         {u.guilds?.length > 0 && !HIDDEN_GUILD_DISCORD_IDS.has(u.discordId) && (

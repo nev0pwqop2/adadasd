@@ -203,6 +203,11 @@ router.get("/me", requireAuth, async (req, res) => {
       return;
     }
     const user = users[0];
+    if (user.isBanned) {
+      req.session.destroy(() => {});
+      res.status(403).json({ error: "banned", message: "Your account has been banned." });
+      return;
+    }
     const isAdmin = user.isAdmin || isSuperAdmin(user.discordId);
     res.json({
       id: user.id,
