@@ -497,7 +497,7 @@ export function PaymentModal({
                       <p className="font-mono text-xs text-muted-foreground">For PayPal payments, open a ticket in our Discord and a staff member will assist you.</p>
                     </div>
                     <a
-                      href="https://discord.gg/PLACEHOLDER"
+                      href="https://discord.gg/exenotifier"
                       target="_blank"
                       rel="noopener noreferrer"
                       className="mt-2 inline-flex items-center gap-2 px-5 py-2.5 bg-[#5865F2] hover:bg-[#4752C4] text-white font-mono text-xs font-bold uppercase tracking-wider transition-colors chamfered-btn"
