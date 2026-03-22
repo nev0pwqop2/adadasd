@@ -180,10 +180,14 @@ async function handleWhitelist(interaction: ChatInputCommandInteraction) {
   const hours = interaction.options.getInteger("hours", true);
   const preferredSlot = interaction.options.getInteger("slot") ?? undefined;
 
-  const userRes = await db.query(`SELECT * FROM users WHERE username = $1 LIMIT 1`, [username]);
+  // Try case-insensitive name match first, then fall back to Discord ID
+  const isSnowflake = /^\d{15,20}$/.test(username);
+  const userRes = isSnowflake
+    ? await db.query(`SELECT * FROM users WHERE discord_id = $1 LIMIT 1`, [username])
+    : await db.query(`SELECT * FROM users WHERE LOWER(username) = LOWER($1) LIMIT 1`, [username]);
 
   if (userRes.rows.length === 0) {
-    await interaction.editReply(`❌ User **${username}** not found. They must log in to the site at least once first.`);
+    await interaction.editReply(`❌ User **${username}** not found. They must log in to the site first, or try their Discord ID (a long number).`);
     return;
   }
 
@@ -253,9 +257,12 @@ async function handleUnwhitelist(interaction: ChatInputCommandInteraction) {
   const username = interaction.options.getString("username", true).replace(/^@+/, "");
   const preferredSlot = interaction.options.getInteger("slot") ?? undefined;
 
-  const userRes = await db.query(`SELECT * FROM users WHERE username = $1 LIMIT 1`, [username]);
+  const isSnowflake = /^\d{15,20}$/.test(username);
+  const userRes = isSnowflake
+    ? await db.query(`SELECT * FROM users WHERE discord_id = $1 LIMIT 1`, [username])
+    : await db.query(`SELECT * FROM users WHERE LOWER(username) = LOWER($1) LIMIT 1`, [username]);
   if (userRes.rows.length === 0) {
-    await interaction.editReply(`❌ User **${username}** not found.`);
+    await interaction.editReply(`❌ User **${username}** not found. Try their Discord ID (a long number) if the name doesn't work.`);
     return;
   }
 
