@@ -37,6 +37,9 @@ async function runMigrations() {
         created_at TIMESTAMP DEFAULT NOW() NOT NULL
       )
     `);
+    await db.execute(sql`
+      ALTER TABLE preorders ADD COLUMN IF NOT EXISTS hours_requested INTEGER
+    `);
     // Deduplicate slots: keep the active row (or latest by id) per (user_id, slot_number)
     await db.execute(sql`
       DELETE FROM slots

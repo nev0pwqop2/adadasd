@@ -72,6 +72,7 @@ router.get("/", requireAuth, async (req: Request, res: Response) => {
       rank: i + 1,
       amount: parseFloat(p.amount),
       currency: p.currency,
+      hoursRequested: p.hoursRequested ?? null,
       isOwn: p.userId === req.session.userId,
       username: users[p.userId]?.username ?? "Unknown",
       discordId: users[p.userId]?.discordId ?? "",
@@ -104,7 +105,20 @@ router.post("/create-stripe", requireAuth, async (req: Request, res: Response) =
     return;
   }
 
-  const { pricePerDay, slotDurationHours } = await getSettings();
+  const { pricePerDay, slotDurationHours, hourlyPricingEnabled, pricePerHour, minHours } = await getSettings();
+  const { hours } = req.body as { hours?: number };
+
+  let purchaseHours = slotDurationHours;
+  let priceAmount = pricePerDay;
+
+  if (hourlyPricingEnabled) {
+    if (!hours || typeof hours !== "number" || !Number.isInteger(hours) || hours < minHours) {
+      res.status(400).json({ error: "invalid_hours", message: `Hours must be a whole number of at least ${minHours}` });
+      return;
+    }
+    purchaseHours = hours;
+    priceAmount = pricePerHour * hours;
+  }
 
   try {
     const Stripe = (await import("stripe")).default;
@@ -120,10 +134,10 @@ router.post("/create-stripe", requireAuth, async (req: Request, res: Response) =
       line_items: [{
         price_data: {
           currency: "usd",
-          unit_amount: Math.round(pricePerDay * 100),
+          unit_amount: Math.round(priceAmount * 100),
           product_data: {
-            name: `Exe Joiner — Pre-order (${slotDurationHours}h slot)`,
-            description: `Pre-order a slot for the next available opening at $${pricePerDay.toFixed(2)}`,
+            name: `Exe Joiner — Pre-order (${purchaseHours}h slot)`,
+            description: `Pre-order a slot for the next available opening at $${priceAmount.toFixed(2)}`,
           },
         },
         quantity: 1,
@@ -140,12 +154,12 @@ router.post("/create-stripe", requireAuth, async (req: Request, res: Response) =
       slotNumber: 0,
       method: "preorder-stripe",
       status: "pending",
-      amount: pricePerDay.toFixed(2),
-      usdAmount: pricePerDay.toFixed(2),
+      amount: priceAmount.toFixed(2),
+      usdAmount: priceAmount.toFixed(2),
       currency: "USD",
       stripeSessionId: session.id,
       expiresAt: new Date(Date.now() + 30 * 60 * 1000),
-      derivationIndex: slotDurationHours,
+      derivationIndex: purchaseHours,
     });
 
     res.json({ url: session.url });
@@ -162,7 +176,7 @@ router.post("/create-crypto", requireAuth, async (req: Request, res: Response) =
     return;
   }
 
-  const { currency } = req.body;
+  const { currency, hours } = req.body as { currency?: string; hours?: number };
   if (!currency || !VALID_CURRENCIES.includes(currency)) {
     res.status(400).json({ error: "invalid_currency", message: "Invalid currency. Supported: BTC, LTC, USDT (TRC20)" });
     return;
@@ -176,12 +190,25 @@ router.post("/create-crypto", requireAuth, async (req: Request, res: Response) =
     return;
   }
 
-  const { pricePerDay, slotDurationHours } = await getSettings();
+  const { pricePerDay, slotDurationHours, hourlyPricingEnabled, pricePerHour, minHours } = await getSettings();
+
+  let purchaseHours = slotDurationHours;
+  let priceAmount = pricePerDay;
+
+  if (hourlyPricingEnabled) {
+    if (!hours || typeof hours !== "number" || !Number.isInteger(hours) || hours < minHours) {
+      res.status(400).json({ error: "invalid_hours", message: `Hours must be a whole number of at least ${minHours}` });
+      return;
+    }
+    purchaseHours = hours;
+    priceAmount = pricePerHour * hours;
+  }
+
   const minUsd = await getNowPaymentsMinAmount(currency);
-  if (minUsd > 0 && pricePerDay < minUsd) {
+  if (minUsd > 0 && priceAmount < minUsd) {
     res.status(400).json({
       error: "below_minimum",
-      message: `${currency === "USDT" ? "USDT TRC20" : currency} requires a minimum of $${minUsd.toFixed(2)} USD. Current price ($${pricePerDay.toFixed(2)}) is too low.`,
+      message: `${currency === "USDT" ? "USDT TRC20" : currency} requires a minimum of $${minUsd.toFixed(2)} USD. Current price ($${priceAmount.toFixed(2)}) is too low.`,
     });
     return;
   }
@@ -195,7 +222,7 @@ router.post("/create-crypto", requireAuth, async (req: Request, res: Response) =
     const nowPayment = await nowpaymentsRequest("/payment", {
       method: "POST",
       body: JSON.stringify({
-        price_amount: pricePerDay,
+        price_amount: priceAmount,
         price_currency: "usd",
         pay_currency: NOWPAYMENTS_CURRENCY_MAP[currency],
         ipn_callback_url: `${baseUrl}/api/payments/nowpayments-ipn`,
@@ -213,11 +240,11 @@ router.post("/create-crypto", requireAuth, async (req: Request, res: Response) =
       status: "pending",
       currency,
       amount: String(nowPayment.pay_amount),
-      usdAmount: pricePerDay.toFixed(2),
+      usdAmount: priceAmount.toFixed(2),
       address: nowPayment.pay_address,
       txHash: nowPayment.payment_id,
       expiresAt,
-      derivationIndex: slotDurationHours,
+      derivationIndex: purchaseHours,
     });
 
     res.json({ paymentId, address: nowPayment.pay_address, amount: String(nowPayment.pay_amount), currency, expiresAt: expiresAt.toISOString() });
@@ -239,7 +266,20 @@ router.post("/create-balance", requireAuth, async (req: Request, res: Response) 
     return;
   }
 
-  const { pricePerDay, slotDurationHours } = await getSettings();
+  const { pricePerDay, slotDurationHours, hourlyPricingEnabled, pricePerHour, minHours } = await getSettings();
+  const { hours } = req.body as { hours?: number };
+
+  let purchaseHours = slotDurationHours;
+  let priceAmount = pricePerDay;
+
+  if (hourlyPricingEnabled) {
+    if (!hours || typeof hours !== "number" || !Number.isInteger(hours) || hours < minHours) {
+      res.status(400).json({ error: "invalid_hours", message: `Hours must be a whole number of at least ${minHours}` });
+      return;
+    }
+    purchaseHours = hours;
+    priceAmount = pricePerHour * hours;
+  }
 
   try {
     const userRows = await db
@@ -249,43 +289,40 @@ router.post("/create-balance", requireAuth, async (req: Request, res: Response) 
       .limit(1);
 
     const currentBalance = parseFloat(userRows[0]?.balance ?? "0");
-    if (currentBalance < pricePerDay) {
+    if (currentBalance < priceAmount) {
       res.status(400).json({
         error: "insufficient_balance",
-        message: `Insufficient balance. Need $${pricePerDay.toFixed(2)}, have $${currentBalance.toFixed(2)}`,
+        message: `Insufficient balance. Need $${priceAmount.toFixed(2)}, have $${currentBalance.toFixed(2)}`,
       });
       return;
     }
 
-    // Deduct balance
     await db.update(usersTable)
-      .set({ balance: sql`${usersTable.balance} - ${pricePerDay.toFixed(2)}::numeric`, updatedAt: new Date() })
+      .set({ balance: sql`${usersTable.balance} - ${priceAmount.toFixed(2)}::numeric`, updatedAt: new Date() })
       .where(eq(usersTable.id, userId));
 
-    // Create preorder record
     const paymentId = crypto.randomUUID();
     await db.insert(preordersTable).values({
       userId,
-      amount: pricePerDay.toFixed(2),
+      amount: priceAmount.toFixed(2),
       currency: "USD",
       paymentId,
       status: "paid",
+      hoursRequested: purchaseHours,
     });
 
-    // Create payment log
     await db.insert(paymentsTable).values({
       id: paymentId,
       userId,
       slotNumber: 0,
       method: "preorder-balance",
       status: "completed",
-      amount: pricePerDay.toFixed(2),
-      usdAmount: pricePerDay.toFixed(2),
+      amount: priceAmount.toFixed(2),
+      usdAmount: priceAmount.toFixed(2),
       currency: "USD",
-      derivationIndex: slotDurationHours,
+      derivationIndex: purchaseHours,
     });
 
-    // Discord webhook
     try {
       if (userRows[0]) {
         await sendPaymentWebhook({
@@ -293,7 +330,7 @@ router.post("/create-balance", requireAuth, async (req: Request, res: Response) 
           discordId: userRows[0].discordId,
           method: "balance",
           currency: "USD",
-          amount: pricePerDay.toFixed(2),
+          amount: priceAmount.toFixed(2),
           purchaseType: "preorder",
         });
       }
@@ -301,7 +338,7 @@ router.post("/create-balance", requireAuth, async (req: Request, res: Response) 
       req.log.warn({ webhookErr }, "Preorder balance webhook failed");
     }
 
-    res.json({ success: true, newBalance: (currentBalance - pricePerDay).toFixed(2) });
+    res.json({ success: true, newBalance: (currentBalance - priceAmount).toFixed(2) });
   } catch (err) {
     req.log.error({ err }, "Pre-order balance payment failed");
     res.status(500).json({ error: "server_error", message: "Failed to process balance payment" });
@@ -345,7 +382,6 @@ router.post("/verify-crypto", requireAuth, async (req: Request, res: Response) =
       return;
     }
 
-    // Poll NOWPayments for status
     const nowStatus = await nowpaymentsRequest(`/payment/${payment.txHash}`) as { payment_status: string };
     const CONFIRMED = new Set(["finished", "confirmed", "complete", "partially_paid"]);
     if (!CONFIRMED.has(nowStatus.payment_status)) {
@@ -356,7 +392,6 @@ router.post("/verify-crypto", requireAuth, async (req: Request, res: Response) =
       return;
     }
 
-    // Check user doesn't already have an active preorder
     const existing = await db
       .select()
       .from(preordersTable)
@@ -367,17 +402,16 @@ router.post("/verify-crypto", requireAuth, async (req: Request, res: Response) =
       return;
     }
 
-    // Mark payment completed and create preorder
     await db.update(paymentsTable).set({ status: "completed", updatedAt: new Date() }).where(eq(paymentsTable.id, payment.id));
     await db.insert(preordersTable).values({
       userId: payment.userId,
-      amount: payment.amount,
+      amount: payment.amount ?? "0",
       currency: payment.currency ?? "USD",
       paymentId: payment.id,
       status: "paid",
+      hoursRequested: payment.derivationIndex ?? null,
     });
 
-    // Discord webhook
     try {
       const userRows = await db.select({ username: usersTable.username, discordId: usersTable.discordId })
         .from(usersTable).where(eq(usersTable.id, payment.userId)).limit(1);

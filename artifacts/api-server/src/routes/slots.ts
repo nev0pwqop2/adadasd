@@ -204,7 +204,7 @@ router.post("/gift", requireAuth, async (req, res) => {
 
 router.get("/", requireAuth, async (req, res) => {
   try {
-    const { slotCount, pricePerDay, slotDurationHours } = await getSettings();
+    const { slotCount, pricePerDay, slotDurationHours, hourlyPricingEnabled, pricePerHour, minHours } = await getSettings();
     const currentUserId = req.session.userId!;
 
     // Verify the user still exists in the database (session may be stale after data resets)
@@ -262,7 +262,7 @@ router.get("/", requireAuth, async (req, res) => {
       .from(slotsTable)
       .where(and(eq(slotsTable.isActive, true), lte(slotsTable.slotNumber, slotCount)));
 
-    // Step 3: Auto-assign paid pre-orders to any free slots
+    // Step 3: Unified priority queue — bids and preorders compete by amount (highest wins)
     const freeSlotNums = Array.from({ length: slotCount }, (_, i) => i + 1)
       .filter(n => !allActiveSlots.some(s => s.slotNumber === n));
 
@@ -271,97 +271,76 @@ router.get("/", requireAuth, async (req, res) => {
         .where(eq(preordersTable.status, "paid"))
         .orderBy(sql`CAST(${preordersTable.amount} AS NUMERIC) DESC`, preordersTable.createdAt);
 
-      let preordersAssigned = 0;
-      if (paidPreorders.length > 0) {
-        const toAssign = Math.min(freeSlotNums.length, paidPreorders.length);
-        for (let i = 0; i < toAssign; i++) {
-          const preorder = paidPreorders[i];
-          const slotNum = freeSlotNums[i];
-          const expiresAt = new Date(now.getTime() + slotDurationHours * 60 * 60 * 1000);
+      const activeBids = await db.select().from(bidsTable)
+        .where(and(eq(bidsTable.status, "active"), eq(bidsTable.paidWithBalance, true)))
+        .orderBy(sql`CAST(${bidsTable.amount} AS NUMERIC) DESC`, bidsTable.createdAt);
 
-          let luarmorUserId: string | null = null;
-          if (isLuarmorConfigured()) {
-            try {
-              const preorderUser = await db.select().from(usersTable).where(eq(usersTable.id, preorder.userId)).limit(1);
-              if (preorderUser.length) {
-                const lu = await createLuarmorUser(preorderUser[0].discordId, preorderUser[0].username, expiresAt);
-                luarmorUserId = lu.user_key;
-              }
-            } catch (e) {}
-          }
+      // Merge into one list, sorted by amount descending (preorder wins ties — placed first)
+      type Claimant =
+        | { kind: "preorder"; id: number; userId: string; amount: number; hoursRequested: number | null }
+        | { kind: "bid"; id: number; userId: string; amount: number };
 
-          const existingRow = await db.select().from(slotsTable)
-            .where(and(eq(slotsTable.userId, preorder.userId), eq(slotsTable.slotNumber, slotNum)))
-            .limit(1);
-          if (existingRow.length) {
-            await db.update(slotsTable)
-              .set({ isActive: true, purchasedAt: now, expiresAt, label: null, luarmorUserId, notified24h: false, notified1h: false })
-              .where(and(eq(slotsTable.userId, preorder.userId), eq(slotsTable.slotNumber, slotNum)));
-          } else {
-            await db.insert(slotsTable).values({ userId: preorder.userId, slotNumber: slotNum, isActive: true, purchasedAt: now, expiresAt, luarmorUserId });
-          }
-          await db.update(preordersTable).set({ status: "fulfilled" }).where(eq(preordersTable.id, preorder.id));
+      const claimants: Claimant[] = [
+        ...paidPreorders.map(p => ({ kind: "preorder" as const, id: p.id, userId: p.userId, amount: parseFloat(p.amount), hoursRequested: p.hoursRequested ?? null })),
+        ...activeBids.map(b => ({ kind: "bid" as const, id: b.id, userId: b.userId, amount: parseFloat(b.amount) })),
+      ].sort((a, b) => {
+        if (b.amount !== a.amount) return b.amount - a.amount;
+        // tie-break: preorders beat bids (they committed first)
+        if (a.kind === "preorder" && b.kind === "bid") return -1;
+        if (a.kind === "bid" && b.kind === "preorder") return 1;
+        return 0;
+      });
 
-          // DM the preorder user
+      const toAssign = Math.min(freeSlotNums.length, claimants.length);
+      for (let i = 0; i < toAssign; i++) {
+        const claimant = claimants[i];
+        const slotNum = freeSlotNums[i];
+        const hours = claimant.kind === "preorder" && claimant.hoursRequested
+          ? claimant.hoursRequested
+          : slotDurationHours;
+        const expiresAt = new Date(now.getTime() + hours * 60 * 60 * 1000);
+
+        let luarmorUserId: string | null = null;
+        if (isLuarmorConfigured()) {
           try {
-            const preorderUser = await db.select({ discordId: usersTable.discordId, username: usersTable.username }).from(usersTable).where(eq(usersTable.id, preorder.userId)).limit(1);
-            if (preorderUser.length) {
+            const ownerUser = await db.select().from(usersTable).where(eq(usersTable.id, claimant.userId)).limit(1);
+            if (ownerUser.length) {
+              const lu = await createLuarmorUser(ownerUser[0].discordId, ownerUser[0].username, expiresAt);
+              luarmorUserId = lu.user_key;
+            }
+          } catch (e) {}
+        }
+
+        const existingRow = await db.select().from(slotsTable)
+          .where(and(eq(slotsTable.userId, claimant.userId), eq(slotsTable.slotNumber, slotNum)))
+          .limit(1);
+        if (existingRow.length) {
+          await db.update(slotsTable)
+            .set({ isActive: true, purchasedAt: now, expiresAt, label: null, luarmorUserId, notified24h: false, notified1h: false })
+            .where(and(eq(slotsTable.userId, claimant.userId), eq(slotsTable.slotNumber, slotNum)));
+        } else {
+          await db.insert(slotsTable).values({ userId: claimant.userId, slotNumber: slotNum, isActive: true, purchasedAt: now, expiresAt, luarmorUserId });
+        }
+
+        if (claimant.kind === "preorder") {
+          await db.update(preordersTable).set({ status: "fulfilled" }).where(eq(preordersTable.id, claimant.id));
+          try {
+            const u = await db.select({ discordId: usersTable.discordId, username: usersTable.username }).from(usersTable).where(eq(usersTable.id, claimant.userId)).limit(1);
+            if (u.length) {
               const ts = Math.floor(expiresAt.getTime() / 1000);
-              await sendDiscordDM(preorderUser[0].discordId,
-                `✅ **Pre-order fulfilled!** — Hey ${preorderUser[0].username}, your Exe Joiner slot is now active! It expires <t:${ts}:R>. Check your dashboard to get your script key!`
+              await sendDiscordDM(u[0].discordId,
+                `✅ **Pre-order fulfilled!** — Hey ${u[0].username}, your Exe Joiner slot is now active! It expires <t:${ts}:R>. Check your dashboard to get your script key!`
               );
             }
           } catch (_) {}
-
-          preordersAssigned++;
-        }
-      }
-
-      // After preorders, assign remaining free slots to the highest balance-paid bids
-      const remainingFreeSlots = freeSlotNums.slice(preordersAssigned);
-      if (remainingFreeSlots.length > 0) {
-        const activeBids = await db.select().from(bidsTable)
-          .where(and(eq(bidsTable.status, "active"), eq(bidsTable.paidWithBalance, true)))
-          .orderBy(sql`CAST(${bidsTable.amount} AS NUMERIC) DESC`, bidsTable.createdAt);
-
-        const toAssignBids = Math.min(remainingFreeSlots.length, activeBids.length);
-        for (let i = 0; i < toAssignBids; i++) {
-          const bid = activeBids[i];
-          const slotNum = remainingFreeSlots[i];
-          const expiresAt = new Date(now.getTime() + slotDurationHours * 60 * 60 * 1000);
-
-          let luarmorUserId: string | null = null;
-          if (isLuarmorConfigured()) {
-            try {
-              const bidUser = await db.select().from(usersTable).where(eq(usersTable.id, bid.userId)).limit(1);
-              if (bidUser.length) {
-                const lu = await createLuarmorUser(bidUser[0].discordId, bidUser[0].username, expiresAt);
-                luarmorUserId = lu.user_key;
-              }
-            } catch (e) {}
-          }
-
-          const existingRow = await db.select().from(slotsTable)
-            .where(and(eq(slotsTable.userId, bid.userId), eq(slotsTable.slotNumber, slotNum)))
-            .limit(1);
-          if (existingRow.length) {
-            await db.update(slotsTable)
-              .set({ isActive: true, purchasedAt: now, expiresAt, label: null, luarmorUserId, notified24h: false, notified1h: false })
-              .where(and(eq(slotsTable.userId, bid.userId), eq(slotsTable.slotNumber, slotNum)));
-          } else {
-            await db.insert(slotsTable).values({ userId: bid.userId, slotNumber: slotNum, isActive: true, purchasedAt: now, expiresAt, luarmorUserId });
-          }
-
-          // Mark bid as won (money was already deducted when bid was placed)
-          await db.update(bidsTable).set({ status: "won", updatedAt: now }).where(eq(bidsTable.id, bid.id));
-
-          // DM the winning bidder
+        } else {
+          await db.update(bidsTable).set({ status: "won", updatedAt: now }).where(eq(bidsTable.id, claimant.id));
           try {
-            const bidUser = await db.select({ discordId: usersTable.discordId, username: usersTable.username }).from(usersTable).where(eq(usersTable.id, bid.userId)).limit(1);
-            if (bidUser.length) {
+            const u = await db.select({ discordId: usersTable.discordId, username: usersTable.username }).from(usersTable).where(eq(usersTable.id, claimant.userId)).limit(1);
+            if (u.length) {
               const ts = Math.floor(expiresAt.getTime() / 1000);
-              await sendDiscordDM(bidUser[0].discordId,
-                `🏆 **Your bid won!** — Hey ${bidUser[0].username}, your Exe Joiner bid of $${parseFloat(bid.amount).toFixed(2)} won a slot! It expires <t:${ts}:R>. Check your dashboard to get your script key!`
+              await sendDiscordDM(u[0].discordId,
+                `🏆 **Your bid won!** — Hey ${u[0].username}, your Exe Joiner bid of $${claimant.amount.toFixed(2)} won a slot! It expires <t:${ts}:R>. Check your dashboard to get your script key!`
               );
             }
           } catch (_) {}
@@ -466,8 +445,6 @@ router.get("/", requireAuth, async (req, res) => {
         };
       }
     });
-
-    const { hourlyPricingEnabled, pricePerHour, minHours } = await getSettings();
 
     // Find the earliest expiry among all active slots (for the countdown timer)
     const activeExpiries = allActiveSlots

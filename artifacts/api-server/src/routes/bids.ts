@@ -1,12 +1,12 @@
 import { Router } from "express";
-import { db, bidsTable, usersTable } from "@workspace/db";
+import { db, bidsTable, usersTable, preordersTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
 
 const router = Router();
 
-// GET /api/bids — list all active bids with user info
+// GET /api/bids — list all active bids with user info + top preorder amount
 router.get("/", requireAuth, async (req, res) => {
   try {
     const bids = await db
@@ -28,6 +28,15 @@ router.get("/", requireAuth, async (req, res) => {
 
     const myBid = bids.find((b) => b.userId === req.session.userId);
 
+    // Get the highest active pre-order amount so the UI can show the minimum bid needed
+    const topPreorderRows = await db
+      .select({ amount: preordersTable.amount })
+      .from(preordersTable)
+      .where(eq(preordersTable.status, "paid"))
+      .orderBy(desc(preordersTable.amount))
+      .limit(1);
+    const topPreorderAmount = topPreorderRows.length ? parseFloat(topPreorderRows[0].amount) : null;
+
     res.json({
       bids: bids.map((b) => ({
         id: b.id,
@@ -47,6 +56,7 @@ router.get("/", requireAuth, async (req, res) => {
             paidWithBalance: myBid.paidWithBalance,
           }
         : null,
+      topPreorderAmount,
     });
   } catch (err) {
     req.log.error({ err }, "Failed to fetch bids");
@@ -71,6 +81,23 @@ router.post("/", requireAuth, async (req, res) => {
   const userId = req.session.userId!;
 
   try {
+    // Enforce bid must exceed the highest active pre-order
+    const topPreorderRows = await db
+      .select({ amount: preordersTable.amount })
+      .from(preordersTable)
+      .where(eq(preordersTable.status, "paid"))
+      .orderBy(desc(preordersTable.amount))
+      .limit(1);
+    const topPreorderAmount = topPreorderRows.length ? parseFloat(topPreorderRows[0].amount) : 0;
+
+    if (topPreorderAmount > 0 && amount <= topPreorderAmount) {
+      res.status(400).json({
+        error: "bid_too_low",
+        message: `Your bid must exceed the highest pre-order of $${topPreorderAmount.toFixed(2)} to get priority. Bid more than $${topPreorderAmount.toFixed(2)}.`,
+      });
+      return;
+    }
+
     const existing = await db
       .select()
       .from(bidsTable)
@@ -78,7 +105,6 @@ router.post("/", requireAuth, async (req, res) => {
       .limit(1);
 
     if (useBalance) {
-      // Fetch user balance
       const userRows = await db.select({ balance: usersTable.balance }).from(usersTable).where(eq(usersTable.id, userId)).limit(1);
       const currentBalance = parseFloat(userRows[0]?.balance ?? "0");
 
@@ -93,13 +119,11 @@ router.post("/", requireAuth, async (req, res) => {
         return;
       }
 
-      // Deduct net cost (new amount minus already-held old amount)
       if (netCost > 0) {
         await db.update(usersTable)
           .set({ balance: sql`${usersTable.balance} - ${netCost.toFixed(2)}::numeric`, updatedAt: new Date() })
           .where(eq(usersTable.id, userId));
       } else if (netCost < 0) {
-        // Refund the difference if lowering a balance bid
         const refund = Math.abs(netCost);
         await db.update(usersTable)
           .set({ balance: sql`${usersTable.balance} + ${refund.toFixed(2)}::numeric`, updatedAt: new Date() })
@@ -122,7 +146,6 @@ router.post("/", requireAuth, async (req, res) => {
         res.json({ success: true, message: "Bid placed" });
       }
     } else {
-      // No balance payment — if existing bid was paid with balance, refund it first
       if (existing.length && existing[0].paidWithBalance) {
         const refundAmount = parseFloat(existing[0].amount);
         await db.update(usersTable)

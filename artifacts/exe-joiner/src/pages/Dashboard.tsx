@@ -67,7 +67,7 @@ export default function Dashboard() {
   type BidEntry = { id: number; amount: number; username: string; discordId: string; avatar: string | null; isOwn: boolean; paidWithBalance: boolean; createdAt: string };
   const { data: bidsRes, refetch: refetchBids } = useQuery({
     queryKey: ['bids'],
-    queryFn: () => apiFetch<{ bids: BidEntry[]; myBid: { id: number; amount: number; rank: number; paidWithBalance: boolean } | null }>('api/bids'),
+    queryFn: () => apiFetch<{ bids: BidEntry[]; myBid: { id: number; amount: number; rank: number; paidWithBalance: boolean } | null; topPreorderAmount: number | null }>('api/bids'),
     enabled: !!user,
     refetchInterval: 5000,
     refetchIntervalInBackground: false,
@@ -380,15 +380,22 @@ export default function Dashboard() {
                             <p className="font-mono text-xs text-muted-foreground">
                               {myBid ? `Current bid: $${myBid.amount.toFixed(2)}. Enter a higher amount.` : 'Enter your max bid in USD. Highest bidder gets first pick on the next open slot.'}
                             </p>
+                            {bidsRes?.topPreorderAmount != null && (
+                              <p className="font-mono text-xs text-amber-400">
+                                Highest pre-order: <span className="font-bold">${bidsRes.topPreorderAmount.toFixed(2)}</span> — your bid must exceed this to get priority.
+                              </p>
+                            )}
                             <div className="flex items-center gap-2">
                               <span className="font-mono text-muted-foreground text-sm">$</span>
                               <input
                                 type="number"
-                                min={myBid ? myBid.amount + 0.01 : 0.01}
+                                min={Math.max(myBid?.amount ?? 0, bidsRes?.topPreorderAmount ?? 0) + 0.01}
                                 step={0.01}
                                 value={bidAmount}
                                 onChange={e => setBidAmount(e.target.value)}
-                                placeholder={myBid ? (myBid.amount + 1).toFixed(2) : '0.00'}
+                                placeholder={bidsRes?.topPreorderAmount != null
+                                  ? (bidsRes.topPreorderAmount + 1).toFixed(2)
+                                  : myBid ? (myBid.amount + 1).toFixed(2) : '0.00'}
                                 className="flex-1 bg-background border border-border rounded text-foreground font-mono px-3 py-2 text-sm focus:outline-none focus:border-primary/60"
                                 autoFocus
                               />
@@ -415,6 +422,7 @@ export default function Dashboard() {
                                   isPlacingBid ||
                                   !bidAmount ||
                                   parseFloat(bidAmount) <= (myBid?.amount ?? 0) ||
+                                  (bidsRes?.topPreorderAmount != null && parseFloat(bidAmount) <= bidsRes.topPreorderAmount) ||
                                   (bidUseBalance && parseFloat(bidAmount) > (balanceRes?.balanceNum ?? 0))
                                 }
                                 onClick={() => placeBid({ amount: parseFloat(bidAmount), useBalance: bidUseBalance })}
@@ -762,6 +770,9 @@ export default function Dashboard() {
         nextExpiresAt={nextExpiresAt}
         onSuccess={() => { refetchPreorders(); refetchBalance(); }}
         balance={balanceRes?.balanceNum ?? 0}
+        hourlyPricingEnabled={slotsRes?.hourlyPricingEnabled ?? false}
+        pricePerHour={slotsRes?.pricePerHour ?? 5}
+        minHours={slotsRes?.minHours ?? 2}
       />
     </div>
   );

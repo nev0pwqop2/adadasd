@@ -309,6 +309,7 @@ router.post("/stripe-webhook", async (req: Request, res: Response) => {
               currency: "USD",
               paymentId: pending[0].id,
               status: "paid",
+              hoursRequested: pending[0].derivationIndex ?? null,
             });
             const userRows = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
             if (userRows.length) {
@@ -489,6 +490,7 @@ router.post("/nowpayments-ipn", async (req: Request, res: Response) => {
         currency: payment.currency,
         paymentId: payment.id,
         status: "paid",
+        hoursRequested: payment.derivationIndex ?? null,
       });
       req.log.info({ paymentId: payment.id }, "NOWPayments IPN: pre-order activated");
       const userRows = await db.select().from(usersTable).where(eq(usersTable.id, payment.userId)).limit(1);
