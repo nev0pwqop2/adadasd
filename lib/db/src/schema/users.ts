@@ -11,6 +11,7 @@ export const usersTable = pgTable("users", {
   isAdmin: boolean("is_admin").notNull().default(false),
   guilds: jsonb("guilds").$type<{ id: string; name: string; icon: string | null; owner: boolean }[]>(),
   balance: numeric("balance", { precision: 12, scale: 2 }).notNull().default("0.00"),
+  isBanned: boolean("is_banned").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

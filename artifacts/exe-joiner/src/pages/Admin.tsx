@@ -5,7 +5,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Save, Users, Settings, Shield, ShieldOff, Loader2, RotateCcw, AlertTriangle, Crown, Server, ChevronDown, ChevronUp, Search, Copy, FlaskConical, Check, Key, ScrollText, CreditCard, Bitcoin, TrendingUp } from 'lucide-react';
+import { ArrowLeft, Save, Users, Settings, Shield, ShieldOff, Loader2, RotateCcw, AlertTriangle, Crown, Server, ChevronDown, ChevronUp, Search, Copy, FlaskConical, Check, Key, ScrollText, CreditCard, Bitcoin, TrendingUp, Ban, Tag, Plus, Trash2, ToggleLeft, ToggleRight } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 async function apiFetch<T>(path: string): Promise<T> {
@@ -44,6 +44,76 @@ export default function Admin() {
       toast({ title: "Error", description: err.message, variant: "destructive" });
       setTogglingAdmin(null);
     },
+  });
+
+  const [togglingBan, setTogglingBan] = useState<string | null>(null);
+  const { mutate: toggleBan } = useMutation({
+    mutationFn: async (discordId: string) => {
+      const res = await fetch(`${import.meta.env.BASE_URL}api/admin/users/${discordId}/ban`, { method: 'POST', credentials: 'include' });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.message || 'Failed'); }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: data.isBanned ? "User banned" : "User unbanned", description: data.message, className: data.isBanned ? "bg-red-600 text-white border-none" : "bg-primary text-primary-foreground" });
+      setTogglingBan(null);
+      refetchUsers();
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+      setTogglingBan(null);
+    },
+  });
+
+  type CouponEntry = {
+    id: number; code: string; discountType: string; discountValue: string;
+    maxUses: number | null; usedCount: number; expiresAt: string | null; isActive: boolean; createdAt: string;
+  };
+  const { data: couponsData, isLoading: isCouponsLoading, refetch: refetchCoupons } = useQuery({
+    queryKey: ['admin-coupons'],
+    queryFn: () => apiFetch<{ coupons: CouponEntry[] }>('api/admin/coupons'),
+    enabled: !!user?.isAdmin,
+  });
+
+  const [couponForm, setCouponForm] = useState({ code: '', discountType: 'percent', discountValue: '', maxUses: '', expiresAt: '' });
+  const { mutate: createCoupon, isPending: isCreatingCoupon } = useMutation({
+    mutationFn: async () => {
+      const body: any = {
+        code: couponForm.code,
+        discountType: couponForm.discountType,
+        discountValue: parseFloat(couponForm.discountValue),
+        maxUses: couponForm.maxUses ? parseInt(couponForm.maxUses, 10) : null,
+        expiresAt: couponForm.expiresAt || null,
+      };
+      const res = await fetch(`${import.meta.env.BASE_URL}api/admin/coupons`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.message || 'Failed'); }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Coupon created", className: "bg-primary text-primary-foreground" });
+      setCouponForm({ code: '', discountType: 'percent', discountValue: '', maxUses: '', expiresAt: '' });
+      refetchCoupons();
+    },
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const { mutate: deleteCoupon } = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await fetch(`${import.meta.env.BASE_URL}api/admin/coupons/${id}`, { method: 'DELETE', credentials: 'include' });
+      if (!res.ok) throw new Error('Failed to delete');
+      return res.json();
+    },
+    onSuccess: () => { toast({ title: "Coupon deleted" }); refetchCoupons(); },
+    onError: () => toast({ title: "Error", description: "Failed to delete coupon", variant: "destructive" }),
+  });
+
+  const { mutate: toggleCoupon } = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await fetch(`${import.meta.env.BASE_URL}api/admin/coupons/${id}/toggle`, { method: 'PATCH', credentials: 'include' });
+      if (!res.ok) throw new Error('Failed');
+      return res.json();
+    },
+    onSuccess: () => refetchCoupons(),
+    onError: () => toast({ title: "Error", description: "Failed to toggle coupon", variant: "destructive" }),
   });
 
   const { mutate: resetAllSlots, isPending: isResetting } = useMutation({
@@ -440,6 +510,11 @@ export default function Admin() {
                                 <Shield className="w-3 h-3" /> Admin
                               </span>
                             )}
+                            {u.isBanned && (
+                              <span className="flex items-center gap-1 text-xs font-mono px-2 py-0.5 bg-red-500/10 border border-red-500/30 text-red-400">
+                                <Ban className="w-3 h-3" /> Banned
+                              </span>
+                            )}
                           </div>
                           <p className="font-mono text-xs text-muted-foreground">{u.discordId}</p>
                         </div>
@@ -476,6 +551,24 @@ export default function Admin() {
                               className={`font-mono text-xs border-primary/20 ${u.isAdmin ? 'text-red-400 hover:text-red-300' : 'text-primary hover:text-primary/80'}`}
                             >
                               {u.isAdmin ? <><ShieldOff className="w-3 h-3 mr-1" />Remove Admin</> : <><Shield className="w-3 h-3 mr-1" />Make Admin</>}
+                            </Button>
+                          )
+                        )}
+
+                        {!u.isSuperAdmin && (
+                          togglingBan === u.discordId ? (
+                            <Button size="sm" variant="outline" disabled className="border-red-500/20 font-mono text-xs">
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => { setTogglingBan(u.discordId); toggleBan(u.discordId); }}
+                              className={`font-mono text-xs ${u.isBanned ? 'border-green-500/40 text-green-400 hover:bg-green-500/10' : 'border-red-500/40 text-red-400 hover:bg-red-500/10'}`}
+                            >
+                              <Ban className="w-3 h-3 mr-1" />
+                              {u.isBanned ? 'Unban' : 'Ban'}
                             </Button>
                           )
                         )}
@@ -538,6 +631,141 @@ export default function Admin() {
                   </div>
                 ))}
               </div>
+            </Card>
+          </motion.div>
+
+          {/* Coupon Management */}
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
+            <Card className="border-primary/20">
+              <div className="p-6 border-b border-primary/20 flex items-center gap-3">
+                <Tag className="w-5 h-5 text-primary" />
+                <h2 className="font-display font-bold uppercase tracking-wider text-primary">Coupon Codes</h2>
+                <span className="ml-auto text-xs font-mono text-muted-foreground">{couponsData?.coupons.length ?? 0} codes</span>
+              </div>
+
+              {/* Create form */}
+              <div className="p-6 border-b border-primary/10 space-y-4">
+                <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Create New Coupon</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                  <div className="space-y-1 col-span-2 sm:col-span-1">
+                    <label className="text-xs font-mono text-muted-foreground">Code</label>
+                    <input
+                      type="text"
+                      placeholder="SAVE20"
+                      value={couponForm.code}
+                      onChange={e => setCouponForm(f => ({ ...f, code: e.target.value.toUpperCase() }))}
+                      className="w-full bg-background border border-primary/30 text-foreground font-mono px-3 py-2 text-sm focus:outline-none focus:border-primary uppercase"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-mono text-muted-foreground">Type</label>
+                    <select
+                      value={couponForm.discountType}
+                      onChange={e => setCouponForm(f => ({ ...f, discountType: e.target.value }))}
+                      className="w-full bg-background border border-primary/30 text-foreground font-mono px-3 py-2 text-sm focus:outline-none focus:border-primary"
+                    >
+                      <option value="percent">Percent (%)</option>
+                      <option value="fixed">Fixed ($)</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-mono text-muted-foreground">Value</label>
+                    <input
+                      type="number"
+                      min={0}
+                      placeholder={couponForm.discountType === 'percent' ? '20' : '5.00'}
+                      value={couponForm.discountValue}
+                      onChange={e => setCouponForm(f => ({ ...f, discountValue: e.target.value }))}
+                      className="w-full bg-background border border-primary/30 text-foreground font-mono px-3 py-2 text-sm focus:outline-none focus:border-primary"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-mono text-muted-foreground">Max Uses</label>
+                    <input
+                      type="number"
+                      min={1}
+                      placeholder="Unlimited"
+                      value={couponForm.maxUses}
+                      onChange={e => setCouponForm(f => ({ ...f, maxUses: e.target.value }))}
+                      className="w-full bg-background border border-primary/30 text-foreground font-mono px-3 py-2 text-sm focus:outline-none focus:border-primary"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-mono text-muted-foreground">Expires</label>
+                    <input
+                      type="datetime-local"
+                      value={couponForm.expiresAt}
+                      onChange={e => setCouponForm(f => ({ ...f, expiresAt: e.target.value }))}
+                      className="w-full bg-background border border-primary/30 text-foreground font-mono px-3 py-2 text-sm focus:outline-none focus:border-primary"
+                    />
+                  </div>
+                </div>
+                <Button onClick={() => createCoupon()} disabled={isCreatingCoupon || !couponForm.code || !couponForm.discountValue} size="sm">
+                  {isCreatingCoupon ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
+                  Create Coupon
+                </Button>
+              </div>
+
+              {/* List */}
+              {isCouponsLoading ? (
+                <div className="p-8 flex justify-center"><Loader2 className="w-6 h-6 text-primary animate-spin" /></div>
+              ) : !couponsData?.coupons.length ? (
+                <div className="p-8 text-center font-mono text-muted-foreground text-sm">No coupon codes yet.</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full font-mono text-xs">
+                    <thead>
+                      <tr className="border-b border-primary/10 text-muted-foreground uppercase tracking-wider">
+                        <th className="text-left px-4 py-3">Code</th>
+                        <th className="text-left px-4 py-3">Discount</th>
+                        <th className="text-left px-4 py-3">Uses</th>
+                        <th className="text-left px-4 py-3">Expires</th>
+                        <th className="text-left px-4 py-3">Status</th>
+                        <th className="text-left px-4 py-3">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-primary/5">
+                      {couponsData.coupons.map((c: CouponEntry) => (
+                        <tr key={c.id} className="hover:bg-primary/5 transition-colors">
+                          <td className="px-4 py-3 font-bold text-primary tracking-widest">{c.code}</td>
+                          <td className="px-4 py-3 text-foreground">
+                            {c.discountType === 'percent' ? `${parseFloat(c.discountValue)}% off` : `$${parseFloat(c.discountValue).toFixed(2)} off`}
+                          </td>
+                          <td className="px-4 py-3 text-muted-foreground">
+                            {c.usedCount}{c.maxUses !== null ? ` / ${c.maxUses}` : ' / ∞'}
+                          </td>
+                          <td className="px-4 py-3 text-muted-foreground">
+                            {c.expiresAt ? new Date(c.expiresAt).toLocaleDateString() : '—'}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`px-2 py-0.5 border text-xs ${c.isActive ? 'border-green-500/30 text-green-400 bg-green-500/10' : 'border-red-500/30 text-red-400 bg-red-500/10'}`}>
+                              {c.isActive ? 'Active' : 'Disabled'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => toggleCoupon(c.id)}
+                                className="text-muted-foreground hover:text-primary transition-colors"
+                                title={c.isActive ? 'Disable' : 'Enable'}
+                              >
+                                {c.isActive ? <ToggleRight className="w-4 h-4 text-green-400" /> : <ToggleLeft className="w-4 h-4" />}
+                              </button>
+                              <button
+                                onClick={() => deleteCoupon(c.id)}
+                                className="text-muted-foreground hover:text-red-400 transition-colors"
+                                title="Delete"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </Card>
           </motion.div>
 

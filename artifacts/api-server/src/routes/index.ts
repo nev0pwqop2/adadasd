@@ -7,6 +7,7 @@ import adminRouter from "./admin.js";
 import bidsRouter from "./bids.js";
 import preordersRouter from "./preorders.js";
 import balanceRouter from "./balance.js";
+import couponsRouter from "./coupons.js";
 
 const router: IRouter = Router();
 
@@ -18,5 +19,6 @@ router.use("/admin", adminRouter);
 router.use("/bids", bidsRouter);
 router.use("/preorders", preordersRouter);
 router.use("/balance", balanceRouter);
+router.use("/coupons", couponsRouter);
 
 export default router;

@@ -1,7 +1,6 @@
 import { Router, Request, Response } from "express";
-import { db, paymentsTable, usersTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
-import { sql } from "drizzle-orm";
+import { db, paymentsTable, usersTable, couponsTable } from "@workspace/db";
+import { eq, and, sql } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { getSettings } from "../lib/settings.js";
 import { isLuarmorConfigured, createLuarmorUser } from "../lib/luarmor.js";
@@ -285,7 +284,7 @@ router.delete("/deposit/cancel", requireAuth, async (req: Request, res: Response
 
 // POST /api/balance/use — buy a slot using account balance
 router.post("/use", requireAuth, async (req: Request, res: Response) => {
-  const { slotNumber, hours } = req.body as { slotNumber?: number; hours?: number };
+  const { slotNumber, hours, couponId } = req.body as { slotNumber?: number; hours?: number; couponId?: number };
 
   if (slotNumber === undefined || slotNumber < 1) {
     res.status(400).json({ error: "invalid_slot" });
@@ -311,10 +310,40 @@ router.post("/use", requireAuth, async (req: Request, res: Response) => {
     const userId = req.session.userId!;
 
     const userRows = await db
-      .select({ balance: usersTable.balance, discordId: usersTable.discordId, username: usersTable.username })
+      .select({ balance: usersTable.balance, discordId: usersTable.discordId, username: usersTable.username, isBanned: usersTable.isBanned })
       .from(usersTable)
       .where(eq(usersTable.id, userId))
       .limit(1);
+
+    if (userRows[0]?.isBanned) {
+      res.status(403).json({ error: "banned", message: "Your account has been banned." });
+      return;
+    }
+
+    // Apply coupon discount if provided
+    if (couponId) {
+      const couponRows = await db
+        .select()
+        .from(couponsTable)
+        .where(and(eq(couponsTable.id, couponId), eq(couponsTable.isActive, true)))
+        .limit(1);
+
+      if (couponRows.length) {
+        const coupon = couponRows[0];
+        const now = new Date();
+        const notExpired = !coupon.expiresAt || coupon.expiresAt > now;
+        const notExhausted = coupon.maxUses === null || coupon.usedCount < coupon.maxUses;
+
+        if (notExpired && notExhausted) {
+          const discountValue = parseFloat(coupon.discountValue);
+          if (coupon.discountType === "percent") {
+            chargeAmount = parseFloat(Math.max(0, chargeAmount - chargeAmount * (discountValue / 100)).toFixed(2));
+          } else {
+            chargeAmount = parseFloat(Math.max(0, chargeAmount - discountValue).toFixed(2));
+          }
+        }
+      }
+    }
 
     const currentBalance = parseFloat(userRows[0]?.balance ?? "0");
 
@@ -404,6 +433,14 @@ router.post("/use", requireAuth, async (req: Request, res: Response) => {
       }
     } catch (webhookErr) {
       req.log.warn({ webhookErr }, "Balance purchase webhook failed");
+    }
+
+    // Increment coupon usedCount
+    if (couponId) {
+      await db.update(couponsTable)
+        .set({ usedCount: sql`${couponsTable.usedCount} + 1` })
+        .where(eq(couponsTable.id, couponId))
+        .catch(() => {});
     }
 
     res.json({ success: true, slotNumber, expiresAt: expiresAt.toISOString(), balance: (currentBalance - chargeAmount).toFixed(2) });

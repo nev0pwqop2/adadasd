@@ -1,9 +1,10 @@
 import { Router } from "express";
-import { db, slotsTable, usersTable, paymentsTable, preordersTable } from "@workspace/db";
+import { db, slotsTable, usersTable, paymentsTable, preordersTable, bidsTable, couponsTable } from "@workspace/db";
 import { eq, and, sql, inArray, lte, desc } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { getSettings } from "../lib/settings.js";
 import { isLuarmorConfigured, createLuarmorUser, deleteLuarmorUser, getLuarmorUsers, resetLuarmorHwid } from "../lib/luarmor.js";
+import { sendDiscordDM } from "../lib/discord.js";
 
 const router = Router();
 
@@ -109,6 +110,98 @@ router.post("/:id/reset-hwid", requireAuth, async (req, res) => {
   }
 });
 
+// POST /api/slots/gift — transfer your active slot to another Discord user
+router.post("/gift", requireAuth, async (req, res) => {
+  const { slotId, recipientDiscordId } = req.body as { slotId?: number; recipientDiscordId?: string };
+
+  if (!slotId || typeof slotId !== "number") {
+    res.status(400).json({ error: "invalid_slot", message: "slotId is required" });
+    return;
+  }
+  if (!recipientDiscordId || typeof recipientDiscordId !== "string") {
+    res.status(400).json({ error: "invalid_recipient", message: "recipientDiscordId is required" });
+    return;
+  }
+
+  const senderId = req.session.userId!;
+
+  try {
+    const slot = await db.select().from(slotsTable).where(eq(slotsTable.id, slotId)).limit(1);
+    if (!slot.length || slot[0].userId !== senderId || !slot[0].isActive) {
+      res.status(404).json({ error: "not_found", message: "Active slot not found or you do not own it" });
+      return;
+    }
+
+    const senderRow = await db.select({ discordId: usersTable.discordId }).from(usersTable).where(eq(usersTable.id, senderId)).limit(1);
+    if (senderRow.length && senderRow[0].discordId === recipientDiscordId.trim()) {
+      res.status(400).json({ error: "invalid_recipient", message: "You cannot gift a slot to yourself" });
+      return;
+    }
+
+    const recipient = await db.select().from(usersTable).where(eq(usersTable.discordId, recipientDiscordId.trim())).limit(1);
+    if (!recipient.length) {
+      res.status(404).json({ error: "recipient_not_found", message: "Recipient user not found. They must have logged in at least once." });
+      return;
+    }
+    if (recipient[0].isBanned) {
+      res.status(403).json({ error: "recipient_banned", message: "That user is banned and cannot receive slots" });
+      return;
+    }
+
+    const recipientId = recipient[0].id;
+    const slotNum = slot[0].slotNumber;
+    const expiresAt = slot[0].expiresAt;
+
+    // Remove Luarmor key from sender
+    if (isLuarmorConfigured() && slot[0].luarmorUserId) {
+      try { await deleteLuarmorUser(slot[0].luarmorUserId); } catch (_) {}
+    }
+
+    // Deactivate sender's slot
+    await db.update(slotsTable)
+      .set({ isActive: false, expiresAt: null, purchasedAt: null, luarmorUserId: null, label: null, notified24h: false, notified1h: false })
+      .where(eq(slotsTable.id, slotId));
+
+    // Create Luarmor key for recipient
+    let luarmorUserId: string | null = null;
+    if (isLuarmorConfigured()) {
+      try {
+        const lu = await createLuarmorUser(recipient[0].discordId, recipient[0].username, expiresAt ?? undefined);
+        luarmorUserId = lu.user_key;
+      } catch (_) {}
+    }
+
+    // Upsert recipient's slot row
+    const existingRecipientSlot = await db.select().from(slotsTable)
+      .where(and(eq(slotsTable.userId, recipientId), eq(slotsTable.slotNumber, slotNum)))
+      .limit(1);
+
+    if (existingRecipientSlot.length) {
+      await db.update(slotsTable)
+        .set({ isActive: true, purchasedAt: new Date(), expiresAt, luarmorUserId, label: "Gift", notified24h: false, notified1h: false })
+        .where(eq(slotsTable.id, existingRecipientSlot[0].id));
+    } else {
+      await db.insert(slotsTable).values({
+        userId: recipientId, slotNumber: slotNum, isActive: true,
+        purchasedAt: new Date(), expiresAt, luarmorUserId, label: "Gift",
+      });
+    }
+
+    // DM the recipient
+    if (expiresAt) {
+      const ts = Math.floor(expiresAt.getTime() / 1000);
+      await sendDiscordDM(recipient[0].discordId,
+        `🎁 **You've been gifted a slot!** — Someone gifted you an Exe Joiner slot. It expires <t:${ts}:R> (<t:${ts}:F>). Check your dashboard to get your script key!`
+      );
+    }
+
+    res.json({ success: true, message: `Slot gifted to ${recipient[0].username}` });
+  } catch (err) {
+    req.log.error({ err }, "Failed to gift slot");
+    res.status(500).json({ error: "server_error", message: "Failed to gift slot" });
+  }
+});
+
 router.get("/", requireAuth, async (req, res) => {
   try {
     const { slotCount, pricePerDay, slotDurationHours } = await getSettings();
@@ -178,6 +271,7 @@ router.get("/", requireAuth, async (req, res) => {
         .where(eq(preordersTable.status, "paid"))
         .orderBy(sql`CAST(${preordersTable.amount} AS NUMERIC) DESC`, preordersTable.createdAt);
 
+      let preordersAssigned = 0;
       if (paidPreorders.length > 0) {
         const toAssign = Math.min(freeSlotNums.length, paidPreorders.length);
         for (let i = 0; i < toAssign; i++) {
@@ -185,7 +279,6 @@ router.get("/", requireAuth, async (req, res) => {
           const slotNum = freeSlotNums[i];
           const expiresAt = new Date(now.getTime() + slotDurationHours * 60 * 60 * 1000);
 
-          // Create Luarmor key for this user
           let luarmorUserId: string | null = null;
           if (isLuarmorConfigured()) {
             try {
@@ -194,9 +287,7 @@ router.get("/", requireAuth, async (req, res) => {
                 const lu = await createLuarmorUser(preorderUser[0].discordId, preorderUser[0].username, expiresAt);
                 luarmorUserId = lu.user_key;
               }
-            } catch (e) {
-              // Non-fatal — slot still activates
-            }
+            } catch (e) {}
           }
 
           const existingRow = await db.select().from(slotsTable)
@@ -204,20 +295,84 @@ router.get("/", requireAuth, async (req, res) => {
             .limit(1);
           if (existingRow.length) {
             await db.update(slotsTable)
-              .set({ isActive: true, purchasedAt: now, expiresAt, label: null, luarmorUserId })
+              .set({ isActive: true, purchasedAt: now, expiresAt, label: null, luarmorUserId, notified24h: false, notified1h: false })
               .where(and(eq(slotsTable.userId, preorder.userId), eq(slotsTable.slotNumber, slotNum)));
           } else {
             await db.insert(slotsTable).values({ userId: preorder.userId, slotNumber: slotNum, isActive: true, purchasedAt: now, expiresAt, luarmorUserId });
           }
           await db.update(preordersTable).set({ status: "fulfilled" }).where(eq(preordersTable.id, preorder.id));
-        }
 
-        // Re-fetch active slots after assignment
-        allActiveSlots = await db
-          .select()
-          .from(slotsTable)
-          .where(and(eq(slotsTable.isActive, true), lte(slotsTable.slotNumber, slotCount)));
+          // DM the preorder user
+          try {
+            const preorderUser = await db.select({ discordId: usersTable.discordId, username: usersTable.username }).from(usersTable).where(eq(usersTable.id, preorder.userId)).limit(1);
+            if (preorderUser.length) {
+              const ts = Math.floor(expiresAt.getTime() / 1000);
+              await sendDiscordDM(preorderUser[0].discordId,
+                `✅ **Pre-order fulfilled!** — Hey ${preorderUser[0].username}, your Exe Joiner slot is now active! It expires <t:${ts}:R>. Check your dashboard to get your script key!`
+              );
+            }
+          } catch (_) {}
+
+          preordersAssigned++;
+        }
       }
+
+      // After preorders, assign remaining free slots to the highest balance-paid bids
+      const remainingFreeSlots = freeSlotNums.slice(preordersAssigned);
+      if (remainingFreeSlots.length > 0) {
+        const activeBids = await db.select().from(bidsTable)
+          .where(and(eq(bidsTable.status, "active"), eq(bidsTable.paidWithBalance, true)))
+          .orderBy(sql`CAST(${bidsTable.amount} AS NUMERIC) DESC`, bidsTable.createdAt);
+
+        const toAssignBids = Math.min(remainingFreeSlots.length, activeBids.length);
+        for (let i = 0; i < toAssignBids; i++) {
+          const bid = activeBids[i];
+          const slotNum = remainingFreeSlots[i];
+          const expiresAt = new Date(now.getTime() + slotDurationHours * 60 * 60 * 1000);
+
+          let luarmorUserId: string | null = null;
+          if (isLuarmorConfigured()) {
+            try {
+              const bidUser = await db.select().from(usersTable).where(eq(usersTable.id, bid.userId)).limit(1);
+              if (bidUser.length) {
+                const lu = await createLuarmorUser(bidUser[0].discordId, bidUser[0].username, expiresAt);
+                luarmorUserId = lu.user_key;
+              }
+            } catch (e) {}
+          }
+
+          const existingRow = await db.select().from(slotsTable)
+            .where(and(eq(slotsTable.userId, bid.userId), eq(slotsTable.slotNumber, slotNum)))
+            .limit(1);
+          if (existingRow.length) {
+            await db.update(slotsTable)
+              .set({ isActive: true, purchasedAt: now, expiresAt, label: null, luarmorUserId, notified24h: false, notified1h: false })
+              .where(and(eq(slotsTable.userId, bid.userId), eq(slotsTable.slotNumber, slotNum)));
+          } else {
+            await db.insert(slotsTable).values({ userId: bid.userId, slotNumber: slotNum, isActive: true, purchasedAt: now, expiresAt, luarmorUserId });
+          }
+
+          // Mark bid as won (money was already deducted when bid was placed)
+          await db.update(bidsTable).set({ status: "won", updatedAt: now }).where(eq(bidsTable.id, bid.id));
+
+          // DM the winning bidder
+          try {
+            const bidUser = await db.select({ discordId: usersTable.discordId, username: usersTable.username }).from(usersTable).where(eq(usersTable.id, bid.userId)).limit(1);
+            if (bidUser.length) {
+              const ts = Math.floor(expiresAt.getTime() / 1000);
+              await sendDiscordDM(bidUser[0].discordId,
+                `🏆 **Your bid won!** — Hey ${bidUser[0].username}, your Exe Joiner bid of $${parseFloat(bid.amount).toFixed(2)} won a slot! It expires <t:${ts}:R>. Check your dashboard to get your script key!`
+              );
+            }
+          } catch (_) {}
+        }
+      }
+
+      // Re-fetch active slots after all assignments
+      allActiveSlots = await db
+        .select()
+        .from(slotsTable)
+        .where(and(eq(slotsTable.isActive, true), lte(slotsTable.slotNumber, slotCount)));
     }
 
     // Get owners for active slots

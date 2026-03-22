@@ -1,5 +1,36 @@
 export type PurchaseType = "slot" | "balance_deposit" | "preorder";
 
+export async function sendDiscordDM(discordId: string, content: string): Promise<void> {
+  const botToken = process.env.DISCORD_BOT_TOKEN;
+  if (!botToken) return;
+
+  try {
+    const channelRes = await fetch("https://discord.com/api/v10/users/@me/channels", {
+      method: "POST",
+      headers: { Authorization: `Bot ${botToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ recipient_id: discordId }),
+    });
+    if (!channelRes.ok) {
+      const text = await channelRes.text().catch(() => "");
+      console.error(`[discord dm] failed to open channel ${channelRes.status}: ${text}`);
+      return;
+    }
+    const channel = (await channelRes.json()) as { id: string };
+
+    const msgRes = await fetch(`https://discord.com/api/v10/channels/${channel.id}/messages`, {
+      method: "POST",
+      headers: { Authorization: `Bot ${botToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ content }),
+    });
+    if (!msgRes.ok) {
+      const text = await msgRes.text().catch(() => "");
+      console.error(`[discord dm] failed to send message ${msgRes.status}: ${text}`);
+    }
+  } catch (err) {
+    console.error("[discord dm] fetch error:", err);
+  }
+}
+
 export async function sendPaymentWebhook(data: {
   username: string;
   discordId: string;

@@ -1,7 +1,8 @@
 import app from "./app";
 import { logger } from "./lib/logger";
-import { db } from "@workspace/db";
-import { sql } from "drizzle-orm";
+import { db, slotsTable, usersTable } from "@workspace/db";
+import { sql, eq, and, gt, lte } from "drizzle-orm";
+import { sendDiscordDM } from "./lib/discord.js";
 
 async function runMigrations() {
   try {
@@ -14,9 +15,78 @@ async function runMigrations() {
     await db.execute(sql`
       ALTER TABLE payments ADD COLUMN IF NOT EXISTS usd_amount TEXT
     `);
+    await db.execute(sql`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS is_banned BOOLEAN NOT NULL DEFAULT FALSE
+    `);
+    await db.execute(sql`
+      ALTER TABLE slots ADD COLUMN IF NOT EXISTS notified_24h BOOLEAN NOT NULL DEFAULT FALSE
+    `);
+    await db.execute(sql`
+      ALTER TABLE slots ADD COLUMN IF NOT EXISTS notified_1h BOOLEAN NOT NULL DEFAULT FALSE
+    `);
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS coupons (
+        id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+        code VARCHAR(32) NOT NULL UNIQUE,
+        discount_type TEXT NOT NULL,
+        discount_value NUMERIC(10,2) NOT NULL,
+        max_uses INTEGER,
+        used_count INTEGER NOT NULL DEFAULT 0,
+        expires_at TIMESTAMP,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT NOW() NOT NULL
+      )
+    `);
     logger.info("DB migrations applied");
   } catch (err) {
     logger.warn({ err }, "DB migration step skipped or failed");
+  }
+}
+
+async function runExpiryNotifications() {
+  const botToken = process.env.DISCORD_BOT_TOKEN;
+  if (!botToken) return;
+
+  try {
+    const now = new Date();
+    const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    const in25h = new Date(now.getTime() + 25 * 60 * 60 * 1000);
+    const in1h = new Date(now.getTime() + 60 * 60 * 1000);
+    const in2h = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+
+    const slots24h = await db
+      .select({ id: slotsTable.id, userId: slotsTable.userId, expiresAt: slotsTable.expiresAt })
+      .from(slotsTable)
+      .where(and(eq(slotsTable.isActive, true), eq(slotsTable.notified24h, false), gt(slotsTable.expiresAt, in24h), lte(slotsTable.expiresAt, in25h)));
+
+    for (const slot of slots24h) {
+      const userRows = await db.select({ discordId: usersTable.discordId, username: usersTable.username })
+        .from(usersTable).where(eq(usersTable.id, slot.userId)).limit(1);
+      if (!userRows.length) continue;
+      const ts = Math.floor(slot.expiresAt!.getTime() / 1000);
+      await sendDiscordDM(userRows[0].discordId,
+        `⏰ **Slot expiry reminder** — Hey ${userRows[0].username}, your Exe Joiner slot expires in **24 hours** (<t:${ts}:F>). Renew it before it's gone!`
+      );
+      await db.update(slotsTable).set({ notified24h: true }).where(eq(slotsTable.id, slot.id));
+    }
+
+    const slots1h = await db
+      .select({ id: slotsTable.id, userId: slotsTable.userId, expiresAt: slotsTable.expiresAt })
+      .from(slotsTable)
+      .where(and(eq(slotsTable.isActive, true), eq(slotsTable.notified1h, false), gt(slotsTable.expiresAt, in1h), lte(slotsTable.expiresAt, in2h)));
+
+    for (const slot of slots1h) {
+      const userRows = await db.select({ discordId: usersTable.discordId, username: usersTable.username })
+        .from(usersTable).where(eq(usersTable.id, slot.userId)).limit(1);
+      if (!userRows.length) continue;
+      const ts = Math.floor(slot.expiresAt!.getTime() / 1000);
+      await sendDiscordDM(userRows[0].discordId,
+        `🚨 **Slot expiring soon!** — Hey ${userRows[0].username}, your Exe Joiner slot expires in **1 hour** (<t:${ts}:F>). Act now to keep your access!`
+      );
+      await db.update(slotsTable).set({ notified1h: true }).where(eq(slotsTable.id, slot.id));
+    }
+  } catch (err) {
+    logger.warn({ err }, "Expiry notification job failed");
   }
 }
 
@@ -35,5 +105,7 @@ if (Number.isNaN(port) || port <= 0) {
 runMigrations().then(() => {
   app.listen(port, () => {
     logger.info({ port }, "Server listening");
+    setInterval(runExpiryNotifications, 5 * 60 * 1000);
+    setTimeout(runExpiryNotifications, 10_000);
   });
 });

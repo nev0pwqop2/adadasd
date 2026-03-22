@@ -1,8 +1,8 @@
 import { Router } from "express";
-import { db, slotsTable, usersTable, paymentsTable } from "@workspace/db";
-import { eq, sql, inArray, and, lte, isNotNull, desc } from "drizzle-orm";
-import { requireAdmin, isSuperAdmin, SUPER_ADMIN_DISCORD_ID } from "../middlewares/requireAdmin.js";
-import { getSettings, getSetting, setSetting } from "../lib/settings.js";
+import { db, slotsTable, usersTable, paymentsTable, couponsTable } from "@workspace/db";
+import { eq, sql, inArray, and, lte, desc } from "drizzle-orm";
+import { requireAdmin, isSuperAdmin } from "../middlewares/requireAdmin.js";
+import { getSettings, setSetting } from "../lib/settings.js";
 import { isLuarmorConfigured, createLuarmorUser, deleteLuarmorUser, getLuarmorUsers } from "../lib/luarmor.js";
 import { sendPaymentWebhook } from "../lib/discord.js";
 
@@ -95,6 +95,7 @@ router.get("/users", async (req, res) => {
         avatar: u.avatar,
         isAdmin: u.isAdmin || isSuperAdmin(u.discordId),
         isSuperAdmin: isSuperAdmin(u.discordId),
+        isBanned: u.isBanned,
         activeSlots: userSlots.filter((s) => s.isActive).length,
         totalSlots: slotCount,
         guilds: (u.guilds as any[] | null) ?? [],
@@ -510,6 +511,134 @@ router.get("/transactions", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to fetch admin transactions");
     res.status(500).json({ error: "server_error", message: "Failed to fetch transactions" });
+  }
+});
+
+// POST /admin/users/:discordId/ban — ban or unban a user
+router.post("/users/:discordId/ban", async (req, res) => {
+  try {
+    const { discordId } = req.params;
+    if (isSuperAdmin(discordId)) {
+      res.status(400).json({ error: "invalid_request", message: "Cannot ban the super admin" });
+      return;
+    }
+    const users = await db.select().from(usersTable).where(eq(usersTable.discordId, discordId)).limit(1);
+    if (!users.length) {
+      res.status(404).json({ error: "not_found", message: "User not found" });
+      return;
+    }
+    const newBanned = !users[0].isBanned;
+    await db.update(usersTable).set({ isBanned: newBanned, updatedAt: new Date() }).where(eq(usersTable.discordId, discordId));
+    req.log.info({ adminId: req.session.userId, targetDiscordId: discordId, isBanned: newBanned }, "User ban toggled");
+    res.json({ success: true, isBanned: newBanned, message: `${users[0].username} has been ${newBanned ? "banned" : "unbanned"}` });
+  } catch (err) {
+    req.log.error({ err }, "Failed to toggle ban");
+    res.status(500).json({ error: "server_error", message: "Failed to update ban status" });
+  }
+});
+
+// GET /admin/coupons — list all coupons
+router.get("/coupons", async (req, res) => {
+  try {
+    const coupons = await db.select().from(couponsTable).orderBy(desc(couponsTable.createdAt));
+    res.json({ coupons });
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch coupons");
+    res.status(500).json({ error: "server_error", message: "Failed to fetch coupons" });
+  }
+});
+
+// POST /admin/coupons — create a coupon
+router.post("/coupons", async (req, res) => {
+  try {
+    const { code, discountType, discountValue, maxUses, expiresAt } = req.body as {
+      code?: string;
+      discountType?: string;
+      discountValue?: number;
+      maxUses?: number | null;
+      expiresAt?: string | null;
+    };
+
+    if (!code || typeof code !== "string" || !code.trim()) {
+      res.status(400).json({ error: "invalid_code", message: "Code is required" });
+      return;
+    }
+    if (!discountType || !["percent", "fixed"].includes(discountType)) {
+      res.status(400).json({ error: "invalid_type", message: "discountType must be 'percent' or 'fixed'" });
+      return;
+    }
+    if (!discountValue || typeof discountValue !== "number" || discountValue <= 0) {
+      res.status(400).json({ error: "invalid_value", message: "discountValue must be a positive number" });
+      return;
+    }
+    if (discountType === "percent" && discountValue > 100) {
+      res.status(400).json({ error: "invalid_value", message: "Percent discount cannot exceed 100" });
+      return;
+    }
+
+    const normalizedCode = code.toUpperCase().trim();
+    const existing = await db.select().from(couponsTable).where(eq(couponsTable.code, normalizedCode)).limit(1);
+    if (existing.length) {
+      res.status(409).json({ error: "duplicate_code", message: "A coupon with that code already exists" });
+      return;
+    }
+
+    const [created] = await db.insert(couponsTable).values({
+      code: normalizedCode,
+      discountType,
+      discountValue: discountValue.toFixed(2),
+      maxUses: maxUses ?? null,
+      expiresAt: expiresAt ? new Date(expiresAt) : null,
+      isActive: true,
+    }).returning();
+
+    res.json({ success: true, coupon: created });
+  } catch (err) {
+    req.log.error({ err }, "Failed to create coupon");
+    res.status(500).json({ error: "server_error", message: "Failed to create coupon" });
+  }
+});
+
+// DELETE /admin/coupons/:id — delete a coupon
+router.delete("/coupons/:id", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) {
+      res.status(400).json({ error: "invalid_id", message: "Invalid coupon ID" });
+      return;
+    }
+    const existing = await db.select().from(couponsTable).where(eq(couponsTable.id, id)).limit(1);
+    if (!existing.length) {
+      res.status(404).json({ error: "not_found", message: "Coupon not found" });
+      return;
+    }
+    await db.delete(couponsTable).where(eq(couponsTable.id, id));
+    res.json({ success: true, message: "Coupon deleted" });
+  } catch (err) {
+    req.log.error({ err }, "Failed to delete coupon");
+    res.status(500).json({ error: "server_error", message: "Failed to delete coupon" });
+  }
+});
+
+// PATCH /admin/coupons/:id/toggle — enable or disable a coupon
+router.patch("/coupons/:id/toggle", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) {
+      res.status(400).json({ error: "invalid_id", message: "Invalid coupon ID" });
+      return;
+    }
+    const existing = await db.select().from(couponsTable).where(eq(couponsTable.id, id)).limit(1);
+    if (!existing.length) {
+      res.status(404).json({ error: "not_found", message: "Coupon not found" });
+      return;
+    }
+    const newActive = !existing[0].isActive;
+    await db.update(couponsTable).set({ isActive: newActive }).where(eq(couponsTable.id, id));
+    res.json({ success: true, isActive: newActive });
+  } catch (err) {
+    req.log.error({ err }, "Failed to toggle coupon");
+    res.status(500).json({ error: "server_error", message: "Failed to toggle coupon" });
   }
 });
 
