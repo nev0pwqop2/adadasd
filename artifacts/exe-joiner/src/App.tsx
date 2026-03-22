@@ -1,7 +1,8 @@
-import { Switch, Route, Router as WouterRouter } from "wouter";
+import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useGetMe } from "@workspace/api-client-react";
 import NotFound from "@/pages/not-found";
 
 import Landing from "@/pages/Landing";
@@ -17,12 +18,26 @@ const queryClient = new QueryClient({
   },
 });
 
+function AdminRoute() {
+  const [, setLocation] = useLocation();
+  const { data: user, isLoading } = useGetMe({ query: { retry: false } });
+
+  if (isLoading) return null;
+
+  if (!user?.isAdmin) {
+    setLocation("/");
+    return null;
+  }
+
+  return <Admin />;
+}
+
 function Router() {
   return (
     <Switch>
       <Route path="/" component={Landing} />
       <Route path="/dashboard" component={Dashboard} />
-      <Route path="/admin" component={Admin} />
+      <Route path="/admin" component={AdminRoute} />
       <Route component={NotFound} />
     </Switch>
   );
