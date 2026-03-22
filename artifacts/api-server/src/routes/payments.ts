@@ -305,34 +305,81 @@ router.post("/stripe-webhook", async (req: Request, res: Response) => {
     }
 
     if (event.type === "checkout.session.completed") {
-      const session = event.data.object as { metadata?: { userId?: string; slotNumber?: string; isPreorder?: string; type?: string; couponId?: string }; payment_status?: string };
+      const session = event.data.object as {
+        id: string;
+        metadata?: { userId?: string; slotNumber?: string; isPreorder?: string; type?: string; couponId?: string };
+        payment_status?: string;
+        amount_total?: number | null;
+      };
       const { userId, slotNumber, isPreorder, type, couponId: metaCouponId } = session.metadata || {};
+      const stripeSessionId = session.id;
 
       if (userId && session.payment_status === "paid") {
+
+        // Idempotency: skip if this session was already fully processed
+        const alreadyDone = await db.select({ id: paymentsTable.id })
+          .from(paymentsTable)
+          .where(and(eq(paymentsTable.stripeSessionId, stripeSessionId), eq(paymentsTable.status, "completed")))
+          .limit(1);
+        if (alreadyDone.length) {
+          req.log.info({ stripeSessionId }, "Stripe webhook: session already processed, skipping");
+          res.json({ success: true, message: "Already processed" });
+          return;
+        }
+
         if (type === "balance_deposit") {
-          // Balance deposit — credit the user's balance
+          // Find pending record — fall back to Stripe session amount if none found
           const pending = await db.select().from(paymentsTable)
             .where(and(eq(paymentsTable.userId, userId), eq(paymentsTable.method, "balance-deposit-stripe"), eq(paymentsTable.status, "pending")))
             .orderBy(paymentsTable.createdAt)
             .limit(1);
+
+          let depositAmount: number;
+          let paymentRecordId: string;
+
           if (pending.length) {
-            const depositAmount = parseFloat(pending[0].amount ?? "0");
-            await db.update(paymentsTable).set({ status: "completed", updatedAt: new Date() }).where(eq(paymentsTable.id, pending[0].id));
-            await db.update(usersTable)
-              .set({ balance: sql`${usersTable.balance} + ${depositAmount.toFixed(2)}::numeric`, updatedAt: new Date() })
-              .where(eq(usersTable.id, userId));
-            const userRows = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
-            if (userRows.length) {
-              await sendPaymentWebhook({
-                username: userRows[0].username,
-                discordId: userRows[0].discordId,
-                method: pending[0].method,
-                currency: "USD",
-                amount: pending[0].amount,
-                purchaseType: "balance_deposit",
-              });
+            depositAmount = parseFloat(pending[0].amount ?? "0");
+            paymentRecordId = pending[0].id;
+            await db.update(paymentsTable).set({ status: "completed", updatedAt: new Date() }).where(eq(paymentsTable.id, paymentRecordId));
+          } else {
+            // No pending record — create one from Stripe session data
+            depositAmount = session.amount_total ? session.amount_total / 100 : 0;
+            if (depositAmount <= 0) {
+              req.log.warn({ stripeSessionId, userId }, "Stripe webhook: balance deposit amount is 0, skipping");
+              res.json({ success: true });
+              return;
             }
+            paymentRecordId = crypto.randomUUID();
+            await db.insert(paymentsTable).values({
+              id: paymentRecordId,
+              userId,
+              slotNumber: 0,
+              method: "balance-deposit-stripe",
+              status: "completed",
+              amount: depositAmount.toFixed(2),
+              usdAmount: depositAmount.toFixed(2),
+              currency: "USD",
+              stripeSessionId,
+            });
+            req.log.warn({ stripeSessionId, userId, depositAmount }, "Stripe webhook: no pending record found, created from session data");
           }
+
+          await db.update(usersTable)
+            .set({ balance: sql`${usersTable.balance} + ${depositAmount.toFixed(2)}::numeric`, updatedAt: new Date() })
+            .where(eq(usersTable.id, userId));
+
+          const userRows = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+          if (userRows.length) {
+            await sendPaymentWebhook({
+              username: userRows[0].username,
+              discordId: userRows[0].discordId,
+              method: "balance-deposit-stripe",
+              currency: "USD",
+              amount: depositAmount.toFixed(2),
+              purchaseType: "balance_deposit",
+            });
+          }
+
         } else if (isPreorder === "true") {
           // Pre-order payment — mark payment completed + create preorder record
           const pending = await db.select().from(paymentsTable)
@@ -365,14 +412,38 @@ router.post("/stripe-webhook", async (req: Request, res: Response) => {
           const pending = await db.select().from(paymentsTable)
             .where(and(eq(paymentsTable.userId, userId), eq(paymentsTable.slotNumber, slotNum), eq(paymentsTable.status, "pending")))
             .limit(1);
+
           if (pending.length) {
             await activateSlot(userId, slotNum, pending[0].id, pending[0].derivationIndex ?? undefined);
-            // Increment coupon usage
             const couponIdToIncrement = pending[0].couponId ?? (metaCouponId ? parseInt(metaCouponId, 10) : null);
             if (couponIdToIncrement) {
               await db.update(couponsTable)
                 .set({ usedCount: sql`${couponsTable.usedCount} + 1` })
                 .where(eq(couponsTable.id, couponIdToIncrement))
+                .catch(() => {});
+            }
+          } else {
+            // No pending record — create one from Stripe session data and activate slot
+            const chargeAmount = session.amount_total ? session.amount_total / 100 : 0;
+            const paymentRecordId = crypto.randomUUID();
+            await db.insert(paymentsTable).values({
+              id: paymentRecordId,
+              userId,
+              slotNumber: slotNum,
+              method: "stripe",
+              status: "pending",
+              amount: chargeAmount.toFixed(2),
+              usdAmount: chargeAmount.toFixed(2),
+              currency: "USD",
+              stripeSessionId,
+              couponId: metaCouponId ? parseInt(metaCouponId, 10) : null,
+            });
+            req.log.warn({ stripeSessionId, userId, slotNum }, "Stripe webhook: no pending slot record found, created from session data");
+            await activateSlot(userId, slotNum, paymentRecordId, undefined);
+            if (metaCouponId) {
+              await db.update(couponsTable)
+                .set({ usedCount: sql`${couponsTable.usedCount} + 1` })
+                .where(eq(couponsTable.id, parseInt(metaCouponId, 10)))
                 .catch(() => {});
             }
           }
