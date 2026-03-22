@@ -6,7 +6,6 @@ import {
   SlashCommandBuilder,
   ChatInputCommandInteraction,
   Events,
-  PermissionFlagsBits,
 } from "discord.js";
 import pg from "pg";
 
@@ -34,7 +33,6 @@ const commands = [
   new SlashCommandBuilder()
     .setName("whitelist")
     .setDescription("Whitelist a user by granting them a slot for a set duration")
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addStringOption((opt) =>
       opt
         .setName("username")
