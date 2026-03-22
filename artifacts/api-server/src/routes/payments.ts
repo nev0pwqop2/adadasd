@@ -555,16 +555,19 @@ router.post("/create-crypto-session", requireAuth, async (req: Request, res: Res
 
 router.post("/nowpayments-ipn", async (req: Request, res: Response) => {
   const signature = req.headers["x-nowpayments-sig"] as string;
-  const rawBody = JSON.stringify(req.body);
+
+  // req.body is a raw Buffer here (express.raw middleware)
+  const rawBody = Buffer.isBuffer(req.body) ? req.body.toString("utf8") : JSON.stringify(req.body);
 
   if (!verifyNowPaymentsIpn(rawBody, signature)) {
-    req.log.warn("NOWPayments IPN signature verification failed");
+    req.log.warn({ signature, hasSecret: !!process.env.NOWPAYMENTS_IPN_SECRET }, "NOWPayments IPN signature verification failed");
     res.status(400).json({ error: "invalid_signature" });
     return;
   }
 
   try {
-    const { order_id, payment_status } = req.body as { order_id: string; payment_status: string };
+    const parsed = JSON.parse(rawBody) as { order_id: string; payment_status: string };
+    const { order_id, payment_status } = parsed;
 
     if (!isPaymentSuccessful(payment_status)) {
       res.json({ received: true });

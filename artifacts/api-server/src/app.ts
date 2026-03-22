@@ -42,6 +42,7 @@ app.use(cookieParser());
 app.use(sessionMiddleware);
 
 app.use("/api/payments/stripe-webhook", express.raw({ type: "application/json" }));
+app.use("/api/payments/nowpayments-ipn", express.raw({ type: "application/json" }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
