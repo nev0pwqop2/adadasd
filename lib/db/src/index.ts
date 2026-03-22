@@ -4,7 +4,8 @@ import * as schema from "./schema";
 
 const { Pool } = pg;
 
-const connectionString = "postgresql://postgres.rwflvsslkcpubiyveykk:barneyisadinosau@aws-1-us-east-1.pooler.supabase.com:5432/postgres";
+const connectionString = process.env.SUPABASE_DATABASE_URL;
+if (!connectionString) throw new Error("SUPABASE_DATABASE_URL environment variable is not set");
 
 
 export const pool = new Pool({ connectionString });
