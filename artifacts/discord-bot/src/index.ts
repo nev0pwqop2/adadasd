@@ -101,10 +101,18 @@ const commands = [
     .addIntegerOption((opt) =>
       opt
         .setName("hours")
-        .setDescription("How many hours to whitelist the user for")
-        .setRequired(true)
-        .setMinValue(1)
+        .setDescription("Hours to whitelist for (can combine with minutes)")
+        .setRequired(false)
+        .setMinValue(0)
         .setMaxValue(720)
+    )
+    .addIntegerOption((opt) =>
+      opt
+        .setName("minutes")
+        .setDescription("Extra minutes to whitelist for (can combine with hours)")
+        .setRequired(false)
+        .setMinValue(0)
+        .setMaxValue(59)
     )
     .addIntegerOption((opt) =>
       opt
@@ -177,8 +185,15 @@ async function handleWhitelist(interaction: ChatInputCommandInteraction) {
   await interaction.deferReply({ ephemeral: true });
 
   const username = interaction.options.getString("username", true).replace(/^@+/, "");
-  const hours = interaction.options.getInteger("hours", true);
+  const hours = interaction.options.getInteger("hours") ?? 0;
+  const minutes = interaction.options.getInteger("minutes") ?? 0;
   const preferredSlot = interaction.options.getInteger("slot") ?? undefined;
+
+  const totalMs = (hours * 60 + minutes) * 60 * 1000;
+  if (totalMs <= 0) {
+    await interaction.editReply("❌ You must specify at least 1 minute (use the `hours` and/or `minutes` options).");
+    return;
+  }
 
   // Try case-insensitive name match first, then fall back to Discord ID
   const isSnowflake = /^\d{15,20}$/.test(username);
@@ -203,7 +218,7 @@ async function handleWhitelist(interaction: ChatInputCommandInteraction) {
     return;
   }
 
-  const expiresAt = new Date(Date.now() + hours * 60 * 60 * 1000);
+  const expiresAt = new Date(Date.now() + totalMs);
   const purchasedAt = new Date();
 
   // Create or update Luarmor user if configured
@@ -239,10 +254,14 @@ async function handleWhitelist(interaction: ChatInputCommandInteraction) {
   const unixExpiry = Math.floor(expiresAt.getTime() / 1000);
   const luarmorNote = luarmorUserId ? ` · Luarmor key issued` : luarmorConfigured() ? ` · ⚠️ Luarmor key failed` : "";
 
-  console.log(`[WHITELIST] ${interaction.user.username} whitelisted "${username}" on slot #${slotNumber} for ${hours}h`);
+  const durationLabel = hours > 0 && minutes > 0
+    ? `${hours}h ${minutes}m`
+    : hours > 0 ? `${hours}h` : `${minutes}m`;
+
+  console.log(`[WHITELIST] ${interaction.user.username} whitelisted "${username}" on slot #${slotNumber} for ${durationLabel}`);
 
   await interaction.editReply(
-    `✅ **${username}** has been whitelisted on **Slot #${slotNumber}** for **${hours} hour(s)**.\nExpires: <t:${unixExpiry}:F> (<t:${unixExpiry}:R>)${luarmorNote}`
+    `✅ **${username}** has been whitelisted on **Slot #${slotNumber}** for **${durationLabel}**.\nExpires: <t:${unixExpiry}:F> (<t:${unixExpiry}:R>)${luarmorNote}`
   );
 }
 
