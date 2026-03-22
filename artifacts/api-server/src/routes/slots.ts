@@ -157,10 +157,10 @@ router.post("/gift", requireAuth, async (req, res) => {
       try { await deleteLuarmorUser(slot[0].luarmorUserId); } catch (_) {}
     }
 
-    // Deactivate sender's slot
+    // Deactivate ALL of sender's rows for this slot number (handles any duplicate rows)
     await db.update(slotsTable)
       .set({ isActive: false, expiresAt: null, purchasedAt: null, luarmorUserId: null, label: null, notified24h: false, notified1h: false })
-      .where(eq(slotsTable.id, slotId));
+      .where(and(eq(slotsTable.userId, senderId), eq(slotsTable.slotNumber, slotNum)));
 
     // Create Luarmor key for recipient
     let luarmorUserId: string | null = null;

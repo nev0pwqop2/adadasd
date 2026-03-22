@@ -37,6 +37,26 @@ async function runMigrations() {
         created_at TIMESTAMP DEFAULT NOW() NOT NULL
       )
     `);
+    // Deduplicate slots: keep the active row (or latest by id) per (user_id, slot_number)
+    await db.execute(sql`
+      DELETE FROM slots
+      WHERE id NOT IN (
+        SELECT DISTINCT ON (user_id, slot_number) id
+        FROM slots
+        ORDER BY user_id, slot_number, is_active DESC, id DESC
+      )
+    `);
+    // Add unique constraint so duplicates can never form again
+    await db.execute(sql`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'slots_user_slot_unique'
+        ) THEN
+          ALTER TABLE slots ADD CONSTRAINT slots_user_slot_unique UNIQUE (user_id, slot_number);
+        END IF;
+      END$$
+    `);
     logger.info("DB migrations applied");
   } catch (err) {
     logger.warn({ err }, "DB migration step skipped or failed");
