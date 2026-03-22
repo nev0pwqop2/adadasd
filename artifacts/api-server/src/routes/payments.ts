@@ -431,7 +431,7 @@ router.post("/stripe-webhook", async (req: Request, res: Response) => {
               userId,
               slotNumber: slotNum,
               method: "stripe",
-              status: "pending",
+              status: "completed",
               amount: chargeAmount.toFixed(2),
               usdAmount: chargeAmount.toFixed(2),
               currency: "USD",
