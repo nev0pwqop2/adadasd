@@ -66,11 +66,11 @@ export function ManageSlotModal({ slot, onClose, onSuccess }: ManageSlotModalPro
     if (!slot?.id || !giftDiscordId.trim()) return;
     setIsGifting(true);
     try {
-      const res = await fetch(`${import.meta.env.BASE_URL}api/slots/${slot.id}/gift`, {
+      const res = await fetch(`${import.meta.env.BASE_URL}api/slots/gift`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ recipientDiscordId: giftDiscordId.trim() }),
+        body: JSON.stringify({ slotId: slot.id, recipientDiscordId: giftDiscordId.trim() }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.message || 'Failed to gift slot');
