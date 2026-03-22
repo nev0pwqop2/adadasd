@@ -21,7 +21,7 @@ interface PreorderModalProps {
 const CRYPTO_OPTIONS = [
   { id: 'BTC', label: 'Bitcoin' },
   { id: 'LTC', label: 'Litecoin' },
-  { id: 'USDT', label: 'Tether' },
+  { id: 'USDT', label: 'USDT' },
 ];
 
 type Step = 'choose' | 'crypto_address' | 'loading';
@@ -329,7 +329,7 @@ export function PreorderModal({
                     </div>
                     <div>
                       <p className="font-semibold text-sm text-foreground">Pay with Crypto</p>
-                      <p className="text-xs text-muted-foreground font-mono">Bitcoin, Litecoin, Tether (TRC20)</p>
+                      <p className="text-xs text-muted-foreground font-mono">Bitcoin, Litecoin, USDT (TRC20)</p>
                     </div>
                   </div>
                   <div className="flex gap-2 mb-3">

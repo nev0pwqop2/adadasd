@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { QRCodeSVG } from 'qrcode.react';
-import { X, CreditCard, Bitcoin, Loader2, CheckCircle, Copy, Plus, Minus, Wallet, Tag, Check } from 'lucide-react';
+import { X, CreditCard, Bitcoin, Loader2, CheckCircle, Copy, Plus, Minus, Wallet, Tag, Check, MessageSquare } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
 import { cn } from '@/lib/utils';
@@ -26,7 +26,7 @@ interface PaymentModalProps {
   onSuccess: () => void;
 }
 
-type Tab = 'crypto' | 'stripe' | 'balance';
+type Tab = 'crypto' | 'stripe' | 'balance' | 'paypal';
 
 export function PaymentModal({
   isOpen,
@@ -345,6 +345,15 @@ export function PaymentModal({
                 >
                   <CreditCard className="w-4 h-4" /> Card
                 </button>
+                <button
+                  onClick={() => setTab('paypal')}
+                  className={cn(
+                    "flex-1 py-2 text-sm font-mono uppercase tracking-wider transition-colors chamfered flex items-center justify-center gap-2",
+                    tab === 'paypal' ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <MessageSquare className="w-4 h-4" /> PayPal
+                </button>
               </div>
 
               {tab === 'stripe' && (
@@ -378,7 +387,7 @@ export function PaymentModal({
                               : "border-primary/20 bg-transparent text-muted-foreground hover:border-primary/50"
                           )}
                         >
-                          {c === 'BTC' ? 'Bitcoin' : c === 'LTC' ? 'Litecoin' : c === 'USDT' ? 'Tether' : c === 'ETH' ? 'Ethereum' : c === 'SOL' ? 'Solana' : c}
+                          {c === 'BTC' ? 'Bitcoin' : c === 'LTC' ? 'Litecoin' : c === 'USDT' ? 'USDT' : c === 'ETH' ? 'Ethereum' : c === 'SOL' ? 'Solana' : c}
                         </button>
                       ))}
                     </div>
@@ -476,6 +485,26 @@ export function PaymentModal({
                   >
                     {isBalanceLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Wallet className="w-4 h-4 mr-2" /> Pay with Balance</>}
                   </Button>
+                </div>
+              )}
+
+              {tab === 'paypal' && (
+                <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
+                  <div className="flex flex-col items-center justify-center gap-3 py-8 text-center bg-secondary/30 border border-primary/20 chamfered">
+                    <MessageSquare className="w-10 h-10 text-primary opacity-80" />
+                    <div className="space-y-1">
+                      <p className="font-mono text-sm font-bold text-foreground">Pay with PayPal</p>
+                      <p className="font-mono text-xs text-muted-foreground">For PayPal payments, open a ticket in our Discord and a staff member will assist you.</p>
+                    </div>
+                    <a
+                      href="https://discord.gg/PLACEHOLDER"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-2 inline-flex items-center gap-2 px-5 py-2.5 bg-[#5865F2] hover:bg-[#4752C4] text-white font-mono text-xs font-bold uppercase tracking-wider transition-colors chamfered-btn"
+                    >
+                      <MessageSquare className="w-4 h-4" /> Join Discord
+                    </a>
+                  </div>
                 </div>
               )}
             </div>
