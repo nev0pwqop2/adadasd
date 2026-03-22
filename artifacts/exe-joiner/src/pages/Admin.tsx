@@ -46,6 +46,27 @@ export default function Admin() {
     },
   });
 
+  const [editingBalance, setEditingBalance] = useState<string | null>(null);
+  const [balanceAmount, setBalanceAmount] = useState<string>('');
+  const { mutate: addBalance, isPending: isAddingBalance } = useMutation({
+    mutationFn: async ({ discordId, amount }: { discordId: string; amount: number }) => {
+      const res = await fetch(`${import.meta.env.BASE_URL}api/admin/users/${discordId}/add-balance`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount }),
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.message || 'Failed'); }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "Balance updated", description: data.message, className: "bg-primary text-primary-foreground" });
+      setEditingBalance(null);
+      setBalanceAmount('');
+      refetchUsers();
+    },
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
   const [togglingBan, setTogglingBan] = useState<string | null>(null);
   const { mutate: toggleBan } = useMutation({
     mutationFn: async (discordId: string) => {
@@ -581,6 +602,41 @@ export default function Admin() {
                         ) : (
                           <Button size="sm" variant="outline" onClick={() => { setEditingUser(u.discordId); setUserSlotCount(String(u.activeSlots)); }} className="border-primary/20 text-muted-foreground hover:text-primary font-mono text-xs">
                             Edit Slots
+                          </Button>
+                        )}
+
+                        {editingBalance === u.discordId ? (
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={balanceAmount}
+                              onChange={e => setBalanceAmount(e.target.value)}
+                              placeholder="e.g. 10 or -5"
+                              className="w-28 bg-background border border-green-500/50 text-foreground font-mono px-3 py-1.5 text-sm focus:outline-none focus:border-green-500"
+                              autoFocus
+                            />
+                            <Button
+                              size="sm"
+                              onClick={() => addBalance({ discordId: u.discordId, amount: parseFloat(balanceAmount) })}
+                              disabled={isAddingBalance || !balanceAmount}
+                              className="bg-green-600 hover:bg-green-700 text-white border-none"
+                            >
+                              {isAddingBalance ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Apply'}
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => { setEditingBalance(null); setBalanceAmount(''); }} className="border-primary/20">
+                              Cancel
+                            </Button>
+                          </div>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => { setEditingBalance(u.discordId); setBalanceAmount(''); }}
+                            className="border-green-500/40 text-green-400 hover:bg-green-500/10 font-mono text-xs"
+                          >
+                            <Plus className="w-3 h-3 mr-1" />
+                            Balance ${parseFloat(u.balance ?? '0').toFixed(2)}
                           </Button>
                         )}
                       </div>

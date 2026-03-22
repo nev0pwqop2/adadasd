@@ -99,6 +99,7 @@ router.get("/users", async (req, res) => {
         activeSlots: userSlots.filter((s) => s.isActive).length,
         totalSlots: slotCount,
         guilds: (u.guilds as any[] | null) ?? [],
+        balance: u.balance ?? "0.00",
       };
     });
 
@@ -106,6 +107,37 @@ router.get("/users", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to get admin users");
     res.status(500).json({ error: "server_error", message: "Failed to get users" });
+  }
+});
+
+router.post("/users/:discordId/add-balance", async (req, res) => {
+  try {
+    const { discordId } = req.params;
+    const { amount } = req.body as { amount?: number };
+
+    if (amount === undefined || isNaN(amount)) {
+      res.status(400).json({ error: "invalid_amount", message: "Amount is required" });
+      return;
+    }
+
+    const users = await db.select().from(usersTable).where(eq(usersTable.discordId, discordId)).limit(1);
+    if (!users.length) {
+      res.status(404).json({ error: "not_found", message: "User not found" });
+      return;
+    }
+
+    const currentBalance = parseFloat(users[0].balance ?? "0");
+    const newBalance = Math.max(0, currentBalance + amount).toFixed(2);
+
+    await db.update(usersTable)
+      .set({ balance: newBalance, updatedAt: new Date() })
+      .where(eq(usersTable.discordId, discordId));
+
+    req.log.info({ adminId: req.session.userId, targetDiscordId: discordId, amount, newBalance }, "Admin adjusted user balance");
+    res.json({ success: true, newBalance, message: `Balance updated to $${newBalance} for ${users[0].username}` });
+  } catch (err) {
+    req.log.error({ err }, "Failed to adjust user balance");
+    res.status(500).json({ error: "server_error", message: "Failed to update balance" });
   }
 });
 
