@@ -72,18 +72,21 @@ async function createNowPaymentsPayment(
   orderId: string,
   usdAmount: number,
   currency: string,
-  ipnCallbackUrl: string
+  ipnCallbackUrl?: string
 ): Promise<{ payment_id: string; pay_address: string; pay_amount: number; pay_currency: string }> {
+  const body: Record<string, unknown> = {
+    price_amount: usdAmount,
+    price_currency: "usd",
+    pay_currency: NOWPAYMENTS_CURRENCY_MAP[currency],
+    order_id: orderId,
+    order_description: `Exe Joiner slot activation`,
+  };
+  if (ipnCallbackUrl) {
+    body.ipn_callback_url = ipnCallbackUrl;
+  }
   return nowpaymentsRequest("/payment", {
     method: "POST",
-    body: JSON.stringify({
-      price_amount: usdAmount,
-      price_currency: "usd",
-      pay_currency: NOWPAYMENTS_CURRENCY_MAP[currency],
-      ipn_callback_url: ipnCallbackUrl,
-      order_id: orderId,
-      order_description: `Exe Joiner slot activation`,
-    }),
+    body: JSON.stringify(body),
   }) as Promise<{ payment_id: string; pay_address: string; pay_amount: number; pay_currency: string }>;
 }
 
@@ -512,10 +515,16 @@ router.post("/create-crypto-session", requireAuth, async (req: Request, res: Res
   try {
     const paymentId = crypto.randomUUID();
 
+    // Build the IPN callback URL — only use it if we have a real public HTTPS base URL.
+    // On Render, set BASE_URL to your service URL (e.g. https://yourapp.onrender.com).
+    // If no valid URL can be determined we omit the callback so NOWPayments doesn't
+    // reject the request because of an unreachable localhost address.
     const baseUrl = process.env.REPLIT_DEV_DOMAIN
       ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-      : process.env.BASE_URL || "http://localhost:80";
-    const ipnCallbackUrl = `${baseUrl}/api/payments/nowpayments-ipn`;
+      : process.env.BASE_URL?.startsWith("https://")
+        ? process.env.BASE_URL
+        : null;
+    const ipnCallbackUrl = baseUrl ? `${baseUrl}/api/payments/nowpayments-ipn` : undefined;
 
     const minUsd = await getNowPaymentsMinAmount(currency);
     if (minUsd > 0 && chargeAmount < minUsd) {
@@ -555,8 +564,9 @@ router.post("/create-crypto-session", requireAuth, async (req: Request, res: Res
       expiresAt: expiresAt.toISOString(),
     });
   } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
     req.log.error({ err }, "Crypto session creation failed");
-    res.status(500).json({ error: "server_error", message: "Failed to create crypto payment" });
+    res.status(500).json({ error: "server_error", message: `Failed to create crypto payment: ${detail}` });
   }
 });
 

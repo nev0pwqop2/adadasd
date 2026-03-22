@@ -217,18 +217,22 @@ router.post("/create-crypto", requireAuth, async (req: Request, res: Response) =
     const paymentId = crypto.randomUUID();
     const baseUrl = process.env.REPLIT_DEV_DOMAIN
       ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-      : process.env.BASE_URL || "http://localhost:80";
+      : process.env.BASE_URL?.startsWith("https://")
+        ? process.env.BASE_URL
+        : null;
+
+    const nowBody: Record<string, unknown> = {
+      price_amount: priceAmount,
+      price_currency: "usd",
+      pay_currency: NOWPAYMENTS_CURRENCY_MAP[currency],
+      order_id: paymentId,
+      order_description: `Exe Joiner pre-order`,
+    };
+    if (baseUrl) nowBody.ipn_callback_url = `${baseUrl}/api/payments/nowpayments-ipn`;
 
     const nowPayment = await nowpaymentsRequest("/payment", {
       method: "POST",
-      body: JSON.stringify({
-        price_amount: priceAmount,
-        price_currency: "usd",
-        pay_currency: NOWPAYMENTS_CURRENCY_MAP[currency],
-        ipn_callback_url: `${baseUrl}/api/payments/nowpayments-ipn`,
-        order_id: paymentId,
-        order_description: `Exe Joiner pre-order`,
-      }),
+      body: JSON.stringify(nowBody),
     }) as { payment_id: string; pay_address: string; pay_amount: number };
 
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000);

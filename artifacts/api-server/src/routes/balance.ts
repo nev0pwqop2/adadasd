@@ -140,8 +140,10 @@ router.post("/deposit/crypto", requireAuth, async (req: Request, res: Response) 
     const paymentId = crypto.randomUUID();
     const baseUrl = process.env.REPLIT_DEV_DOMAIN
       ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-      : process.env.BASE_URL || "http://localhost:80";
-    const ipnCallbackUrl = `${baseUrl}/api/payments/nowpayments-ipn`;
+      : process.env.BASE_URL?.startsWith("https://")
+        ? process.env.BASE_URL
+        : null;
+    const ipnCallbackUrl = baseUrl ? `${baseUrl}/api/payments/nowpayments-ipn` : undefined;
     const nowCurrency = NOWPAYMENTS_CURRENCY_MAP[currency];
 
     let minAmount = 2;
@@ -156,15 +158,17 @@ router.post("/deposit/crypto", requireAuth, async (req: Request, res: Response) 
       return;
     }
 
+    const nowBody: Record<string, unknown> = {
+      price_amount: amount,
+      price_currency: "usd",
+      pay_currency: nowCurrency,
+      order_id: paymentId,
+    };
+    if (ipnCallbackUrl) nowBody.ipn_callback_url = ipnCallbackUrl;
+
     const nowPayment = await nowpaymentsRequest("/payment", {
       method: "POST",
-      body: JSON.stringify({
-        price_amount: amount,
-        price_currency: "usd",
-        pay_currency: nowCurrency,
-        order_id: paymentId,
-        ipn_callback_url: ipnCallbackUrl,
-      }),
+      body: JSON.stringify(nowBody),
     }) as { pay_address: string; pay_amount: number; pay_currency: string };
 
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
@@ -190,8 +194,9 @@ router.post("/deposit/crypto", requireAuth, async (req: Request, res: Response) 
       expiresAt: expiresAt.toISOString(),
     });
   } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
     req.log.error({ err }, "Balance crypto deposit failed");
-    res.status(500).json({ error: "server_error", message: "Failed to create crypto payment" });
+    res.status(500).json({ error: "server_error", message: `Failed to create crypto payment: ${detail}` });
   }
 });
 
