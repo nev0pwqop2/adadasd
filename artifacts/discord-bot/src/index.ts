@@ -15,6 +15,8 @@ const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
 const DISCORD_APPLICATION_ID = process.env.DISCORD_APPLICATION_ID;
 const DISCORD_GUILD_ID = process.env.DISCORD_GUILD_ID;
 const NEON_DATABASE_URL = process.env.NEON_DATABASE_URL;
+const LUARMOR_API_KEY = process.env.LUARMOR_API_KEY;
+const LUARMOR_PROJECT_ID = process.env.LUARMOR_PROJECT_ID;
 
 const ALLOWED_USER_IDS = new Set(["1279091875378368595", "905033435817586749", "1435005690824622090"]);
 
@@ -26,6 +28,65 @@ if (!DISCORD_BOT_TOKEN || !DISCORD_APPLICATION_ID || !NEON_DATABASE_URL) {
 const db = new PgClient({ connectionString: NEON_DATABASE_URL });
 await db.connect();
 console.log("Connected to database");
+
+// ---------------------------------------------------------------------------
+// Luarmor helpers (only active when LUARMOR_API_KEY + LUARMOR_PROJECT_ID set)
+// ---------------------------------------------------------------------------
+
+function luarmorConfigured(): boolean {
+  return !!(LUARMOR_API_KEY && LUARMOR_PROJECT_ID);
+}
+
+async function luarmorRequest(path: string, options: RequestInit = {}): Promise<unknown> {
+  if (!LUARMOR_API_KEY || !LUARMOR_PROJECT_ID) throw new Error("Luarmor not configured");
+  const res = await fetch(`https://api.luarmor.net/v3${path}`, {
+    ...options,
+    headers: {
+      Authorization: LUARMOR_API_KEY,
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Luarmor ${res.status}: ${text}`);
+  }
+  return res.json();
+}
+
+async function luarmorCreateOrUpdateUser(discordId: string, username: string, expiresAt: Date): Promise<string> {
+  const authExpire = Math.floor(expiresAt.getTime() / 1000);
+  try {
+    const data = await luarmorRequest(`/projects/${LUARMOR_PROJECT_ID}/users`, {
+      method: "POST",
+      body: JSON.stringify({ discord_id: discordId, note: username, auth_expire: authExpire }),
+    }) as { user_key: string };
+    return data.user_key;
+  } catch {
+    // User may already exist — find and update them
+    const list = await luarmorRequest(`/projects/${LUARMOR_PROJECT_ID}/users`) as { users: { user_key: string; discord_id: string }[] };
+    const existing = list.users?.find((u) => u.discord_id === discordId);
+    if (existing) {
+      await luarmorRequest(`/projects/${LUARMOR_PROJECT_ID}/users`, {
+        method: "PATCH",
+        body: JSON.stringify({ user_key: existing.user_key, auth_expire: authExpire, note: username }),
+      });
+      return existing.user_key;
+    }
+    throw new Error("Could not create or find Luarmor user");
+  }
+}
+
+async function luarmorDeleteUser(userKey: string): Promise<void> {
+  await luarmorRequest(
+    `/projects/${LUARMOR_PROJECT_ID}/users?user_key=${encodeURIComponent(userKey)}`,
+    { method: "DELETE" }
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Commands
+// ---------------------------------------------------------------------------
 
 const commands = [
   new SlashCommandBuilder()
@@ -141,6 +202,17 @@ async function handleWhitelist(interaction: ChatInputCommandInteraction) {
   const expiresAt = new Date(Date.now() + hours * 60 * 60 * 1000);
   const purchasedAt = new Date();
 
+  // Create or update Luarmor user if configured
+  let luarmorUserId: string | null = null;
+  if (luarmorConfigured()) {
+    try {
+      luarmorUserId = await luarmorCreateOrUpdateUser(user.discord_id, username, expiresAt);
+      console.log(`[WHITELIST] Luarmor user created/updated: ${luarmorUserId}`);
+    } catch (err) {
+      console.error("[WHITELIST] Luarmor error (continuing anyway):", err);
+    }
+  }
+
   const existingSlot = await db.query(
     `SELECT id FROM slots WHERE user_id = $1 AND slot_number = $2 LIMIT 1`,
     [user.id, slotNumber]
@@ -148,22 +220,25 @@ async function handleWhitelist(interaction: ChatInputCommandInteraction) {
 
   if (existingSlot.rows.length > 0) {
     await db.query(
-      `UPDATE slots SET is_active = true, purchased_at = $1, expires_at = $2 WHERE user_id = $3 AND slot_number = $4`,
-      [purchasedAt, expiresAt, user.id, slotNumber]
+      `UPDATE slots SET is_active = true, purchased_at = $1, expires_at = $2, luarmor_user_id = $3
+       WHERE user_id = $4 AND slot_number = $5`,
+      [purchasedAt, expiresAt, luarmorUserId, user.id, slotNumber]
     );
   } else {
     await db.query(
-      `INSERT INTO slots (user_id, slot_number, is_active, purchased_at, expires_at) VALUES ($1, $2, true, $3, $4)`,
-      [user.id, slotNumber, purchasedAt, expiresAt]
+      `INSERT INTO slots (user_id, slot_number, is_active, purchased_at, expires_at, luarmor_user_id)
+       VALUES ($1, $2, true, $3, $4, $5)`,
+      [user.id, slotNumber, purchasedAt, expiresAt, luarmorUserId]
     );
   }
 
   const unixExpiry = Math.floor(expiresAt.getTime() / 1000);
+  const luarmorNote = luarmorUserId ? ` · Luarmor key issued` : luarmorConfigured() ? ` · ⚠️ Luarmor key failed` : "";
 
   console.log(`[WHITELIST] ${interaction.user.username} whitelisted "${username}" on slot #${slotNumber} for ${hours}h`);
 
   await interaction.editReply(
-    `✅ **${username}** has been whitelisted on **Slot #${slotNumber}** for **${hours} hour(s)**.\nExpires: <t:${unixExpiry}:F> (<t:${unixExpiry}:R>)`
+    `✅ **${username}** has been whitelisted on **Slot #${slotNumber}** for **${hours} hour(s)**.\nExpires: <t:${unixExpiry}:F> (<t:${unixExpiry}:R>)${luarmorNote}`
   );
 }
 
@@ -186,33 +261,76 @@ async function handleUnwhitelist(interaction: ChatInputCommandInteraction) {
 
   const user = userRes.rows[0];
 
+  // Fetch the active slot(s) first so we can grab luarmor_user_id before clearing it
+  let slotsToDeactivate: { slot_number: number; luarmor_user_id: string | null }[] = [];
   if (preferredSlot) {
     const res = await db.query(
-      `UPDATE slots SET is_active = false, purchased_at = NULL, expires_at = NULL
-       WHERE user_id = $1 AND slot_number = $2 AND is_active = true`,
+      `SELECT slot_number, luarmor_user_id FROM slots WHERE user_id = $1 AND slot_number = $2 AND is_active = true`,
       [user.id, preferredSlot]
     );
-    if (res.rowCount === 0) {
+    if (res.rows.length === 0) {
       await interaction.editReply(`❌ Slot #${preferredSlot} is not active for **${username}**.`);
       return;
     }
-    await interaction.editReply(`✅ **${username}**'s Slot #${preferredSlot} has been deactivated.`);
+    slotsToDeactivate = res.rows;
   } else {
     const res = await db.query(
-      `UPDATE slots SET is_active = false, purchased_at = NULL, expires_at = NULL
-       WHERE user_id = $1 AND is_active = true`,
+      `SELECT slot_number, luarmor_user_id FROM slots WHERE user_id = $1 AND is_active = true`,
       [user.id]
     );
-    const count = res.rowCount ?? 0;
-    if (count === 0) {
+    if (res.rows.length === 0) {
       await interaction.editReply(`❌ **${username}** has no active slots.`);
       return;
     }
-    await interaction.editReply(`✅ Removed **${count}** active slot(s) from **${username}**.`);
+    slotsToDeactivate = res.rows;
   }
 
-  console.log(`[UNWHITELIST] ${interaction.user.username} unwhitelisted "${username}"${preferredSlot ? ` slot #${preferredSlot}` : " (all slots)"}`);
+  // Deactivate in DB
+  if (preferredSlot) {
+    await db.query(
+      `UPDATE slots SET is_active = false, purchased_at = NULL, expires_at = NULL, luarmor_user_id = NULL
+       WHERE user_id = $1 AND slot_number = $2`,
+      [user.id, preferredSlot]
+    );
+  } else {
+    await db.query(
+      `UPDATE slots SET is_active = false, purchased_at = NULL, expires_at = NULL, luarmor_user_id = NULL
+       WHERE user_id = $1`,
+      [user.id]
+    );
+  }
+
+  // Revoke Luarmor keys for any slots that had one
+  if (luarmorConfigured()) {
+    const keysToRevoke = slotsToDeactivate
+      .map((s) => s.luarmor_user_id)
+      .filter((k): k is string => !!k);
+
+    // Deduplicate — a user might have the same key across multiple slots
+    const uniqueKeys = [...new Set(keysToRevoke)];
+    for (const key of uniqueKeys) {
+      try {
+        await luarmorDeleteUser(key);
+        console.log(`[UNWHITELIST] Luarmor key revoked: ${key}`);
+      } catch (err) {
+        console.error(`[UNWHITELIST] Failed to revoke Luarmor key ${key}:`, err);
+      }
+    }
+  }
+
+  const count = slotsToDeactivate.length;
+  console.log(`[UNWHITELIST] ${interaction.user.username} unwhitelisted "${username}"${preferredSlot ? ` slot #${preferredSlot}` : ` (${count} slot(s))`}`);
+
+  if (preferredSlot) {
+    await interaction.editReply(`✅ **${username}**'s Slot #${preferredSlot} has been deactivated and Luarmor key revoked.`);
+  } else {
+    await interaction.editReply(`✅ Removed **${count}** active slot(s) from **${username}** and revoked their Luarmor key(s).`);
+  }
 }
+
+// ---------------------------------------------------------------------------
+// Bot setup
+// ---------------------------------------------------------------------------
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
