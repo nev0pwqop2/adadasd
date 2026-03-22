@@ -14,18 +14,18 @@ const { Client: PgClient } = pg;
 const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
 const DISCORD_APPLICATION_ID = process.env.DISCORD_APPLICATION_ID;
 const DISCORD_GUILD_ID = process.env.DISCORD_GUILD_ID;
-const NEON_DATABASE_URL = process.env.NEON_DATABASE_URL;
+const SUPABASE_DATABASE_URL = process.env.SUPABASE_DATABASE_URL;
 const LUARMOR_API_KEY = process.env.LUARMOR_API_KEY;
 const LUARMOR_PROJECT_ID = process.env.LUARMOR_PROJECT_ID;
 
 const ALLOWED_USER_IDS = new Set(["1279091875378368595", "905033435817586749", "1435005690824622090"]);
 
-if (!DISCORD_BOT_TOKEN || !DISCORD_APPLICATION_ID || !NEON_DATABASE_URL) {
-  console.error("Missing required env vars: DISCORD_BOT_TOKEN, DISCORD_APPLICATION_ID, NEON_DATABASE_URL");
+if (!DISCORD_BOT_TOKEN || !DISCORD_APPLICATION_ID || !SUPABASE_DATABASE_URL) {
+  console.error("Missing required env vars: DISCORD_BOT_TOKEN, DISCORD_APPLICATION_ID, SUPABASE_DATABASE_URL");
   process.exit(1);
 }
 
-const db = new PgClient({ connectionString: NEON_DATABASE_URL });
+const db = new PgClient({ connectionString: SUPABASE_DATABASE_URL });
 await db.connect();
 console.log("Connected to database");
 
