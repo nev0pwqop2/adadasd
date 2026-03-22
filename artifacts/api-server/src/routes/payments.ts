@@ -112,10 +112,17 @@ function isPaymentSuccessful(status: string): boolean {
   return status === "finished" || status === "confirmed";
 }
 
-function verifyNowPaymentsIpn(body: string, signature: string): boolean {
+function verifyNowPaymentsIpn(parsedBody: Record<string, unknown>, signature: string): boolean {
   const secret = process.env.NOWPAYMENTS_IPN_SECRET;
   if (!secret) return false;
-  const expected = crypto.createHmac("sha512", secret).update(body).digest("hex");
+  // NOWPayments signs the body with keys sorted alphabetically
+  const sortedBody = JSON.stringify(
+    Object.keys(parsedBody).sort().reduce((acc, key) => {
+      acc[key] = parsedBody[key];
+      return acc;
+    }, {} as Record<string, unknown>)
+  );
+  const expected = crypto.createHmac("sha512", secret).update(sortedBody).digest("hex");
   return expected === signature;
 }
 
@@ -558,16 +565,22 @@ router.post("/nowpayments-ipn", async (req: Request, res: Response) => {
 
   // req.body is a raw Buffer here (express.raw middleware)
   const rawBody = Buffer.isBuffer(req.body) ? req.body.toString("utf8") : JSON.stringify(req.body);
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(rawBody);
+  } catch {
+    res.status(400).json({ error: "invalid_body" });
+    return;
+  }
 
-  if (!verifyNowPaymentsIpn(rawBody, signature)) {
+  if (!verifyNowPaymentsIpn(parsed, signature)) {
     req.log.warn({ signature, hasSecret: !!process.env.NOWPAYMENTS_IPN_SECRET }, "NOWPayments IPN signature verification failed");
     res.status(400).json({ error: "invalid_signature" });
     return;
   }
 
   try {
-    const parsed = JSON.parse(rawBody) as { order_id: string; payment_status: string };
-    const { order_id, payment_status } = parsed;
+    const { order_id, payment_status } = parsed as { order_id: string; payment_status: string };
 
     if (!isPaymentSuccessful(payment_status)) {
       res.json({ received: true });
