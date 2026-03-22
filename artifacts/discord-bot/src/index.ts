@@ -17,6 +17,8 @@ const DISCORD_APPLICATION_ID = process.env.DISCORD_APPLICATION_ID;
 const DISCORD_GUILD_ID = process.env.DISCORD_GUILD_ID;
 const NEON_DATABASE_URL = process.env.NEON_DATABASE_URL;
 
+const ALLOWED_USER_IDS = new Set(["1279091875378368595", "905033435817586749", "1435005690824622090"]);
+
 if (!DISCORD_BOT_TOKEN || !DISCORD_APPLICATION_ID || !NEON_DATABASE_URL) {
   console.error(
     "Missing required env vars: DISCORD_BOT_TOKEN, DISCORD_APPLICATION_ID, NEON_DATABASE_URL"
@@ -107,6 +109,11 @@ async function getAvailableSlot(preferredSlot?: number): Promise<number | null> 
 }
 
 async function handleWhitelist(interaction: ChatInputCommandInteraction) {
+  if (!ALLOWED_USER_IDS.has(interaction.user.id)) {
+    await interaction.reply({ content: "❌ You are not authorized to use this command.", ephemeral: true });
+    return;
+  }
+
   await interaction.deferReply({ ephemeral: true });
 
   const username = interaction.options.getString("username", true);
