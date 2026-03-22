@@ -116,20 +116,6 @@ export default function Admin() {
     onError: () => toast({ title: "Error", description: "Failed to toggle coupon", variant: "destructive" }),
   });
 
-  const { mutate: resetAllSlots, isPending: isResetting } = useMutation({
-    mutationFn: async () => {
-      const res = await fetch(`${import.meta.env.BASE_URL}api/admin/reset-all-slots`, { method: 'POST', credentials: 'include' });
-      if (!res.ok) throw new Error('Failed to reset slots');
-      return res.json();
-    },
-    onSuccess: () => {
-      toast({ title: "All slots reset", description: "Every slot has been deactivated.", className: "bg-red-600 text-white border-none" });
-      setConfirmReset(false);
-      refetchUsers();
-    },
-    onError: () => toast({ title: "Error", description: "Failed to reset slots.", variant: "destructive" }),
-  });
-
   const { mutate: resetLeaderboard, isPending: isResettingLeaderboard } = useMutation({
     mutationFn: async () => {
       const res = await fetch(`${import.meta.env.BASE_URL}api/admin/reset-leaderboard`, { method: 'POST', credentials: 'include' });
@@ -167,7 +153,7 @@ export default function Admin() {
   const [expandedGuilds, setExpandedGuilds] = useState<string | null>(null);
   const [serverSearch, setServerSearch] = useState('');
   const [copiedServerId, setCopiedServerId] = useState<string | null>(null);
-  const [confirmReset, setConfirmReset] = useState(false);
+
   const [testScriptResult, setTestScriptResult] = useState<{ scriptKey: string | null; script: string | null; expiresAt: string; luarmorConfigured: boolean } | null>(null);
   const [testKeyCopied, setTestKeyCopied] = useState(false);
   const [testScriptCopied, setTestScriptCopied] = useState(false);
@@ -778,40 +764,6 @@ export default function Admin() {
               </div>
 
               <div className="divide-y divide-red-500/10">
-                {/* Reset All Slots */}
-                <div className="p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div>
-                    <p className="font-mono text-sm text-foreground font-bold">Reset All Slots</p>
-                    <p className="text-xs text-muted-foreground font-mono mt-1">Deactivates every slot for every user. This cannot be undone.</p>
-                  </div>
-                  {confirmReset ? (
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-mono text-red-400 uppercase">Are you sure?</span>
-                      <Button
-                        size="sm"
-                        className="bg-red-600 hover:bg-red-700 text-white border-none"
-                        onClick={() => resetAllSlots()}
-                        disabled={isResetting}
-                      >
-                        {isResetting ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Yes, Reset All'}
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={() => setConfirmReset(false)} className="border-primary/20">
-                        Cancel
-                      </Button>
-                    </div>
-                  ) : (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="border-red-500/40 text-red-400 hover:bg-red-500/10 hover:border-red-500 font-mono shrink-0"
-                      onClick={() => setConfirmReset(true)}
-                    >
-                      <RotateCcw className="w-4 h-4 mr-2" />
-                      Reset All Slots
-                    </Button>
-                  )}
-                </div>
-
                 {/* Reset Leaderboard */}
                 <div className="p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
