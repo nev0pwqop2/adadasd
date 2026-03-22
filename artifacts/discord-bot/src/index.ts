@@ -97,7 +97,7 @@ async function handleWhitelist(interaction: ChatInputCommandInteraction) {
 
   await interaction.deferReply({ ephemeral: true });
 
-  const username = interaction.options.getString("username", true);
+  const username = interaction.options.getString("username", true).replace(/^@+/, "");
   const hours = interaction.options.getInteger("hours", true);
   const preferredSlot = interaction.options.getInteger("slot") ?? undefined;
 
