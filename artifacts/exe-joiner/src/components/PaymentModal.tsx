@@ -66,10 +66,12 @@ export function PaymentModal({
   const durationLabel = hourlyPricingEnabled ? `${selectedHours}h` : `${slotDurationHours}h`;
 
   const handleClose = () => {
-    fetch(`${import.meta.env.BASE_URL}api/payments/cancel-pending`, {
-      method: 'DELETE',
-      credentials: 'include',
-    }).catch(() => {});
+    if (!cryptoSession) {
+      fetch(`${import.meta.env.BASE_URL}api/payments/cancel-pending`, {
+        method: 'DELETE',
+        credentials: 'include',
+      }).catch(() => {});
+    }
     resetCrypto();
     onClose();
   };
@@ -440,7 +442,13 @@ export function PaymentModal({
                     <Button 
                       variant="outline" 
                       className="flex-1" 
-                      onClick={() => resetCrypto()}
+                      onClick={() => {
+                        fetch(`${import.meta.env.BASE_URL}api/payments/cancel-pending`, {
+                          method: 'DELETE',
+                          credentials: 'include',
+                        }).catch(() => {});
+                        resetCrypto();
+                      }}
                       disabled={isVerifyLoading}
                     >
                       Cancel

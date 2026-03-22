@@ -58,7 +58,9 @@ export function DepositModal({ isOpen, onClose, onSuccess }: DepositModalProps) 
   };
 
   const handleClose = () => {
-    cancelPendingDeposit();
+    if (!cryptoSession) {
+      cancelPendingDeposit();
+    }
     reset();
     onClose();
   };
