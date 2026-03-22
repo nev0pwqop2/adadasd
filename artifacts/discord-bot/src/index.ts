@@ -54,6 +54,24 @@ const commands = [
         .setMaxValue(50)
     )
     .toJSON(),
+  new SlashCommandBuilder()
+    .setName("unwhitelist")
+    .setDescription("Remove a user's active slot(s)")
+    .addStringOption((opt) =>
+      opt
+        .setName("username")
+        .setDescription("The username of the user (as shown on the site)")
+        .setRequired(true)
+    )
+    .addIntegerOption((opt) =>
+      opt
+        .setName("slot")
+        .setDescription("Specific slot number to remove (removes all active slots if not set)")
+        .setRequired(false)
+        .setMinValue(1)
+        .setMaxValue(50)
+    )
+    .toJSON(),
 ];
 
 const rest = new REST({ version: "10" }).setToken(DISCORD_BOT_TOKEN);
@@ -149,6 +167,53 @@ async function handleWhitelist(interaction: ChatInputCommandInteraction) {
   );
 }
 
+async function handleUnwhitelist(interaction: ChatInputCommandInteraction) {
+  if (!ALLOWED_USER_IDS.has(interaction.user.id)) {
+    await interaction.reply({ content: "❌ You are not authorized to use this command.", ephemeral: true });
+    return;
+  }
+
+  await interaction.deferReply({ ephemeral: true });
+
+  const username = interaction.options.getString("username", true).replace(/^@+/, "");
+  const preferredSlot = interaction.options.getInteger("slot") ?? undefined;
+
+  const userRes = await db.query(`SELECT * FROM users WHERE username = $1 LIMIT 1`, [username]);
+  if (userRes.rows.length === 0) {
+    await interaction.editReply(`❌ User **${username}** not found.`);
+    return;
+  }
+
+  const user = userRes.rows[0];
+
+  if (preferredSlot) {
+    const res = await db.query(
+      `UPDATE slots SET is_active = false, purchased_at = NULL, expires_at = NULL
+       WHERE user_id = $1 AND slot_number = $2 AND is_active = true`,
+      [user.id, preferredSlot]
+    );
+    if (res.rowCount === 0) {
+      await interaction.editReply(`❌ Slot #${preferredSlot} is not active for **${username}**.`);
+      return;
+    }
+    await interaction.editReply(`✅ **${username}**'s Slot #${preferredSlot} has been deactivated.`);
+  } else {
+    const res = await db.query(
+      `UPDATE slots SET is_active = false, purchased_at = NULL, expires_at = NULL
+       WHERE user_id = $1 AND is_active = true`,
+      [user.id]
+    );
+    const count = res.rowCount ?? 0;
+    if (count === 0) {
+      await interaction.editReply(`❌ **${username}** has no active slots.`);
+      return;
+    }
+    await interaction.editReply(`✅ Removed **${count}** active slot(s) from **${username}**.`);
+  }
+
+  console.log(`[UNWHITELIST] ${interaction.user.username} unwhitelisted "${username}"${preferredSlot ? ` slot #${preferredSlot}` : " (all slots)"}`);
+}
+
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
 client.once(Events.ClientReady, async (c) => {
@@ -159,11 +224,16 @@ client.once(Events.ClientReady, async (c) => {
 client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
-  if (interaction.commandName === "whitelist") {
+  const handler =
+    interaction.commandName === "whitelist" ? handleWhitelist :
+    interaction.commandName === "unwhitelist" ? handleUnwhitelist :
+    null;
+
+  if (handler) {
     try {
-      await handleWhitelist(interaction);
+      await handler(interaction);
     } catch (err) {
-      console.error("Whitelist command error:", err);
+      console.error(`${interaction.commandName} command error:`, err);
       const msg = "❌ An error occurred. Check the bot logs.";
       if (interaction.deferred) {
         await interaction.editReply(msg).catch(() => {});
