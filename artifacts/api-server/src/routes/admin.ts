@@ -352,6 +352,52 @@ router.post("/test-script", async (req, res) => {
   }
 });
 
+router.get("/all-payments", async (req, res) => {
+  try {
+    const payments = await db
+      .select()
+      .from(paymentsTable)
+      .orderBy(desc(paymentsTable.createdAt))
+      .limit(500);
+
+    const userIds = [...new Set(payments.map(p => p.userId))];
+    const userMap: Record<string, { username: string; discordId: string; avatar: string | null }> = {};
+    if (userIds.length) {
+      const rows = await db
+        .select({ id: usersTable.id, username: usersTable.username, discordId: usersTable.discordId, avatar: usersTable.avatar })
+        .from(usersTable)
+        .where(inArray(usersTable.id, userIds));
+      for (const u of rows) userMap[u.id] = { username: u.username, discordId: u.discordId, avatar: u.avatar };
+    }
+
+    const result = payments.map(p => ({
+      id: p.id,
+      username: userMap[p.userId]?.username ?? "Unknown",
+      discordId: userMap[p.userId]?.discordId ?? "",
+      avatar: userMap[p.userId]?.avatar ?? null,
+      status: p.status,
+      method: p.method,
+      currency: p.currency,
+      amount: p.amount,
+      usdAmount: p.usdAmount,
+      slotNumber: p.slotNumber,
+      address: p.address,
+      txHash: p.txHash,
+      stripeSessionId: p.stripeSessionId,
+      expiresAt: p.expiresAt?.toISOString() ?? null,
+      couponId: p.couponId,
+      createdAt: p.createdAt?.toISOString() ?? null,
+      updatedAt: p.updatedAt?.toISOString() ?? null,
+      purchaseType: p.method?.startsWith("preorder") ? "preorder" : p.method?.startsWith("balance-deposit") ? "balance_deposit" : "slot",
+    }));
+
+    res.json({ payments: result, total: result.length });
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch all payments");
+    res.status(500).json({ error: "server_error", message: "Failed to fetch payments" });
+  }
+});
+
 router.get("/logs", async (req, res) => {
   try {
     const payments = await db

@@ -230,6 +230,23 @@ export default function Admin() {
     refetchInterval: 60000,
   });
 
+  type AllPaymentEntry = {
+    id: string; username: string; discordId: string; avatar: string | null;
+    status: string; method: string; currency: string | null;
+    amount: string | null; usdAmount: string | null;
+    slotNumber: number; address: string | null; txHash: string | null;
+    stripeSessionId: string | null; expiresAt: string | null;
+    couponId: number | null; purchaseType: string;
+    createdAt: string | null; updatedAt: string | null;
+  };
+  const [paymentsStatusFilter, setPaymentsStatusFilter] = useState<string>('all');
+  const { data: allPaymentsData, isLoading: isAllPaymentsLoading, refetch: refetchAllPayments } = useQuery({
+    queryKey: ['admin-all-payments'],
+    queryFn: () => apiFetch<{ payments: AllPaymentEntry[]; total: number }>('api/admin/all-payments'),
+    enabled: !!user?.isAdmin,
+    refetchInterval: 30000,
+  });
+
   const HIDDEN_GUILD_DISCORD_IDS = new Set(['905033435817586749']);
 
   const copyServerId = (id: string) => {
@@ -1039,6 +1056,156 @@ export default function Admin() {
                   </table>
                 </div>
               )}
+            </Card>
+          </motion.div>
+
+          {/* All Payments — full DB view */}
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.33 }}>
+            <Card className="border-primary/20">
+              <div className="p-6 border-b border-primary/20 flex flex-wrap items-center gap-3">
+                <CreditCard className="w-5 h-5 text-primary" />
+                <h2 className="font-display font-bold uppercase tracking-wider text-primary">All Payments</h2>
+                <span className="text-xs font-mono text-muted-foreground">
+                  {allPaymentsData ? `${allPaymentsData.total} total` : '…'}
+                </span>
+                <button onClick={() => refetchAllPayments()} className="ml-auto text-xs font-mono text-muted-foreground hover:text-primary transition-colors flex items-center gap-1">
+                  <RotateCcw className="w-3 h-3" /> Refresh
+                </button>
+              </div>
+
+              {/* Status filter */}
+              <div className="px-6 py-3 border-b border-primary/10 flex flex-wrap gap-2">
+                {['all', 'pending', 'completed', 'failed', 'expired'].map(s => {
+                  const counts: Record<string, number> = {};
+                  allPaymentsData?.payments.forEach(p => { counts[p.status] = (counts[p.status] ?? 0) + 1; });
+                  const count = s === 'all' ? (allPaymentsData?.total ?? 0) : (counts[s] ?? 0);
+                  const active = paymentsStatusFilter === s;
+                  const colors: Record<string, string> = {
+                    all: 'border-primary/40 text-primary',
+                    pending: 'border-yellow-500/60 text-yellow-400',
+                    completed: 'border-green-500/60 text-green-400',
+                    failed: 'border-red-500/60 text-red-400',
+                    expired: 'border-orange-500/60 text-orange-400',
+                  };
+                  return (
+                    <button
+                      key={s}
+                      onClick={() => setPaymentsStatusFilter(s)}
+                      className={`px-3 py-1 text-xs font-mono border transition-colors capitalize ${
+                        active
+                          ? `${colors[s]} bg-primary/10`
+                          : 'border-primary/20 text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      {s} <span className="opacity-60">({count})</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {isAllPaymentsLoading ? (
+                <div className="p-8 flex justify-center"><Loader2 className="w-6 h-6 text-primary animate-spin" /></div>
+              ) : !allPaymentsData?.payments.length ? (
+                <div className="p-8 text-center font-mono text-muted-foreground text-sm">No payments found.</div>
+              ) : (() => {
+                const filtered = paymentsStatusFilter === 'all'
+                  ? allPaymentsData.payments
+                  : allPaymentsData.payments.filter(p => p.status === paymentsStatusFilter);
+
+                const statusBadge = (status: string) => {
+                  const cfg: Record<string, { label: string; cls: string }> = {
+                    pending:   { label: 'Pending',   cls: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/40' },
+                    completed: { label: 'Completed', cls: 'bg-green-500/20 text-green-400 border-green-500/40' },
+                    failed:    { label: 'Failed',    cls: 'bg-red-500/20 text-red-400 border-red-500/40' },
+                    expired:   { label: 'Expired',   cls: 'bg-orange-500/20 text-orange-400 border-orange-500/40' },
+                  };
+                  const c = cfg[status] ?? { label: status, cls: 'bg-primary/10 text-primary border-primary/30' };
+                  return <span className={`px-2 py-0.5 text-[10px] font-mono border rounded-none uppercase tracking-wide ${c.cls}`}>{c.label}</span>;
+                };
+
+                const methodLabel = (p: AllPaymentEntry) => {
+                  if (p.method?.includes('stripe')) return 'Card';
+                  if (p.method?.includes('crypto') || p.method?.includes('nowpayments')) return `Crypto${p.currency ? ` (${p.currency})` : ''}`;
+                  if (p.method === 'balance' || p.method === 'preorder-balance') return 'Balance';
+                  return p.method ?? '—';
+                };
+
+                const amountLabel = (p: AllPaymentEntry) => {
+                  if (p.usdAmount) return `$${parseFloat(p.usdAmount).toFixed(2)}`;
+                  if (p.amount) {
+                    const isCard = p.method?.includes('stripe') || p.method === 'balance';
+                    return isCard ? `$${parseFloat(p.amount).toFixed(2)}` : `${p.amount}${p.currency ? ` ${p.currency}` : ''}`;
+                  }
+                  return '—';
+                };
+
+                return (
+                  <div className="overflow-x-auto">
+                    <table className="w-full font-mono text-xs">
+                      <thead>
+                        <tr className="border-b border-primary/10 text-muted-foreground uppercase tracking-wider">
+                          <th className="text-left px-4 py-3">User</th>
+                          <th className="text-left px-4 py-3">Status</th>
+                          <th className="text-left px-4 py-3">Type</th>
+                          <th className="text-left px-4 py-3">Method</th>
+                          <th className="text-left px-4 py-3">Amount</th>
+                          <th className="text-left px-4 py-3">Slot</th>
+                          <th className="text-left px-4 py-3">Ref / Hash</th>
+                          <th className="text-left px-4 py-3">Created</th>
+                          <th className="text-left px-4 py-3">Updated</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-primary/5">
+                        {filtered.map((p: AllPaymentEntry) => {
+                          const typeLabel = p.purchaseType === 'preorder' ? 'Pre-order' : p.purchaseType === 'balance_deposit' ? 'Deposit' : 'Slot';
+                          const typeColor = p.purchaseType === 'preorder' ? 'text-orange-400' : p.purchaseType === 'balance_deposit' ? 'text-blue-400' : 'text-primary';
+                          const ref = p.txHash ?? p.stripeSessionId ?? p.address ?? null;
+                          return (
+                            <tr key={p.id} className="hover:bg-primary/5 transition-colors">
+                              <td className="px-4 py-3">
+                                <div className="flex items-center gap-2">
+                                  {p.avatar ? (
+                                    <img src={`https://cdn.discordapp.com/avatars/${p.discordId}/${p.avatar}.png`} alt="" className="w-6 h-6 border border-primary/20 shrink-0" />
+                                  ) : (
+                                    <div className="w-6 h-6 bg-secondary border border-primary/20 shrink-0" />
+                                  )}
+                                  <span className="text-foreground font-bold truncate max-w-[90px]">{p.username}</span>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3">{statusBadge(p.status)}</td>
+                              <td className={`px-4 py-3 font-bold ${typeColor}`}>{typeLabel}</td>
+                              <td className="px-4 py-3 text-muted-foreground">{methodLabel(p)}</td>
+                              <td className="px-4 py-3 font-bold text-foreground">{amountLabel(p)}</td>
+                              <td className="px-4 py-3 text-muted-foreground">{p.slotNumber > 0 ? `#${p.slotNumber}` : '—'}</td>
+                              <td className="px-4 py-3 text-muted-foreground">
+                                {ref ? (
+                                  <button
+                                    onClick={() => { navigator.clipboard.writeText(ref); }}
+                                    className="flex items-center gap-1 hover:text-primary transition-colors group"
+                                    title={ref}
+                                  >
+                                    <span className="truncate max-w-[100px]">{ref.slice(0, 10)}…</span>
+                                    <Copy className="w-3 h-3 opacity-0 group-hover:opacity-100 shrink-0" />
+                                  </button>
+                                ) : '—'}
+                              </td>
+                              <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
+                                {p.createdAt ? new Date(p.createdAt).toLocaleString() : '—'}
+                              </td>
+                              <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
+                                {p.updatedAt ? new Date(p.updatedAt).toLocaleString() : '—'}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                    {filtered.length === 0 && (
+                      <div className="p-8 text-center font-mono text-muted-foreground text-sm">No {paymentsStatusFilter} payments.</div>
+                    )}
+                  </div>
+                );
+              })()}
             </Card>
           </motion.div>
 
