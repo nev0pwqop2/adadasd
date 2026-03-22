@@ -84,11 +84,11 @@ async function createNowPaymentsPayment(
       order_id: orderId,
       order_description: `Exe Joiner slot activation`,
     }),
-  });
+  }) as Promise<{ payment_id: string; pay_address: string; pay_amount: number; pay_currency: string }>;
 }
 
 async function getNowPaymentsStatus(nowpaymentsPaymentId: string): Promise<{ payment_status: string }> {
-  return nowpaymentsRequest(`/payment/${nowpaymentsPaymentId}`);
+  return nowpaymentsRequest(`/payment/${nowpaymentsPaymentId}`) as Promise<{ payment_status: string }>;
 }
 
 async function getNowPaymentsMinAmount(currency: string): Promise<number> {

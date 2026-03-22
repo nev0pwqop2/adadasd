@@ -165,7 +165,7 @@ router.post("/deposit/crypto", requireAuth, async (req: Request, res: Response) 
         order_id: paymentId,
         ipn_callback_url: ipnCallbackUrl,
       }),
-    });
+    }) as { pay_address: string; pay_amount: number; pay_currency: string };
 
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
 

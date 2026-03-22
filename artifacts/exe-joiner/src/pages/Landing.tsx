@@ -21,7 +21,7 @@ const ERROR_MESSAGES: Record<string, string> = {
 
 export default function Landing() {
   const [, setLocation] = useLocation();
-  const { data: user, isLoading } = useGetMe({ query: { retry: false } });
+  const { data: user, isLoading } = useGetMe({ query: { retry: false } as any });
 
   const params = new URLSearchParams(window.location.search);
   const errorCode = params.get('error');

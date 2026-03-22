@@ -48,7 +48,7 @@ export default function Dashboard() {
   const [managingSlot, setManagingSlot] = useState<PublicSlot | null>(null);
   const queryClient = useQueryClient();
 
-  const { data: user, isError: isUserError, isLoading: isUserLoading } = useGetMe({ query: { retry: false } });
+  const { data: user, isError: isUserError, isLoading: isUserLoading } = useGetMe({ query: { retry: false } as any });
 
   const [bidAmount, setBidAmount] = useState('');
   const [bidUseBalance, setBidUseBalance] = useState(false);

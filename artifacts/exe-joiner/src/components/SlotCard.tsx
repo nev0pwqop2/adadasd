@@ -16,6 +16,7 @@ export interface PublicSlot {
   script?: string | null;
   hwidResetAt?: string | null;
   hwidUnlimited?: boolean;
+  luarmorUserId?: string | null;
 }
 
 interface SlotCardProps {

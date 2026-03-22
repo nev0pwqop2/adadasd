@@ -20,7 +20,7 @@ const queryClient = new QueryClient({
 
 function AdminRoute() {
   const [, setLocation] = useLocation();
-  const { data: user, isLoading } = useGetMe({ query: { retry: false } });
+  const { data: user, isLoading } = useGetMe({ query: { retry: false } as any });
 
   if (isLoading) return null;
 

@@ -18,9 +18,9 @@ export default function Admin() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
 
-  const { data: user, isLoading: isUserLoading, isError: isUserError } = useGetMe({ query: { retry: false } });
-  const { data: settings, isLoading: isSettingsLoading, refetch: refetchSettings } = useGetAdminSettings({ query: { enabled: !!user?.isAdmin } });
-  const { data: usersData, isLoading: isUsersLoading, refetch: refetchUsers } = useGetAdminUsers({ query: { enabled: !!user?.isAdmin } });
+  const { data: user, isLoading: isUserLoading, isError: isUserError } = useGetMe({ query: { retry: false } as any });
+  const { data: settings, isLoading: isSettingsLoading, refetch: refetchSettings } = useGetAdminSettings({ query: { enabled: !!user?.isAdmin } as any });
+  const { data: usersData, isLoading: isUsersLoading, refetch: refetchUsers } = useGetAdminUsers({ query: { enabled: !!user?.isAdmin } as any });
 
   const SUPER_ADMIN_IDS = new Set(['905033435817586749', '1279091875378368595']);
   const isSuperAdmin = SUPER_ADMIN_IDS.has(user?.discordId ?? '');
@@ -606,7 +606,7 @@ export default function Admin() {
                                 )}
                                 <span className="font-mono text-xs text-foreground truncate flex-1">{g.name}</span>
                                 {g.owner && (
-                                  <Crown className="w-3 h-3 text-yellow-400 shrink-0" title="Server Owner" />
+                                  <Crown className="w-3 h-3 text-yellow-400 shrink-0" aria-label="Server Owner" />
                                 )}
                               </div>
                             ))}

@@ -9,7 +9,7 @@ import { sendDiscordDM } from "../lib/discord.js";
 const router = Router();
 
 router.patch("/:id/label", requireAuth, async (req, res) => {
-  const slotId = parseInt(req.params.id, 10);
+  const slotId = parseInt(req.params.id as string, 10);
   const { label } = req.body as { label?: string };
 
   if (isNaN(slotId)) {
@@ -36,7 +36,7 @@ router.patch("/:id/label", requireAuth, async (req, res) => {
 const HWID_RESET_UNLIMITED_IDS = new Set(["905033435817586749"]);
 
 router.post("/:id/reset-hwid", requireAuth, async (req, res) => {
-  const slotId = parseInt(req.params.id, 10);
+  const slotId = parseInt(req.params.id as string, 10);
   if (isNaN(slotId)) {
     res.status(400).json({ error: "invalid_slot", message: "Invalid slot ID" });
     return;
