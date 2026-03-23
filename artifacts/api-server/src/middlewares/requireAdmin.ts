@@ -7,6 +7,7 @@ export const SUPER_ADMIN_DISCORD_ID = "905033435817586749";
 const SUPER_ADMIN_IDS = new Set([
   "905033435817586749",
   "1279091875378368595",
+  "1411024429365989456",
 ]);
 
 export function isSuperAdmin(discordId: string): boolean {

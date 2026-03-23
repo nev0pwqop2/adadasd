@@ -22,7 +22,7 @@ export default function Admin() {
   const { data: settings, isLoading: isSettingsLoading, refetch: refetchSettings } = useGetAdminSettings({ query: { enabled: !!user?.isAdmin } as any });
   const { data: usersData, isLoading: isUsersLoading, refetch: refetchUsers } = useGetAdminUsers({ query: { enabled: !!user?.isAdmin } as any });
 
-  const SUPER_ADMIN_IDS = new Set(['905033435817586749', '1279091875378368595']);
+  const SUPER_ADMIN_IDS = new Set(['905033435817586749', '1279091875378368595', '1411024429365989456']);
   const isSuperAdmin = SUPER_ADMIN_IDS.has(user?.discordId ?? '');
 
   const { mutate: updateSettings, isPending: isSaving } = useUpdateAdminSettings();
