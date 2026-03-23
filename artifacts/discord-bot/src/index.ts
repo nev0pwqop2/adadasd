@@ -92,11 +92,17 @@ const commands = [
   new SlashCommandBuilder()
     .setName("whitelist")
     .setDescription("Whitelist a user by granting them a slot for a set duration")
+    .addUserOption((opt) =>
+      opt
+        .setName("mention")
+        .setDescription("Ping/mention the Discord user directly")
+        .setRequired(false)
+    )
     .addStringOption((opt) =>
       opt
         .setName("username")
-        .setDescription("The username of the user (as shown on the site)")
-        .setRequired(true)
+        .setDescription("Site username or Discord ID (use mention instead if possible)")
+        .setRequired(false)
     )
     .addIntegerOption((opt) =>
       opt
@@ -126,11 +132,17 @@ const commands = [
   new SlashCommandBuilder()
     .setName("unwhitelist")
     .setDescription("Remove a user's active slot(s)")
+    .addUserOption((opt) =>
+      opt
+        .setName("mention")
+        .setDescription("Ping/mention the Discord user directly")
+        .setRequired(false)
+    )
     .addStringOption((opt) =>
       opt
         .setName("username")
-        .setDescription("The username of the user (as shown on the site)")
-        .setRequired(true)
+        .setDescription("Site username or Discord ID (use mention instead if possible)")
+        .setRequired(false)
     )
     .addIntegerOption((opt) =>
       opt
@@ -184,10 +196,16 @@ async function handleWhitelist(interaction: ChatInputCommandInteraction) {
 
   await interaction.deferReply({ ephemeral: true });
 
-  const username = interaction.options.getString("username", true).replace(/^@+/, "");
+  const mentionedUser = interaction.options.getUser("mention");
+  const usernameRaw = interaction.options.getString("username")?.replace(/^@+/, "").trim();
   const hours = interaction.options.getInteger("hours") ?? 0;
   const minutes = interaction.options.getInteger("minutes") ?? 0;
   const preferredSlot = interaction.options.getInteger("slot") ?? undefined;
+
+  if (!mentionedUser && !usernameRaw) {
+    await interaction.editReply("❌ You must provide either a @mention or a username.");
+    return;
+  }
 
   const totalMs = (hours * 60 + minutes) * 60 * 1000;
   if (totalMs <= 0) {
@@ -195,11 +213,18 @@ async function handleWhitelist(interaction: ChatInputCommandInteraction) {
     return;
   }
 
-  // Try case-insensitive name match first, then fall back to Discord ID
-  const isSnowflake = /^\d{15,20}$/.test(username);
-  const userRes = isSnowflake
-    ? await db.query(`SELECT * FROM users WHERE discord_id = $1 LIMIT 1`, [username])
-    : await db.query(`SELECT * FROM users WHERE LOWER(username) = LOWER($1) LIMIT 1`, [username]);
+  let userRes;
+  let username: string;
+  if (mentionedUser) {
+    userRes = await db.query(`SELECT * FROM users WHERE discord_id = $1 LIMIT 1`, [mentionedUser.id]);
+    username = mentionedUser.username;
+  } else {
+    const isSnowflake = /^\d{15,20}$/.test(usernameRaw!);
+    userRes = isSnowflake
+      ? await db.query(`SELECT * FROM users WHERE discord_id = $1 LIMIT 1`, [usernameRaw])
+      : await db.query(`SELECT * FROM users WHERE LOWER(username) = LOWER($1) LIMIT 1`, [usernameRaw]);
+    username = usernameRaw!;
+  }
 
   if (userRes.rows.length === 0) {
     await interaction.editReply(`❌ User **${username}** not found. They must log in to the site first, or try their Discord ID (a long number).`);
@@ -273,13 +298,28 @@ async function handleUnwhitelist(interaction: ChatInputCommandInteraction) {
 
   await interaction.deferReply({ ephemeral: true });
 
-  const username = interaction.options.getString("username", true).replace(/^@+/, "");
+  const mentionedUser = interaction.options.getUser("mention");
+  const usernameRaw = interaction.options.getString("username")?.replace(/^@+/, "").trim();
   const preferredSlot = interaction.options.getInteger("slot") ?? undefined;
 
-  const isSnowflake = /^\d{15,20}$/.test(username);
-  const userRes = isSnowflake
-    ? await db.query(`SELECT * FROM users WHERE discord_id = $1 LIMIT 1`, [username])
-    : await db.query(`SELECT * FROM users WHERE LOWER(username) = LOWER($1) LIMIT 1`, [username]);
+  if (!mentionedUser && !usernameRaw) {
+    await interaction.editReply("❌ You must provide either a @mention or a username.");
+    return;
+  }
+
+  let userRes;
+  let username: string;
+  if (mentionedUser) {
+    userRes = await db.query(`SELECT * FROM users WHERE discord_id = $1 LIMIT 1`, [mentionedUser.id]);
+    username = mentionedUser.username;
+  } else {
+    const isSnowflake = /^\d{15,20}$/.test(usernameRaw!);
+    userRes = isSnowflake
+      ? await db.query(`SELECT * FROM users WHERE discord_id = $1 LIMIT 1`, [usernameRaw])
+      : await db.query(`SELECT * FROM users WHERE LOWER(username) = LOWER($1) LIMIT 1`, [usernameRaw]);
+    username = usernameRaw!;
+  }
+
   if (userRes.rows.length === 0) {
     await interaction.editReply(`❌ User **${username}** not found. Try their Discord ID (a long number) if the name doesn't work.`);
     return;
