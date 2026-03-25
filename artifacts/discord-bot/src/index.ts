@@ -446,8 +446,8 @@ client.once(Events.ClientReady, async (c) => {
   console.log(`Bot online as ${c.user.tag}`);
   await registerCommands();
   await cleanupExpiredSlots();
-  setInterval(cleanupExpiredSlots, 5 * 60 * 1000);
-  console.log("[CLEANUP] Expired slot cleanup job started (every 5 minutes)");
+  setInterval(cleanupExpiredSlots, 2 * 60 * 1000);
+  console.log("[CLEANUP] Expired slot cleanup job started (every 2 minutes)");
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
