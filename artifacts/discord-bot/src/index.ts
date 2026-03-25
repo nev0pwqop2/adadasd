@@ -395,6 +395,48 @@ async function handleUnwhitelist(interaction: ChatInputCommandInteraction) {
 }
 
 // ---------------------------------------------------------------------------
+// Expiry cleanup job — runs every 5 minutes
+// ---------------------------------------------------------------------------
+
+async function cleanupExpiredSlots() {
+  try {
+    const expired = await db.query(`
+      SELECT slot_number, luarmor_user_id, user_id
+      FROM slots
+      WHERE is_active = true
+        AND expires_at IS NOT NULL
+        AND expires_at < NOW()
+    `);
+
+    if (expired.rows.length === 0) return;
+
+    console.log(`[CLEANUP] Found ${expired.rows.length} expired slot(s) to clean up`);
+
+    for (const slot of expired.rows) {
+      // Delete Luarmor key if present
+      if (luarmorConfigured() && slot.luarmor_user_id) {
+        try {
+          await luarmorDeleteUser(slot.luarmor_user_id);
+          console.log(`[CLEANUP] Luarmor key deleted for slot #${slot.slot_number}: ${slot.luarmor_user_id}`);
+        } catch (err) {
+          console.error(`[CLEANUP] Failed to delete Luarmor key ${slot.luarmor_user_id}:`, err);
+        }
+      }
+
+      // Deactivate slot in DB
+      await db.query(
+        `UPDATE slots SET is_active = false, purchased_at = NULL, expires_at = NULL, luarmor_user_id = NULL
+         WHERE user_id = $1 AND slot_number = $2`,
+        [slot.user_id, slot.slot_number]
+      );
+      console.log(`[CLEANUP] Slot #${slot.slot_number} deactivated for user ${slot.user_id}`);
+    }
+  } catch (err) {
+    console.error("[CLEANUP] Error during expired slot cleanup:", err);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Bot setup
 // ---------------------------------------------------------------------------
 
@@ -403,6 +445,9 @@ const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 client.once(Events.ClientReady, async (c) => {
   console.log(`Bot online as ${c.user.tag}`);
   await registerCommands();
+  await cleanupExpiredSlots();
+  setInterval(cleanupExpiredSlots, 5 * 60 * 1000);
+  console.log("[CLEANUP] Expired slot cleanup job started (every 5 minutes)");
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
