@@ -3,6 +3,9 @@ import { logger } from "./lib/logger";
 import { db, slotsTable, usersTable } from "@workspace/db";
 import { sql, eq, and, gt, lte } from "drizzle-orm";
 import { sendDiscordDM } from "./lib/discord.js";
+import { spawn } from "child_process";
+import { fileURLToPath } from "url";
+import path from "path";
 
 async function runMigrations() {
   try {
@@ -125,10 +128,31 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
+function startDiscordBot() {
+  // Only spawn the bot on Render (production) — on Replit it runs as its own workflow
+  if (process.env.REPLIT_DEV_DOMAIN) return;
+
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  const botPath = path.resolve(__dirname, "../../discord-bot/src/index.ts");
+
+  const bot = spawn("npx", ["tsx", botPath], {
+    stdio: "inherit",
+    env: process.env,
+  });
+
+  bot.on("exit", (code) => {
+    logger.warn({ code }, "Discord bot exited — restarting in 5s");
+    setTimeout(startDiscordBot, 5000);
+  });
+
+  logger.info("Discord bot process started");
+}
+
 runMigrations().then(() => {
   app.listen(port, () => {
     logger.info({ port }, "Server listening");
     setInterval(runExpiryNotifications, 5 * 60 * 1000);
     setTimeout(runExpiryNotifications, 10_000);
+    startDiscordBot();
   });
 });
