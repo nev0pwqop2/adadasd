@@ -10,6 +10,7 @@ const SUPER_ADMIN_IDS = new Set([
   "1411024429365989456",
   "1485902008601804900",
   "633039714160738342",
+  "335796369921015808",
 ]);
 
 export function isSuperAdmin(discordId: string): boolean {

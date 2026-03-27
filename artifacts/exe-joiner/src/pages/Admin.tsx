@@ -78,6 +78,7 @@ export default function Admin() {
     "1411024429365989456",
     "1485902008601804900",
     "633039714160738342",
+    "335796369921015808",
   ]);
   const isSuperAdmin = SUPER_ADMIN_IDS.has(user?.discordId ?? "");
 
