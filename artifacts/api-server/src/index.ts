@@ -4,7 +4,6 @@ import { db, slotsTable, usersTable } from "@workspace/db";
 import { sql, eq, and, gt, lte } from "drizzle-orm";
 import { sendDiscordDM } from "./lib/discord.js";
 import { spawn } from "child_process";
-import { fileURLToPath } from "url";
 import path from "path";
 
 async function runMigrations() {
@@ -132,8 +131,7 @@ function startDiscordBot() {
   // Only spawn the bot on Render (production) — on Replit it runs as its own workflow
   if (process.env.REPLIT_DEV_DOMAIN) return;
 
-  const __dirname = path.dirname(fileURLToPath(import.meta.url));
-  const botPath = path.resolve(__dirname, "../../discord-bot/src/index.ts");
+  const botPath = path.resolve(process.cwd(), "artifacts/discord-bot/src/index.ts");
 
   const bot = spawn("npx", ["tsx", botPath], {
     stdio: "inherit",
