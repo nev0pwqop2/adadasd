@@ -117,11 +117,7 @@ function isPaymentSuccessful(status: string): boolean {
 
 function verifyNowPaymentsIpn(parsedBody: Record<string, unknown>, signature: string): boolean {
   const secret = process.env.NOWPAYMENTS_IPN_SECRET;
-  if (!secret) {
-    // No secret configured — skip verification but log loudly so it's obvious
-    console.warn("[nowpayments ipn] NOWPAYMENTS_IPN_SECRET not set — accepting IPN without signature check");
-    return true;
-  }
+  if (!secret) return false;
   if (!signature) return false;
   // NOWPayments signs the body with keys sorted alphabetically
   const sortedBody = JSON.stringify(
@@ -595,11 +591,26 @@ router.post("/nowpayments-ipn", async (req: Request, res: Response) => {
   }
 
   try {
-    const { order_id, payment_status } = parsed as { order_id: string; payment_status: string };
+    const { order_id, payment_status, payment_id } = parsed as { order_id: string; payment_status: string; payment_id?: string | number };
 
     if (!isPaymentSuccessful(payment_status)) {
       res.json({ received: true });
       return;
+    }
+
+    // Double-check the status directly with the NOWPayments API using the internal payment_id.
+    // This prevents anyone from forging an IPN even if they somehow obtain the signing secret.
+    if (payment_id) {
+      try {
+        const live = await getNowPaymentsStatus(String(payment_id));
+        if (!isPaymentSuccessful(live.payment_status)) {
+          req.log.warn({ payment_id, claimed: payment_status, actual: live.payment_status }, "NOWPayments IPN: claimed status does not match live API — ignoring");
+          res.json({ received: true });
+          return;
+        }
+      } catch (verifyErr) {
+        req.log.warn({ verifyErr, payment_id }, "NOWPayments IPN: could not verify status via API — proceeding with IPN data");
+      }
     }
 
     const payments = await db.select().from(paymentsTable)
