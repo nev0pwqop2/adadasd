@@ -398,6 +398,16 @@ async function handleUnwhitelist(interaction: ChatInputCommandInteraction) {
 // Expiry cleanup job — runs every 5 minutes
 // ---------------------------------------------------------------------------
 
+async function triggerApiFulfillment() {
+  const port = process.env.PORT;
+  if (!port) return;
+  try {
+    await fetch(`http://localhost:${port}/api/internal/trigger-fulfillment`, { method: "POST" });
+  } catch {
+    // API server not reachable — fulfillment will run on its own interval
+  }
+}
+
 async function cleanupExpiredSlots() {
   try {
     const expired = await db.query(`
@@ -431,6 +441,9 @@ async function cleanupExpiredSlots() {
       );
       console.log(`[CLEANUP] Slot #${slot.slot_number} deactivated for user ${slot.user_id}`);
     }
+
+    // Immediately trigger fulfillment on the API server so queued users get slots right away
+    await triggerApiFulfillment();
   } catch (err) {
     console.error("[CLEANUP] Error during expired slot cleanup:", err);
   }

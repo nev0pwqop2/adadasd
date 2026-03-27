@@ -3,6 +3,7 @@ import { logger } from "./lib/logger";
 import { db, slotsTable, usersTable } from "@workspace/db";
 import { sql, eq, and, gt, lte } from "drizzle-orm";
 import { sendDiscordDM } from "./lib/discord.js";
+import { runSlotCleanup, runAutoFulfillment } from "./lib/fulfillment.js";
 import { spawn } from "child_process";
 import path from "path";
 
@@ -115,6 +116,15 @@ async function runExpiryNotifications() {
   }
 }
 
+/** Combined cleanup + fulfillment — run this whenever a slot might have freed up */
+async function cleanupThenFulfill() {
+  const freed = await runSlotCleanup();
+  if (freed > 0) {
+    logger.info({ freed }, "Slots cleaned up — running auto-fulfillment");
+  }
+  await runAutoFulfillment();
+}
+
 const rawPort = process.env["PORT"];
 
 if (!rawPort) {
@@ -128,7 +138,6 @@ if (Number.isNaN(port) || port <= 0) {
 }
 
 function startDiscordBot() {
-  // Only spawn the bot on Render (production) — on Replit it runs as its own workflow
   if (process.env.REPLIT_DEV_DOMAIN) return;
 
   const botPath = path.resolve(process.cwd(), "artifacts/discord-bot/src/index.ts");
@@ -146,11 +155,25 @@ function startDiscordBot() {
   logger.info("Discord bot process started");
 }
 
+// Internal trigger endpoint — called by Discord bot after cleanup, or admin after slot changes
+app.post("/api/internal/trigger-fulfillment", (_req, res) => {
+  // Fire and forget — don't await so we respond immediately
+  cleanupThenFulfill().catch((err) => logger.warn({ err }, "Triggered fulfillment failed"));
+  res.json({ ok: true });
+});
+
 runMigrations().then(() => {
   app.listen(port, () => {
     logger.info({ port }, "Server listening");
+
+    // Expiry notifications every 5 minutes
     setInterval(runExpiryNotifications, 5 * 60 * 1000);
     setTimeout(runExpiryNotifications, 10_000);
+
+    // Cleanup + fulfillment every 60 seconds as a safety net
+    setInterval(cleanupThenFulfill, 60 * 1000);
+    setTimeout(cleanupThenFulfill, 15_000);
+
     startDiscordBot();
   });
 });

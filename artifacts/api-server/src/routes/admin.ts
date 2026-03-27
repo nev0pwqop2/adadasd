@@ -3,6 +3,7 @@ import { db, slotsTable, usersTable, paymentsTable, couponsTable, bidsTable } fr
 import { eq, sql, inArray, and, lte, desc, ne } from "drizzle-orm";
 import { requireAdmin, isSuperAdmin } from "../middlewares/requireAdmin.js";
 import { getSettings, setSetting } from "../lib/settings.js";
+import { runAutoFulfillment } from "../lib/fulfillment.js";
 import { isLuarmorConfigured, createLuarmorUser, deleteLuarmorUser, getLuarmorUsers } from "../lib/luarmor.js";
 import { sendPaymentWebhook } from "../lib/discord.js";
 
@@ -296,6 +297,9 @@ router.post("/users/:discordId/slots", async (req, res) => {
     }
 
     res.json({ success: true, message: `Set ${count} active slots for ${discordId}` });
+
+    // Immediately check if any queued bids/preorders can be fulfilled
+    runAutoFulfillment().catch((err) => req.log.warn({ err }, "Auto-fulfillment after slot change failed"));
   } catch (err) {
     req.log.error({ err }, "Failed to update user slots");
     res.status(500).json({ error: "server_error", message: "Failed to update user slots" });
