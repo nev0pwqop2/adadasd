@@ -1,8 +1,13 @@
+import { logger } from "./logger.js";
+
 export type PurchaseType = "slot" | "balance_deposit" | "preorder";
 
 export async function sendDiscordDM(discordId: string, content: string): Promise<void> {
   const botToken = process.env.DISCORD_BOT_TOKEN;
-  if (!botToken) return;
+  if (!botToken) {
+    logger.warn({ discordId }, "[discord dm] DISCORD_BOT_TOKEN not set — skipping DM");
+    return;
+  }
 
   try {
     const channelRes = await fetch("https://discord.com/api/v10/users/@me/channels", {
@@ -12,7 +17,7 @@ export async function sendDiscordDM(discordId: string, content: string): Promise
     });
     if (!channelRes.ok) {
       const text = await channelRes.text().catch(() => "");
-      console.error(`[discord dm] failed to open channel ${channelRes.status}: ${text}`);
+      logger.warn({ discordId, status: channelRes.status, body: text }, "[discord dm] failed to open DM channel");
       return;
     }
     const channel = (await channelRes.json()) as { id: string };
@@ -24,10 +29,12 @@ export async function sendDiscordDM(discordId: string, content: string): Promise
     });
     if (!msgRes.ok) {
       const text = await msgRes.text().catch(() => "");
-      console.error(`[discord dm] failed to send message ${msgRes.status}: ${text}`);
+      logger.warn({ discordId, status: msgRes.status, body: text }, "[discord dm] failed to send message");
+    } else {
+      logger.info({ discordId }, "[discord dm] sent successfully");
     }
   } catch (err) {
-    console.error("[discord dm] fetch error:", err);
+    logger.warn({ err, discordId }, "[discord dm] fetch error");
   }
 }
 

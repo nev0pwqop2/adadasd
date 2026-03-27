@@ -5,7 +5,7 @@ import { requireAdmin, isSuperAdmin } from "../middlewares/requireAdmin.js";
 import { getSettings, setSetting } from "../lib/settings.js";
 import { runAutoFulfillment } from "../lib/fulfillment.js";
 import { isLuarmorConfigured, createLuarmorUser, deleteLuarmorUser, getLuarmorUsers } from "../lib/luarmor.js";
-import { sendPaymentWebhook } from "../lib/discord.js";
+import { sendPaymentWebhook, sendDiscordDM } from "../lib/discord.js";
 
 const router = Router();
 
@@ -304,6 +304,18 @@ router.post("/users/:discordId/slots", async (req, res) => {
     req.log.error({ err }, "Failed to update user slots");
     res.status(500).json({ error: "server_error", message: "Failed to update user slots" });
   }
+});
+
+router.post("/test-dm", async (req, res) => {
+  const adminUserId = req.session.userId!;
+  const adminUser = await db.select().from(usersTable).where(eq(usersTable.id, adminUserId)).limit(1);
+  if (!adminUser.length) {
+    res.status(404).json({ error: "not_found" });
+    return;
+  }
+  const discordId = adminUser[0].discordId;
+  await sendDiscordDM(discordId, "✅ Test DM from Exe Joiner bot — DMs are working!");
+  res.json({ success: true, discordId });
 });
 
 router.post("/test-script", async (req, res) => {

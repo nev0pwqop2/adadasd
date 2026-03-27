@@ -379,6 +379,7 @@ export default function Admin() {
   } | null>(null);
   const [testKeyCopied, setTestKeyCopied] = useState(false);
   const [testScriptCopied, setTestScriptCopied] = useState(false);
+  const [testDmStatus, setTestDmStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
 
   const { mutate: generateTestScript, isPending: isGeneratingTestScript } =
     useMutation({
@@ -2318,6 +2319,42 @@ export default function Admin() {
                     <FlaskConical className="w-4 h-4 mr-2" />
                   )}
                   Generate Test Script
+                </Button>
+              </div>
+              <div className="p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-blue-500/10">
+                <div>
+                  <p className="font-mono text-sm text-foreground font-bold">
+                    Test Discord DM
+                  </p>
+                  <p className="text-xs text-muted-foreground font-mono mt-1">
+                    Sends a test DM to your own Discord account. Check API server logs if it fails.
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-blue-500/40 text-blue-400 hover:bg-blue-500/10 hover:border-blue-500 font-mono shrink-0"
+                  disabled={testDmStatus === "sending"}
+                  onClick={async () => {
+                    setTestDmStatus("sending");
+                    try {
+                      const res = await fetch(`${import.meta.env.BASE_URL}api/admin/test-dm`, {
+                        method: "POST",
+                        credentials: "include",
+                      });
+                      setTestDmStatus(res.ok ? "sent" : "error");
+                    } catch {
+                      setTestDmStatus("error");
+                    }
+                    setTimeout(() => setTestDmStatus("idle"), 4000);
+                  }}
+                >
+                  {testDmStatus === "sending" ? (
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  ) : (
+                    <FlaskConical className="w-4 h-4 mr-2" />
+                  )}
+                  {testDmStatus === "sent" ? "DM Sent!" : testDmStatus === "error" ? "Failed — Check Logs" : "Send Test DM"}
                 </Button>
               </div>
               {testScriptResult && (
