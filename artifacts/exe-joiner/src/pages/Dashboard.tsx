@@ -51,7 +51,6 @@ export default function Dashboard() {
   const { data: user, isError: isUserError, isLoading: isUserLoading } = useGetMe({ query: { retry: false } as any });
 
   const [bidAmount, setBidAmount] = useState('');
-  const [bidUseBalance, setBidUseBalance] = useState(false);
   const [showBidForm, setShowBidForm] = useState(false);
   const [showPreorderModal, setShowPreorderModal] = useState(false);
   const [showDepositModal, setShowDepositModal] = useState(false);
@@ -74,18 +73,18 @@ export default function Dashboard() {
   });
 
   const { mutate: placeBid, isPending: isPlacingBid } = useMutation({
-    mutationFn: async ({ amount, useBalance }: { amount: number; useBalance: boolean }) => {
+    mutationFn: async ({ amount }: { amount: number }) => {
       const res = await fetch(`${import.meta.env.BASE_URL}api/bids`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount, useBalance }),
+        body: JSON.stringify({ amount }),
       });
       if (!res.ok) { const d = await res.json(); throw new Error(d.message || 'Failed'); }
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: 'Bid placed!', description: 'You are in the queue.', className: 'bg-primary text-primary-foreground border-none' });
+      toast({ title: 'Bid placed!', description: 'Balance held — you are in the queue.', className: 'bg-primary text-primary-foreground border-none' });
       setShowBidForm(false);
       setBidAmount('');
       refetchBids();
@@ -363,11 +362,9 @@ export default function Dashboard() {
                                 #{myBid.rank}
                               </span>
                             </div>
-                            {myBid.paidWithBalance && (
-                              <p className="font-mono text-xs text-primary/70 mb-1">Paid with balance · cancelling will refund ${myBid.amount.toFixed(2)}</p>
-                            )}
+                            <p className="font-mono text-xs text-primary/70 mb-3">${myBid.amount.toFixed(2)} held from balance · cancelling will refund it</p>
                             <div className="flex gap-2">
-                              <Button size="sm" variant="outline" className="border-primary/30 text-primary text-xs flex-1" onClick={() => { setBidAmount(String(myBid.amount)); setBidUseBalance(myBid.paidWithBalance); setShowBidForm(true); }}>
+                              <Button size="sm" variant="outline" className="border-primary/30 text-primary text-xs flex-1" onClick={() => { setBidAmount(String(myBid.amount)); setShowBidForm(true); }}>
                                 Raise Bid
                               </Button>
                               <Button size="sm" variant="outline" className="border-red-500/25 text-red-400 text-xs" disabled={isCancellingBid} onClick={() => cancelBid()}>
@@ -378,7 +375,7 @@ export default function Dashboard() {
                         ) : showBidForm ? (
                           <div className="border border-primary/25 p-4 rounded-lg space-y-3">
                             <p className="font-mono text-xs text-muted-foreground">
-                              {myBid ? `Current bid: $${myBid.amount.toFixed(2)}. Enter a higher amount.` : 'Enter your max bid in USD. Highest bidder gets first pick on the next open slot.'}
+                              {myBid ? `Current bid: $${myBid.amount.toFixed(2)}. Enter a higher amount.` : 'Bids are paid from your balance. Highest bidder wins the next open slot.'}
                             </p>
                             {bidsRes?.topPreorderAmount != null && (
                               <p className="font-mono text-xs text-amber-400">
@@ -390,6 +387,7 @@ export default function Dashboard() {
                               <input
                                 type="number"
                                 min={Math.max(myBid?.amount ?? 0, bidsRes?.topPreorderAmount ?? 0) + 0.01}
+                                max={balanceRes?.balanceNum ?? 0}
                                 step={0.01}
                                 value={bidAmount}
                                 onChange={e => setBidAmount(e.target.value)}
@@ -400,18 +398,11 @@ export default function Dashboard() {
                                 autoFocus
                               />
                             </div>
-                            {/* Balance toggle */}
-                            <button
-                              type="button"
-                              onClick={() => setBidUseBalance(v => !v)}
-                              className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border text-xs font-mono transition-all ${bidUseBalance ? 'border-primary/50 bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:border-primary/20'}`}
-                            >
-                              <span>Pay with Balance</span>
-                              <span className={bidUseBalance ? 'text-primary' : 'text-muted-foreground'}>
-                                ${(balanceRes?.balanceNum ?? 0).toFixed(2)} available
-                              </span>
-                            </button>
-                            {bidUseBalance && bidAmount && parseFloat(bidAmount) > (balanceRes?.balanceNum ?? 0) && (
+                            <div className="w-full flex items-center justify-between px-3 py-2 rounded-lg border border-primary/20 bg-primary/5 text-xs font-mono">
+                              <span className="text-muted-foreground">Balance available</span>
+                              <span className="text-primary font-bold">${(balanceRes?.balanceNum ?? 0).toFixed(2)}</span>
+                            </div>
+                            {bidAmount && parseFloat(bidAmount) > (balanceRes?.balanceNum ?? 0) + (myBid?.amount ?? 0) && (
                               <p className="font-mono text-xs text-red-400">Insufficient balance for this bid amount.</p>
                             )}
                             <div className="flex gap-2">
@@ -423,13 +414,13 @@ export default function Dashboard() {
                                   !bidAmount ||
                                   parseFloat(bidAmount) <= (myBid?.amount ?? 0) ||
                                   (bidsRes?.topPreorderAmount != null && parseFloat(bidAmount) <= bidsRes.topPreorderAmount) ||
-                                  (bidUseBalance && parseFloat(bidAmount) > (balanceRes?.balanceNum ?? 0))
+                                  parseFloat(bidAmount) > (balanceRes?.balanceNum ?? 0) + (myBid?.amount ?? 0)
                                 }
-                                onClick={() => placeBid({ amount: parseFloat(bidAmount), useBalance: bidUseBalance })}
+                                onClick={() => placeBid({ amount: parseFloat(bidAmount) })}
                               >
-                                {isPlacingBid ? (myBid ? 'Updating…' : 'Placing…') : (myBid ? 'Update Bid' : 'Place Bid')}
+                                {isPlacingBid ? (myBid ? 'Updating…' : 'Placing…') : (myBid ? 'Raise Bid' : 'Place Bid')}
                               </Button>
-                              <Button size="sm" variant="outline" className="border-border text-xs" onClick={() => { setShowBidForm(false); setBidAmount(''); setBidUseBalance(false); }}>
+                              <Button size="sm" variant="outline" className="border-border text-xs" onClick={() => { setShowBidForm(false); setBidAmount(''); }}>
                                 Cancel
                               </Button>
                             </div>

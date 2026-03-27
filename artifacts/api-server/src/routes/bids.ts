@@ -28,7 +28,6 @@ router.get("/", requireAuth, async (req, res) => {
 
     const myBid = bids.find((b) => b.userId === req.session.userId);
 
-    // Get the highest active pre-order amount so the UI can show the minimum bid needed
     const topPreorderRows = await db
       .select({ amount: preordersTable.amount })
       .from(preordersTable)
@@ -64,9 +63,9 @@ router.get("/", requireAuth, async (req, res) => {
   }
 });
 
-// POST /api/bids — place or update your bid
+// POST /api/bids — place or raise your bid (always paid with balance)
 router.post("/", requireAuth, async (req, res) => {
-  const { amount, useBalance } = req.body as { amount?: number; useBalance?: boolean };
+  const { amount } = req.body as { amount?: number };
 
   if (!amount || typeof amount !== "number" || amount <= 0) {
     res.status(400).json({ error: "invalid_amount", message: "Bid amount must be a positive number" });
@@ -104,70 +103,49 @@ router.post("/", requireAuth, async (req, res) => {
       .where(eq(bidsTable.userId, userId))
       .limit(1);
 
-    if (useBalance) {
-      const userRows = await db.select({ balance: usersTable.balance }).from(usersTable).where(eq(usersTable.id, userId)).limit(1);
-      const currentBalance = parseFloat(userRows[0]?.balance ?? "0");
+    const userRows = await db.select({ balance: usersTable.balance }).from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+    const currentBalance = parseFloat(userRows[0]?.balance ?? "0");
 
-      const oldBalanceHeld = existing.length && existing[0].paidWithBalance ? parseFloat(existing[0].amount) : 0;
-      const netCost = amount - oldBalanceHeld;
+    // The existing bid is always held from balance; new bid must be higher
+    const alreadyHeld = existing.length ? parseFloat(existing[0].amount) : 0;
 
-      if (currentBalance < netCost) {
-        res.status(400).json({
-          error: "insufficient_balance",
-          message: `Insufficient balance. Need $${netCost.toFixed(2)} more (have $${currentBalance.toFixed(2)})`,
-        });
-        return;
-      }
+    if (existing.length && amount <= alreadyHeld) {
+      res.status(400).json({ error: "bid_too_low", message: "New bid must be higher than your current bid." });
+      return;
+    }
 
-      if (netCost > 0) {
-        await db.update(usersTable)
-          .set({ balance: sql`${usersTable.balance} - ${netCost.toFixed(2)}::numeric`, updatedAt: new Date() })
-          .where(eq(usersTable.id, userId));
-      } else if (netCost < 0) {
-        const refund = Math.abs(netCost);
-        await db.update(usersTable)
-          .set({ balance: sql`${usersTable.balance} + ${refund.toFixed(2)}::numeric`, updatedAt: new Date() })
-          .where(eq(usersTable.id, userId));
-      }
+    // Only deduct the difference (the rest is already held)
+    const netCost = amount - alreadyHeld;
 
-      if (existing.length) {
-        await db
-          .update(bidsTable)
-          .set({ amount: amount.toFixed(2), paidWithBalance: true, updatedAt: new Date() })
-          .where(eq(bidsTable.userId, userId));
-        res.json({ success: true, message: "Bid updated" });
-      } else {
-        await db.insert(bidsTable).values({
-          userId,
-          amount: amount.toFixed(2),
-          status: "active",
-          paidWithBalance: true,
-        });
-        res.json({ success: true, message: "Bid placed" });
-      }
+    if (currentBalance < netCost) {
+      res.status(400).json({
+        error: "insufficient_balance",
+        message: `Insufficient balance. Need $${netCost.toFixed(2)} more (you have $${currentBalance.toFixed(2)}).`,
+      });
+      return;
+    }
+
+    // Deduct the difference from balance
+    if (netCost > 0) {
+      await db.update(usersTable)
+        .set({ balance: sql`${usersTable.balance} - ${netCost.toFixed(2)}::numeric`, updatedAt: new Date() })
+        .where(eq(usersTable.id, userId));
+    }
+
+    if (existing.length) {
+      await db
+        .update(bidsTable)
+        .set({ amount: amount.toFixed(2), paidWithBalance: true, updatedAt: new Date() })
+        .where(eq(bidsTable.userId, userId));
+      res.json({ success: true, message: "Bid updated" });
     } else {
-      if (existing.length && existing[0].paidWithBalance) {
-        const refundAmount = parseFloat(existing[0].amount);
-        await db.update(usersTable)
-          .set({ balance: sql`${usersTable.balance} + ${refundAmount.toFixed(2)}::numeric`, updatedAt: new Date() })
-          .where(eq(usersTable.id, userId));
-      }
-
-      if (existing.length) {
-        await db
-          .update(bidsTable)
-          .set({ amount: amount.toFixed(2), paidWithBalance: false, updatedAt: new Date() })
-          .where(eq(bidsTable.userId, userId));
-        res.json({ success: true, message: "Bid updated" });
-      } else {
-        await db.insert(bidsTable).values({
-          userId,
-          amount: amount.toFixed(2),
-          status: "active",
-          paidWithBalance: false,
-        });
-        res.json({ success: true, message: "Bid placed" });
-      }
+      await db.insert(bidsTable).values({
+        userId,
+        amount: amount.toFixed(2),
+        status: "active",
+        paidWithBalance: true,
+      });
+      res.json({ success: true, message: "Bid placed" });
     }
   } catch (err) {
     req.log.error({ err }, "Failed to place bid");
@@ -175,13 +153,13 @@ router.post("/", requireAuth, async (req, res) => {
   }
 });
 
-// DELETE /api/bids — cancel your bid (refunds balance if paid with balance)
+// DELETE /api/bids — cancel your bid (always refunds balance)
 router.delete("/", requireAuth, async (req, res) => {
   const userId = req.session.userId!;
   try {
     const existing = await db.select().from(bidsTable).where(eq(bidsTable.userId, userId)).limit(1);
 
-    if (existing.length && existing[0].paidWithBalance) {
+    if (existing.length) {
       const refundAmount = parseFloat(existing[0].amount);
       await db.update(usersTable)
         .set({ balance: sql`${usersTable.balance} + ${refundAmount.toFixed(2)}::numeric`, updatedAt: new Date() })

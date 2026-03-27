@@ -36,6 +36,7 @@ import {
   TrendingUp,
   Ban,
   Tag,
+  Gavel,
   Plus,
   Trash2,
   ToggleLeft,
@@ -516,6 +517,35 @@ export default function Admin() {
       ),
     enabled: !!user?.isAdmin,
     refetchInterval: 30000,
+  });
+
+  type AdminBid = { id: number; amount: number; username: string; discordId: string; userId: string; createdAt: string };
+  const { data: adminBidsData, isLoading: isAdminBidsLoading, refetch: refetchAdminBids } = useQuery({
+    queryKey: ["admin-bids"],
+    queryFn: () => apiFetch<{ bids: AdminBid[] }>("api/admin/bids"),
+    enabled: !!user?.isAdmin,
+    refetchInterval: 15000,
+  });
+
+  const [isFulfillingBid, setIsFulfillingBid] = useState(false);
+  const { mutate: fulfillTopBid } = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`${import.meta.env.BASE_URL}api/admin/bids/fulfill`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.message || "Failed"); }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "Bid fulfilled!", description: data.message, className: "bg-primary text-primary-foreground" });
+      setIsFulfillingBid(false);
+      refetchAdminBids();
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+      setIsFulfillingBid(false);
+    },
   });
 
   const HIDDEN_GUILD_DISCORD_IDS = new Set(["905033435817586749"]);
@@ -2043,6 +2073,84 @@ export default function Admin() {
                     </div>
                   );
                 })()
+              )}
+            </Card>
+          </motion.div>
+
+          {/* Bid Queue */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.33 }}
+          >
+            <Card className="border-primary/30 bg-primary/5">
+              <div className="p-6 border-b border-primary/20 flex items-center gap-3">
+                <Gavel className="w-5 h-5 text-primary" />
+                <h2 className="font-display font-bold uppercase tracking-wider text-primary">Bid Queue</h2>
+                <span className="ml-auto text-xs font-mono text-muted-foreground">
+                  {adminBidsData?.bids.length ?? 0} active bid{adminBidsData?.bids.length !== 1 ? "s" : ""}
+                </span>
+              </div>
+              {isAdminBidsLoading ? (
+                <div className="p-8 flex justify-center"><Loader2 className="w-6 h-6 text-primary animate-spin" /></div>
+              ) : !adminBidsData?.bids.length ? (
+                <div className="p-8 text-center font-mono text-xs text-muted-foreground">No active bids.</div>
+              ) : (
+                <div className="p-6 space-y-4">
+                  <div className="rounded-lg border border-primary/15 overflow-hidden">
+                    <table className="w-full font-mono text-xs">
+                      <thead>
+                        <tr className="border-b border-primary/10 bg-primary/5">
+                          <th className="text-left p-3 text-muted-foreground font-normal">Rank</th>
+                          <th className="text-left p-3 text-muted-foreground font-normal">User</th>
+                          <th className="text-right p-3 text-muted-foreground font-normal">Bid</th>
+                          <th className="text-right p-3 text-muted-foreground font-normal">Placed</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {adminBidsData.bids.map((bid, i) => (
+                          <tr key={bid.id} className={`border-b border-border/30 ${i === 0 ? "bg-primary/8" : ""}`}>
+                            <td className="p-3">
+                              <span className={`px-2 py-0.5 rounded-full border text-xs ${i === 0 ? "border-primary/40 text-primary bg-primary/10" : "border-border text-muted-foreground"}`}>
+                                #{i + 1}
+                              </span>
+                            </td>
+                            <td className="p-3 text-foreground">{bid.username}</td>
+                            <td className="p-3 text-right font-bold text-primary">${bid.amount.toFixed(2)}</td>
+                            <td className="p-3 text-right text-muted-foreground">{new Date(bid.createdAt).toLocaleString()}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="flex items-center gap-3 p-4 rounded-lg border border-primary/20 bg-primary/5">
+                    <div className="flex-1">
+                      <p className="font-mono text-xs text-foreground font-bold">Fulfill Top Bid</p>
+                      <p className="font-mono text-xs text-muted-foreground mt-0.5">
+                        Activates a slot for <span className="text-primary">{adminBidsData.bids[0]?.username}</span> (${adminBidsData.bids[0]?.amount.toFixed(2)}),
+                        refunds {adminBidsData.bids.length - 1} other bidder{adminBidsData.bids.length - 1 !== 1 ? "s" : ""}. All bids are cleared.
+                      </p>
+                    </div>
+                    {!isFulfillingBid ? (
+                      <Button
+                        size="sm"
+                        className="text-xs shrink-0"
+                        onClick={() => setIsFulfillingBid(true)}
+                      >
+                        <Gavel className="w-3.5 h-3.5 mr-1.5" /> Fulfill
+                      </Button>
+                    ) : (
+                      <div className="flex gap-2 shrink-0">
+                        <Button size="sm" className="text-xs bg-green-600 hover:bg-green-700" onClick={() => fulfillTopBid()} disabled={false}>
+                          Confirm
+                        </Button>
+                        <Button size="sm" variant="outline" className="text-xs" onClick={() => setIsFulfillingBid(false)}>
+                          Cancel
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </div>
               )}
             </Card>
           </motion.div>

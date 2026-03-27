@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, slotsTable, usersTable, paymentsTable, couponsTable } from "@workspace/db";
+import { db, slotsTable, usersTable, paymentsTable, couponsTable, bidsTable } from "@workspace/db";
 import { eq, sql, inArray, and, lte, desc, ne } from "drizzle-orm";
 import { requireAdmin, isSuperAdmin } from "../middlewares/requireAdmin.js";
 import { getSettings, setSetting } from "../lib/settings.js";
@@ -774,4 +774,153 @@ router.get("/servers", async (req, res) => {
   }
 });
 
+// POST /api/admin/bids/fulfill — activate slot for top bidder, refund everyone else
+router.post("/bids/fulfill", async (req, res) => {
+  try {
+    const allBids = await db
+      .select()
+      .from(bidsTable)
+      .where(eq(bidsTable.status, "active"))
+      .orderBy(desc(bidsTable.amount), bidsTable.createdAt);
+
+    if (!allBids.length) {
+      res.status(400).json({ error: "no_bids", message: "No active bids to fulfill" });
+      return;
+    }
+
+    const winner = allBids[0];
+    const losers = allBids.slice(1);
+
+    // Refund all losers
+    for (const bid of losers) {
+      const refund = parseFloat(bid.amount);
+      await db.update(usersTable)
+        .set({ balance: sql`${usersTable.balance} + ${refund.toFixed(2)}::numeric`, updatedAt: new Date() })
+        .where(eq(usersTable.id, bid.userId));
+    }
+
+    // The winner's bid amount stays spent — it's the payment for their slot
+    // Activate slot for winner using same logic as the normal slot grant
+    const winnerUsers = await db.select().from(usersTable).where(eq(usersTable.id, winner.userId)).limit(1);
+    if (!winnerUsers.length) {
+      res.status(404).json({ error: "not_found", message: "Winning user not found" });
+      return;
+    }
+
+    const winnerUser = winnerUsers[0];
+    const { slotCount, slotDurationHours } = await getSettings();
+    const expiryMs = slotDurationHours * 60 * 60 * 1000;
+
+    const otherActiveSlots = await db.select({ slotNumber: slotsTable.slotNumber })
+      .from(slotsTable)
+      .where(and(eq(slotsTable.isActive, true), ne(slotsTable.userId, winner.userId)));
+    const busySlotNumbers = new Set(otherActiveSlots.map((s) => s.slotNumber));
+
+    const availableSlotNumbers: number[] = [];
+    for (let i = 1; i <= slotCount; i++) {
+      if (!busySlotNumbers.has(i)) availableSlotNumbers.push(i);
+    }
+
+    if (!availableSlotNumbers.length) {
+      res.status(409).json({ error: "no_slots", message: "No available slots right now" });
+      return;
+    }
+
+    const slotNum = availableSlotNumbers[0];
+    const existingSlot = await db.select().from(slotsTable)
+      .where(and(eq(slotsTable.userId, winner.userId), eq(slotsTable.slotNumber, slotNum)))
+      .limit(1);
+
+    if (!existingSlot.length) {
+      await db.insert(slotsTable).values({ userId: winner.userId, slotNumber: slotNum, isActive: false });
+    }
+
+    const slotRow = await db.select().from(slotsTable)
+      .where(and(eq(slotsTable.userId, winner.userId), eq(slotsTable.slotNumber, slotNum)))
+      .limit(1);
+
+    const expiresAt = new Date(Date.now() + expiryMs);
+    let luarmorKey: string | null = null;
+    if (isLuarmorConfigured()) {
+      try {
+        const keyData = await createLuarmorUser(winnerUser.discordId, slotNum, expiresAt);
+        luarmorKey = keyData?.license_key ?? null;
+      } catch (e) {
+        req.log.warn({ e }, "Luarmor user creation failed (bid fulfill)");
+      }
+    }
+
+    await db.update(slotsTable).set({
+      isActive: true,
+      expiresAt,
+      luarmorKey: luarmorKey ?? slotRow[0]?.luarmorKey ?? null,
+      notified24h: false,
+      notified1h: false,
+      updatedAt: new Date(),
+    }).where(and(eq(slotsTable.userId, winner.userId), eq(slotsTable.slotNumber, slotNum)));
+
+    // Record the payment
+    await db.insert(paymentsTable).values({
+      userId: winner.userId,
+      slotNumber: slotNum,
+      method: "bid-balance",
+      status: "completed",
+      amount: winner.amount,
+      usdAmount: winner.amount,
+      currency: "USD",
+    });
+
+    // Delete ALL bids
+    await db.delete(bidsTable);
+
+    try {
+      await sendPaymentWebhook({
+        username: winnerUser.username,
+        discordId: winnerUser.discordId,
+        method: "balance",
+        currency: "USD",
+        amount: winner.amount,
+        purchaseType: "slot",
+      });
+    } catch (e) {
+      req.log.warn({ e }, "Bid fulfill webhook failed");
+    }
+
+    res.json({
+      success: true,
+      message: `Slot #${slotNum} activated for ${winnerUser.username}. ${losers.length} other bidder(s) refunded.`,
+      winner: { username: winnerUser.username, discordId: winnerUser.discordId, amount: parseFloat(winner.amount), slotNumber: slotNum },
+      refunded: losers.length,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Bid fulfill failed");
+    res.status(500).json({ error: "server_error", message: "Failed to fulfill bid" });
+  }
+});
+
+// GET /api/admin/bids — list all active bids
+router.get("/bids", async (req, res) => {
+  try {
+    const bids = await db
+      .select({
+        id: bidsTable.id,
+        amount: bidsTable.amount,
+        userId: bidsTable.userId,
+        createdAt: bidsTable.createdAt,
+        username: usersTable.username,
+        discordId: usersTable.discordId,
+      })
+      .from(bidsTable)
+      .innerJoin(usersTable, eq(bidsTable.userId, usersTable.id))
+      .where(eq(bidsTable.status, "active"))
+      .orderBy(desc(bidsTable.amount), bidsTable.createdAt);
+
+    res.json({ bids: bids.map(b => ({ ...b, amount: parseFloat(b.amount) })) });
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch admin bids");
+    res.status(500).json({ error: "server_error" });
+  }
+});
+
 export default router;
+
