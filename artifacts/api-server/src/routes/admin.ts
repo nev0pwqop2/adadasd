@@ -565,8 +565,9 @@ router.get("/transactions", async (req, res) => {
 
     function getUsdValue(p: typeof revenue[0]): number {
       if (p.usdAmount) return parseFloat(p.usdAmount);
-      if (p.method?.includes("stripe")) return parseFloat(p.amount ?? "0");
-      return 0;
+      // For any payment method, fall back to the stored amount as USD
+      // (crypto payments store the USD charge amount in usdAmount, but older records may not)
+      return parseFloat(p.amount ?? "0");
     }
 
     const now = new Date();
