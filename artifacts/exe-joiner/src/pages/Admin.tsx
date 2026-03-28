@@ -1343,88 +1343,97 @@ export default function Admin() {
                         .filter((s) => s.isActive)
                         .map((slot) => {
                           const isPaused = slot.isPaused;
-                          const expiry = slot.isPaused
-                            ? slot.pausedAt
-                              ? new Date(slot.pausedAt)
-                              : null
-                            : slot.expiresAt
-                              ? new Date(slot.expiresAt)
-                              : null;
-                          const msLeft = expiry
-                            ? slot.isPaused
-                              ? (slot.expiresAt ? new Date(slot.expiresAt).getTime() - new Date(slot.pausedAt!).getTime() : 0)
-                              : expiry.getTime() - Date.now()
+                          const msLeft = slot.expiresAt
+                            ? Math.max(0, new Date(slot.expiresAt).getTime() - Date.now())
                             : null;
-                          const hoursLeft = msLeft != null ? Math.max(0, Math.floor(msLeft / 3600000)) : null;
-                          const minsLeft = msLeft != null ? Math.max(0, Math.floor((msLeft % 3600000) / 60000)) : null;
+                          const totalSec = msLeft != null ? Math.floor(msLeft / 1000) : null;
+                          const d = totalSec != null ? Math.floor(totalSec / 86400) : null;
+                          const h = totalSec != null ? Math.floor((totalSec % 86400) / 3600) : null;
+                          const m = totalSec != null ? Math.floor((totalSec % 3600) / 60) : null;
+                          const sec = totalSec != null ? totalSec % 60 : null;
+                          const timeStr = totalSec != null
+                            ? d! > 0
+                              ? `${d}d ${h}h ${String(m).padStart(2,"0")}m`
+                              : `${h}h ${String(m).padStart(2,"0")}m ${String(sec).padStart(2,"0")}s`
+                            : null;
 
                           return (
                             <div
                               key={slot.slotNumber}
-                              className={`border rounded p-4 flex flex-col gap-3 transition-colors ${
+                              className={`rounded-2xl border flex flex-col items-center p-4 pt-3 gap-3 transition-colors ${
                                 isPaused
-                                  ? "border-amber-500/40 bg-amber-500/10"
-                                  : "border-primary/20 bg-primary/5"
+                                  ? "border-amber-500/30 bg-[#16140e]"
+                                  : "border-primary/20 bg-[#111209]"
                               }`}
                             >
-                              <div className="flex items-center gap-2">
-                                <span className="font-mono text-xs font-bold text-muted-foreground bg-muted/30 px-2 py-0.5 rounded">
-                                  #{slot.slotNumber}
+                              {/* Header row */}
+                              <div className="w-full flex items-center justify-between">
+                                <span className="font-mono text-[11px] font-bold bg-white/6 border border-white/8 px-2 py-0.5 rounded text-white/50 tracking-widest">
+                                  #{String(slot.slotNumber).padStart(2, "0")}
                                 </span>
-                                {isPaused && (
-                                  <span className="text-xs font-mono font-bold text-amber-400 bg-amber-500/20 px-2 py-0.5 rounded flex items-center gap-1">
-                                    <Pause className="w-3 h-3" />
-                                    PAUSED
+                                {isPaused ? (
+                                  <span className="flex items-center gap-1.5 text-[11px] font-mono font-semibold text-amber-400">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                                    Paused
                                   </span>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-2">
-                                {slot.owner?.avatar ? (
-                                  <img
-                                    src={`https://cdn.discordapp.com/avatars/${slot.owner.discordId}/${slot.owner.avatar}.webp?size=32`}
-                                    alt={slot.owner.username}
-                                    className="w-6 h-6 rounded-full shrink-0"
-                                  />
                                 ) : (
-                                  <div className="w-6 h-6 rounded-full bg-primary/20 shrink-0" />
-                                )}
-                                <span className="font-mono text-sm text-foreground truncate">
-                                  {slot.owner?.username ?? "Unknown"}
-                                </span>
-                              </div>
-                              {msLeft != null && (
-                                <div className="font-mono text-xs text-muted-foreground flex items-center gap-1">
-                                  {isPaused ? (
-                                    <Pause className="w-3 h-3 text-amber-400 shrink-0" />
-                                  ) : null}
-                                  <span>
-                                    {hoursLeft}h {minsLeft}m {isPaused ? "remaining (frozen)" : "left"}
+                                  <span className="flex items-center gap-1.5 text-[11px] font-mono font-semibold text-primary">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                                    Active
                                   </span>
+                                )}
+                              </div>
+
+                              {/* Avatar */}
+                              {slot.owner?.avatar ? (
+                                <img
+                                  src={`https://cdn.discordapp.com/avatars/${slot.owner.discordId}/${slot.owner.avatar}.webp?size=128`}
+                                  alt={slot.owner.username}
+                                  className="w-[62px] h-[62px] rounded-full object-cover border-2 border-white/10"
+                                />
+                              ) : (
+                                <div className="w-[62px] h-[62px] rounded-full bg-white/6 border-2 border-white/8 flex items-center justify-center">
+                                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-white/20">
+                                    <circle cx="12" cy="8" r="4" /><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
+                                  </svg>
                                 </div>
                               )}
-                              <Button
-                                size="sm"
-                                variant="outline"
+
+                              {/* Username */}
+                              <p className="text-sm text-white/60 font-medium truncate max-w-full px-1 text-center">
+                                {slot.owner?.username ?? "Unknown"}
+                              </p>
+
+                              {/* Timer */}
+                              {timeStr && (
+                                <div className="flex items-center gap-1.5 text-[11px] font-mono text-white/35">
+                                  {isPaused
+                                    ? <Pause className="w-3 h-3 text-amber-400/70" />
+                                    : <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-white/25"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                                  }
+                                  <span className={isPaused ? "text-amber-400/70" : ""}>{timeStr}</span>
+                                </div>
+                              )}
+
+                              {/* Pause / Resume button */}
+                              <button
                                 disabled={togglingPause === slot.slotNumber}
-                                onClick={() => {
-                                  setTogglingPause(slot.slotNumber);
-                                  togglePause(slot.slotNumber);
-                                }}
-                                className={
+                                onClick={() => { setTogglingPause(slot.slotNumber); togglePause(slot.slotNumber); }}
+                                className={`w-full h-8 rounded-lg border text-xs font-mono font-medium transition-all flex items-center justify-center gap-1.5 ${
                                   isPaused
-                                    ? "border-green-500/50 text-green-400 hover:bg-green-500/10 font-mono text-xs"
-                                    : "border-amber-500/50 text-amber-400 hover:bg-amber-500/10 font-mono text-xs"
-                                }
+                                    ? "border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
+                                    : "border-amber-500/30 text-amber-400 hover:bg-amber-500/10"
+                                }`}
                               >
                                 {togglingPause === slot.slotNumber ? (
-                                  <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                                  <Loader2 className="w-3 h-3 animate-spin" />
                                 ) : isPaused ? (
-                                  <Play className="w-3 h-3 mr-1" />
+                                  <Play className="w-3 h-3" />
                                 ) : (
-                                  <Pause className="w-3 h-3 mr-1" />
+                                  <Pause className="w-3 h-3" />
                                 )}
-                                {isPaused ? "Resume Slot" : "Pause Slot"}
-                              </Button>
+                                {isPaused ? "Resume" : "Pause"}
+                              </button>
                             </div>
                           );
                         })}

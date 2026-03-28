@@ -418,6 +418,8 @@ router.get("/", requireAuth, async (req, res) => {
           script,
           hwidResetAt: mySlot.hwidResetAt?.toISOString() ?? null,
           hwidUnlimited,
+          isPaused: mySlot.isPaused,
+          pausedAt: mySlot.pausedAt?.toISOString() ?? null,
         };
       } else if (activeSlot) {
         // Someone else owns this slot
@@ -430,6 +432,8 @@ router.get("/", requireAuth, async (req, res) => {
           purchasedAt: null,
           expiresAt: activeSlot.expiresAt?.toISOString() ?? null,
           label: null,
+          isPaused: activeSlot.isPaused,
+          pausedAt: activeSlot.pausedAt?.toISOString() ?? null,
         };
       } else {
         // Slot is free
