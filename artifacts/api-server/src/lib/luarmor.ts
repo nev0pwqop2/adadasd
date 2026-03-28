@@ -122,11 +122,10 @@ export async function resetLuarmorHwid(userKey: string): Promise<{ success: bool
 }
 
 /**
- * Pause a Luarmor user by setting auth_expire to 1 (epoch start = already expired).
- * Call unpauseLuarmorUser to restore.
+ * Pause a Luarmor user by setting auth_expire to 1 second ago, immediately invalidating the key.
  */
 export async function pauseLuarmorUser(userKey: string): Promise<void> {
-  await updateLuarmorUser(userKey, { auth_expire: 1 });
+  await updateLuarmorUser(userKey, { auth_expire: Math.floor(Date.now() / 1000) - 1 });
 }
 
 /**
