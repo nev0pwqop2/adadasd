@@ -289,22 +289,36 @@ router.delete("/deposit/cancel", requireAuth, async (req: Request, res: Response
 
 // POST /api/balance/use — buy a slot using account balance
 router.post("/use", requireAuth, async (req: Request, res: Response) => {
-  const { slotNumber, hours, couponId } = req.body as { slotNumber?: number; hours?: number; couponId?: number };
+  const rawSlot = Number(req.body?.slotNumber);
+  const rawHours = req.body?.hours !== undefined ? Number(req.body.hours) : undefined;
+  const couponId = req.body?.couponId ? Number(req.body.couponId) : undefined;
 
-  if (slotNumber === undefined || slotNumber < 1) {
-    res.status(400).json({ error: "invalid_slot" });
+  const slotNumber = Number.isInteger(rawSlot) ? rawSlot : NaN;
+
+  if (!Number.isFinite(slotNumber) || slotNumber < 1) {
+    res.status(400).json({ error: "invalid_slot", message: "Invalid slot number." });
     return;
   }
 
   try {
     const settings = await getSettings();
-    const { pricePerDay, pricePerHour, hourlyPricingEnabled, minHours, slotDurationHours } = settings;
+    const { pricePerDay, pricePerHour, hourlyPricingEnabled, minHours, slotDurationHours, slotCount } = settings;
+
+    // Reject slot numbers above the configured max
+    if (slotNumber > slotCount) {
+      res.status(400).json({ error: "invalid_slot", message: `Slot number must be between 1 and ${slotCount}.` });
+      return;
+    }
 
     let chargeAmount: number;
     let purchasedHours: number;
 
     if (hourlyPricingEnabled) {
-      const h = Math.max(minHours, hours ?? minHours);
+      const h = rawHours !== undefined ? Math.floor(rawHours) : minHours;
+      if (!Number.isFinite(h) || h < minHours || h > 8760) {
+        res.status(400).json({ error: "invalid_hours", message: `Hours must be between ${minHours} and 8760.` });
+        return;
+      }
       chargeAmount = h * pricePerHour;
       purchasedHours = h;
     } else {

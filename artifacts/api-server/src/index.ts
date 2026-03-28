@@ -155,8 +155,17 @@ function startDiscordBot() {
   logger.info("Discord bot process started");
 }
 
-// Internal trigger endpoint — called by Discord bot after cleanup, or admin after slot changes
-app.post("/api/internal/trigger-fulfillment", (_req, res) => {
+// Internal trigger endpoint — called by Discord bot after cleanup, or admin after slot changes.
+// Only accessible from the same host (loopback) to prevent external abuse.
+app.post("/api/internal/trigger-fulfillment", (req, res) => {
+  const socket = (req.socket as any);
+  const remoteAddr = socket?.remoteAddress ?? "";
+  const isLoopback = remoteAddr === "127.0.0.1" || remoteAddr === "::1" || remoteAddr === "::ffff:127.0.0.1";
+  if (!isLoopback) {
+    logger.warn({ remoteAddr }, "Rejected external call to internal trigger endpoint");
+    res.status(403).json({ error: "forbidden" });
+    return;
+  }
   // Fire and forget — don't await so we respond immediately
   cleanupThenFulfill().catch((err) => logger.warn({ err }, "Triggered fulfillment failed"));
   res.json({ ok: true });
