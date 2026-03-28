@@ -414,6 +414,7 @@ async function cleanupExpiredSlots() {
       SELECT slot_number, luarmor_user_id, user_id
       FROM slots
       WHERE is_active = true
+        AND is_paused = false
         AND expires_at IS NOT NULL
         AND expires_at < NOW()
     `);

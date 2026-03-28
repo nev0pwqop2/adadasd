@@ -12,7 +12,7 @@ export async function runSlotCleanup(): Promise<number> {
   const expired = await db
     .select()
     .from(slotsTable)
-    .where(and(eq(slotsTable.isActive, true), lt(slotsTable.expiresAt, now)));
+    .where(and(eq(slotsTable.isActive, true), eq(slotsTable.isPaused, false), lt(slotsTable.expiresAt, now)));
 
   if (!expired.length) return 0;
 
