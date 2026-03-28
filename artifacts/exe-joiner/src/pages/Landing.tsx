@@ -1,7 +1,6 @@
 import React, { useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { useGetMe } from '@workspace/api-client-react';
-import { motion } from 'framer-motion';
 
 const DiscordIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
@@ -11,7 +10,7 @@ const DiscordIcon = () => (
 
 const ERROR_MESSAGES: Record<string, string> = {
   token_exchange_failed: 'Login failed — Discord rejected the token exchange.',
-  rate_limited: 'Discord is rate limiting the server right now. Wait 1–2 minutes and try again.',
+  rate_limited: 'Discord is rate limiting the server. Wait 1–2 minutes and try again.',
   discord_denied: 'You cancelled the Discord login.',
   invalid_state: 'Login session expired or was tampered with. Please try again.',
   no_code: 'No authorisation code received from Discord.',
@@ -25,7 +24,6 @@ export default function Landing() {
 
   const params = new URLSearchParams(window.location.search);
   const errorCode = params.get('error');
-  const errorDetail = params.get('detail');
 
   useEffect(() => {
     if (!isLoading && user) setLocation('/dashboard');
@@ -37,64 +35,56 @@ export default function Landing() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="min-h-screen bg-[#0a0a0c] flex items-center justify-center">
         <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6 relative overflow-hidden">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_50%_at_50%_-10%,hsla(43,96%,56%,0.12),transparent)]" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_40%_30%_at_50%_110%,hsla(43,96%,56%,0.05),transparent)]" />
+    <div className="min-h-screen bg-[#0a0a0c] flex flex-col items-center justify-center px-4">
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_50%_40%_at_50%_0%,hsla(43,96%,56%,0.07),transparent)]" />
 
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, ease: 'easeOut' }}
-        className="relative z-10 flex flex-col items-center text-center max-w-sm w-full"
-      >
-        <div className="relative mb-8">
-          <div className="absolute inset-0 rounded-full bg-primary/25 blur-3xl scale-[2]" />
-          <img
-            src={`${import.meta.env.BASE_URL}exe-logo.png`}
-            alt="EXE"
-            className="relative z-10 w-16 h-16"
-          />
+      <div className="relative z-10 w-full max-w-[360px]">
+        {/* Card */}
+        <div className="bg-[#111115] border border-white/8 rounded-2xl p-8 flex flex-col items-center text-center shadow-2xl">
+          {/* Logo */}
+          <div className="w-14 h-14 rounded-2xl bg-primary/15 border border-primary/25 flex items-center justify-center mb-5 shadow-[0_0_24px_hsla(43,96%,56%,0.15)]">
+            <img
+              src={`${import.meta.env.BASE_URL}exe-logo.png`}
+              alt="EXE"
+              className="w-9 h-9 object-contain"
+            />
+          </div>
+
+          <h1 className="text-xl font-bold text-white mb-1 tracking-tight">Exe Joiner</h1>
+          <p className="text-sm text-white/40 mb-6">Sign in to access your dashboard</p>
+
+          {errorCode && (
+            <div className="w-full mb-4 rounded-xl border border-red-500/25 bg-red-500/8 p-3 text-left">
+              <p className="text-xs text-red-400">
+                {ERROR_MESSAGES[errorCode] ?? `Error: ${errorCode}`}
+              </p>
+            </div>
+          )}
+
+          <button
+            onClick={handleLogin}
+            className="w-full flex items-center justify-center gap-2.5 h-11 rounded-xl bg-[#5865F2] text-white font-semibold text-sm hover:bg-[#4752c4] active:bg-[#3c45a5] transition-colors"
+          >
+            <DiscordIcon />
+            Sign in with Discord
+          </button>
+
+          <p className="mt-4 text-[11px] text-white/25 leading-relaxed">
+            By signing in, you agree to our Terms of Service
+          </p>
         </div>
 
-        <h1 className="text-4xl font-display font-bold tracking-tight text-foreground mb-2">
-          Exe Joiner
-        </h1>
-        <p className="text-sm text-muted-foreground mb-10">
-          Premium slot access · Discord verified
-        </p>
-
-        {errorCode && (
-          <div className="w-full mb-6 rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-left space-y-2">
-            <p className="text-sm font-semibold text-red-400">
-              {ERROR_MESSAGES[errorCode] ?? `Error: ${errorCode}`}
-            </p>
-            {errorDetail && (
-              <pre className="text-[10px] font-mono text-red-300/70 whitespace-pre-wrap break-all leading-relaxed">
-                {decodeURIComponent(errorDetail)}
-              </pre>
-            )}
-          </div>
-        )}
-
-        <button
-          onClick={handleLogin}
-          className="w-full flex items-center justify-center gap-3 h-12 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:brightness-110 active:brightness-95 transition-all shadow-[0_0_20px_hsla(43,96%,56%,0.25)]"
-        >
-          <DiscordIcon />
-          Continue with Discord
-        </button>
-
-        <p className="mt-5 text-xs text-muted-foreground/50 leading-relaxed">
+        <p className="mt-5 text-center text-xs text-white/25">
           Verified Discord accounts only
         </p>
-      </motion.div>
+      </div>
     </div>
   );
 }
