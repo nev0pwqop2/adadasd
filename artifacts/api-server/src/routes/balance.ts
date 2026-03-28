@@ -340,7 +340,25 @@ router.post("/use", requireAuth, async (req: Request, res: Response) => {
     }
 
     // Apply coupon discount if provided
+    let couponApplied = false;
     if (couponId) {
+      // Per-user check: has this user already used this coupon?
+      const priorUse = await db
+        .select({ id: paymentsTable.id })
+        .from(paymentsTable)
+        .where(and(
+          eq(paymentsTable.userId, userId),
+          eq(paymentsTable.couponId, couponId),
+          eq(paymentsTable.status, "completed")
+        ))
+        .limit(1);
+
+      if (priorUse.length) {
+        res.status(400).json({ error: "coupon_already_used", message: "You have already used this coupon." });
+        return;
+      }
+
+      // Fetch coupon details to calculate discount (read-only — actual consumption is atomic below)
       const couponRows = await db
         .select()
         .from(couponsTable)
@@ -360,6 +378,7 @@ router.post("/use", requireAuth, async (req: Request, res: Response) => {
           } else {
             chargeAmount = parseFloat(Math.max(0, chargeAmount - discountValue).toFixed(2));
           }
+          couponApplied = true;
         }
       }
     }
@@ -402,6 +421,7 @@ router.post("/use", requireAuth, async (req: Request, res: Response) => {
       amount: chargeAmount.toFixed(2),
       currency: "USD",
       derivationIndex: hourlyPricingEnabled ? purchasedHours : null,
+      ...(couponId && couponApplied ? { couponId } : {}),
     });
 
     // Activate slot
@@ -461,11 +481,15 @@ router.post("/use", requireAuth, async (req: Request, res: Response) => {
       req.log.warn({ webhookErr }, "Balance purchase webhook failed");
     }
 
-    // Increment coupon usedCount
-    if (couponId) {
+    // Atomically consume one coupon use — WHERE ensures maxUses can never be exceeded
+    // even under concurrent requests (the DB serialises this UPDATE at row level).
+    if (couponId && couponApplied) {
       await db.update(couponsTable)
         .set({ usedCount: sql`${couponsTable.usedCount} + 1` })
-        .where(eq(couponsTable.id, couponId))
+        .where(and(
+          eq(couponsTable.id, couponId),
+          sql`(${couponsTable.maxUses} IS NULL OR ${couponsTable.usedCount} < ${couponsTable.maxUses})`
+        ))
         .catch(() => {});
     }
 

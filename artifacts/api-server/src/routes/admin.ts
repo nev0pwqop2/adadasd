@@ -116,8 +116,20 @@ router.post("/users/:discordId/add-balance", async (req, res) => {
     const { discordId } = req.params;
     const { amount } = req.body as { amount?: number };
 
-    if (amount === undefined || isNaN(amount)) {
-      res.status(400).json({ error: "invalid_amount", message: "Amount is required" });
+    if (amount === undefined || typeof amount !== "number" || isNaN(amount) || !isFinite(amount)) {
+      res.status(400).json({ error: "invalid_amount", message: "Amount is required and must be a number" });
+      return;
+    }
+
+    // Only super admins may deduct balance — regular admins can only add
+    if (amount < 0 && !isSuperAdmin(req.session.discordId!)) {
+      res.status(403).json({ error: "forbidden", message: "Only super admins can deduct balance" });
+      return;
+    }
+
+    // Hard cap per adjustment: $10,000 add / $10,000 deduct
+    if (amount > 10000 || amount < -10000) {
+      res.status(400).json({ error: "invalid_amount", message: "Amount must be between -$10,000 and $10,000 per adjustment" });
       return;
     }
 
@@ -134,7 +146,7 @@ router.post("/users/:discordId/add-balance", async (req, res) => {
       .set({ balance: newBalance, updatedAt: new Date() })
       .where(eq(usersTable.discordId, discordId));
 
-    req.log.info({ adminId: req.session.userId, targetDiscordId: discordId, amount, newBalance }, "Admin adjusted user balance");
+    req.log.info({ adminId: req.session.userId, adminDiscordId: req.session.discordId, targetDiscordId: discordId, amount, newBalance }, "Admin adjusted user balance");
     res.json({ success: true, newBalance, message: `Balance updated to $${newBalance} for ${users[0].username}` });
   } catch (err) {
     req.log.error({ err }, "Failed to adjust user balance");
