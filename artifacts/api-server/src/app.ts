@@ -111,7 +111,7 @@ const balanceLimiter = rateLimit({
 
 const strictLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 30,
+  max: 120,
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => (req.session as any)?.userId ?? getRealIp(req),
