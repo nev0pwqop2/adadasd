@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db, slotsTable, usersTable, paymentsTable, couponsTable, bidsTable } from "@workspace/db";
 import { eq, sql, inArray, and, lte, desc, ne } from "drizzle-orm";
 import { requireAdmin, isSuperAdmin } from "../middlewares/requireAdmin.js";
+import { generateSlotToken, verifySlotToken } from "../lib/slotToken.js";
 import { getSettings, setSetting } from "../lib/settings.js";
 import { runAutoFulfillment } from "../lib/fulfillment.js";
 import { isLuarmorConfigured, createLuarmorUser, deleteLuarmorUser, getLuarmorUsers } from "../lib/luarmor.js";
@@ -212,6 +213,9 @@ router.get("/slots", async (req, res) => {
         owner: active ? (owners[active.userId] ?? null) : null,
         expiresAt: active?.expiresAt?.toISOString() ?? null,
         purchasedAt: active?.purchasedAt?.toISOString() ?? null,
+        tokenStatus: active
+          ? verifySlotToken(active.purchaseToken, active.userId, active.slotNumber, active.purchasedAt)
+          : null,
       };
     });
 
@@ -299,11 +303,15 @@ router.post("/users/:discordId/slots", async (req, res) => {
             }
           }
         }
+        const purchasedAt = shouldBeActive ? new Date() : null;
         await db.update(slotsTable).set({
           isActive: shouldBeActive,
-          purchasedAt: shouldBeActive ? new Date() : null,
+          purchasedAt,
           expiresAt: shouldBeActive ? new Date(Date.now() + expiryMs) : null,
           luarmorUserId: shouldBeActive ? luarmorUserId : null,
+          purchaseToken: shouldBeActive && purchasedAt
+            ? generateSlotToken(userId, slot.slotNumber, purchasedAt)
+            : null,
         }).where(eq(slotsTable.id, slot.id));
       }
     }
@@ -869,6 +877,7 @@ router.post("/bids/fulfill", async (req, res) => {
       .limit(1);
 
     const expiresAt = new Date(Date.now() + expiryMs);
+    const bidPurchasedAt = new Date();
     let luarmorKey: string | null = null;
     if (isLuarmorConfigured()) {
       try {
@@ -881,8 +890,10 @@ router.post("/bids/fulfill", async (req, res) => {
 
     await db.update(slotsTable).set({
       isActive: true,
+      purchasedAt: bidPurchasedAt,
       expiresAt,
       luarmorKey: luarmorKey ?? slotRow[0]?.luarmorKey ?? null,
+      purchaseToken: generateSlotToken(winner.userId, slotNum, bidPurchasedAt),
       notified24h: false,
       notified1h: false,
       updatedAt: new Date(),

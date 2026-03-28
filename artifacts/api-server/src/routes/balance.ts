@@ -5,6 +5,7 @@ import { requireAuth } from "../middlewares/requireAuth.js";
 import { getSettings } from "../lib/settings.js";
 import { isLuarmorConfigured, createLuarmorUser } from "../lib/luarmor.js";
 import { sendPaymentWebhook } from "../lib/discord.js";
+import { generateSlotToken } from "../lib/slotToken.js";
 import crypto from "crypto";
 
 const router = Router();
@@ -463,11 +464,13 @@ router.post("/use", requireAuth, async (req: Request, res: Response) => {
         }
       }
 
+      const purchasedAt = new Date();
       const slotData = {
         userId,
         isActive: true,
-        purchasedAt: new Date(),
+        purchasedAt,
         expiresAt,
+        purchaseToken: generateSlotToken(userId, slotNumber, purchasedAt),
         ...(luarmorUserId ? { luarmorUserId } : {}),
       };
 

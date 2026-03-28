@@ -63,6 +63,14 @@ async function runMigrations() {
         END IF;
       END$$
     `);
+    // Purchase token — cryptographic proof that a slot was activated through a real payment.
+    // Any row inserted directly into the DB will have a null or wrong token.
+    await db.execute(sql`
+      ALTER TABLE slots ADD COLUMN IF NOT EXISTS purchase_token TEXT
+    `);
+    await db.execute(sql`
+      ALTER TABLE payments ADD COLUMN IF NOT EXISTS coupon_id INTEGER
+    `);
     logger.info("DB migrations applied");
   } catch (err) {
     logger.warn({ err }, "DB migration step skipped or failed");

@@ -5,6 +5,7 @@ import { requireAuth } from "../middlewares/requireAuth.js";
 import { getSettings } from "../lib/settings.js";
 import { isLuarmorConfigured, createLuarmorUser } from "../lib/luarmor.js";
 import { sendPaymentWebhook, type PurchaseType } from "../lib/discord.js";
+import { generateSlotToken } from "../lib/slotToken.js";
 import crypto from "crypto";
 
 async function applyCouponDiscount(couponId: number | undefined, baseAmount: number): Promise<{ finalAmount: number; validCouponId: number | null }> {
@@ -158,10 +159,12 @@ async function activateSlot(userId: string, slotNumber: number, paymentId: strin
     and(eq(slotsTable.userId, userId), eq(slotsTable.slotNumber, slotNumber))
   ).limit(1);
 
+  const purchasedAt = new Date();
   const slotData = {
     isActive: true,
-    purchasedAt: new Date(),
+    purchasedAt,
     expiresAt,
+    purchaseToken: generateSlotToken(userId, slotNumber, purchasedAt),
     ...(luarmorUserId ? { luarmorUserId } : {}),
   };
 
