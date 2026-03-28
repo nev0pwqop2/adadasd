@@ -462,49 +462,113 @@ export default function Dashboard() {
           )}
 
           {/* ── LEADERBOARD TAB ── */}
-          {activeTab === 'leaderboard' && (
-            <>
-              <div className="mb-6">
-                <h1 className="text-xl font-bold text-white mb-0.5">Leaderboard</h1>
-                <p className="text-xs text-white/40">Top spenders by total hours purchased</p>
+          {activeTab === 'leaderboard' && (() => {
+            const all = leaderboardRes?.leaderboard ?? [];
+            const bySpent = [...all].sort((a, b) => b.totalSpent - a.totalSpent);
+            const byHours = [...all].sort((a, b) => b.totalHours - a.totalHours);
+
+            const MedalIcon = ({ rank }: { rank: number }) => {
+              if (rank === 1) return <span className="text-base">👑</span>;
+              if (rank === 2) return <span className="text-base">🥈</span>;
+              if (rank === 3) return <span className="text-base">🥉</span>;
+              return <span className="font-mono text-xs text-white/30 w-5 text-center">{rank}</span>;
+            };
+
+            const Avatar = ({ entry }: { entry: typeof all[0] }) => entry.avatar ? (
+              <img src={`https://cdn.discordapp.com/avatars/${entry.discordId}/${entry.avatar}.png`} className="w-8 h-8 rounded-full flex-shrink-0" alt="" />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-primary/20 border border-primary/20 flex items-center justify-center flex-shrink-0">
+                <span className="text-xs font-bold text-primary">{entry.username[0]?.toUpperCase()}</span>
               </div>
-              {isLeaderboardLoading ? (
-                <div className="flex justify-center py-16">
-                  <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            );
+
+            const topCardStyle = (rank: number) =>
+              rank === 1 ? 'border-primary/30 bg-primary/[0.07]' :
+              rank === 2 ? 'border-white/10 bg-white/[0.04]' :
+              'border-white/8 bg-white/[0.03]';
+
+            const LeaderColumn = ({
+              title, icon, entries, valueKey, formatValue,
+            }: {
+              title: string;
+              icon: React.ReactNode;
+              entries: typeof all;
+              valueKey: 'totalSpent' | 'totalHours';
+              formatValue: (v: number) => string;
+            }) => (
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-4">
+                  {icon}
+                  <span className="text-sm font-bold text-white/80">{title}</span>
                 </div>
-              ) : (
                 <div className="space-y-2">
-                  {(leaderboardRes?.leaderboard ?? []).map((entry) => (
-                    <motion.div
-                      key={entry.discordId}
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      className="flex items-center gap-4 px-5 py-4 rounded-xl border border-white/6 bg-white/2 hover:bg-white/4 transition-colors"
-                    >
-                      <span className={`font-mono font-bold text-sm w-6 text-center ${entry.rank === 1 ? 'text-primary' : entry.rank === 2 ? 'text-white/50' : entry.rank === 3 ? 'text-amber-600' : 'text-white/25'}`}>
-                        {entry.rank === 1 ? '🥇' : entry.rank === 2 ? '🥈' : entry.rank === 3 ? '🥉' : `#${entry.rank}`}
-                      </span>
-                      {entry.avatar ? (
-                        <img src={`https://cdn.discordapp.com/avatars/${entry.discordId}/${entry.avatar}.png`} className="w-8 h-8 rounded-full border border-white/10" alt="" />
-                      ) : (
-                        <div className="w-8 h-8 rounded-full bg-white/8 flex items-center justify-center">
-                          <span className="text-xs text-white/40">{entry.username[0]?.toUpperCase()}</span>
+                  {entries.map((entry, i) => {
+                    const rank = i + 1;
+                    const isTop3 = rank <= 3;
+                    return (
+                      <motion.div
+                        key={`${entry.discordId}-${valueKey}`}
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: i * 0.03 }}
+                        className={`flex items-center gap-3 px-4 py-3 rounded-xl border transition-colors ${
+                          isTop3 ? topCardStyle(rank) : 'border-white/5 bg-transparent hover:bg-white/3'
+                        }`}
+                      >
+                        <div className="w-5 flex items-center justify-center flex-shrink-0">
+                          <MedalIcon rank={rank} />
                         </div>
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-white/90 truncate">{entry.username}</p>
-                        <p className="text-xs text-white/35 font-mono">{entry.totalHours}h purchased</p>
-                      </div>
-                      <span className="text-sm font-mono font-bold text-primary">${entry.totalSpent.toFixed(2)}</span>
-                    </motion.div>
-                  ))}
-                  {(leaderboardRes?.leaderboard ?? []).length === 0 && (
-                    <div className="text-center py-16 text-white/25 text-sm">No entries yet</div>
+                        <Avatar entry={entry} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-white/90 truncate leading-tight">{entry.username}</p>
+                          <p className={`text-xs font-mono font-semibold ${rank === 1 ? 'text-primary' : 'text-primary/60'}`}>
+                            {formatValue(entry[valueKey])}
+                          </p>
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                  {entries.length === 0 && (
+                    <div className="text-center py-10 text-white/20 text-sm">No entries yet</div>
                   )}
                 </div>
-              )}
-            </>
-          )}
+              </div>
+            );
+
+            return (
+              <>
+                <div className="mb-6 flex items-center gap-3">
+                  <Trophy className="w-5 h-5 text-primary" />
+                  <div>
+                    <h1 className="text-xl font-bold text-white leading-tight">Leaderboard</h1>
+                    <p className="text-xs text-white/35">All-time top users</p>
+                  </div>
+                </div>
+                {isLeaderboardLoading ? (
+                  <div className="flex justify-center py-20">
+                    <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                  </div>
+                ) : (
+                  <div className="flex gap-6">
+                    <LeaderColumn
+                      title="Most Deposited"
+                      icon={<span className="text-primary text-sm">$</span>}
+                      entries={bySpent}
+                      valueKey="totalSpent"
+                      formatValue={v => `$${v.toFixed(2)}`}
+                    />
+                    <LeaderColumn
+                      title="Most Hours Bought"
+                      icon={<Trophy className="w-3.5 h-3.5 text-primary" />}
+                      entries={byHours}
+                      valueKey="totalHours"
+                      formatValue={v => `${v} hrs`}
+                    />
+                  </div>
+                )}
+              </>
+            );
+          })()}
 
           {/* ── HISTORY TAB ── */}
           {activeTab === 'deposit' && (
