@@ -108,6 +108,25 @@ app.use("/api/payments/nowpayments-ipn", express.raw({ type: "application/json" 
 app.use(express.json({ limit: "100kb" }));
 app.use(express.urlencoded({ extended: true, limit: "100kb" }));
 
+// Block prototype pollution attempts — reject any request body containing
+// __proto__, constructor, or prototype keys which can poison all JS objects.
+app.use((req, _res, next) => {
+  const dangerousKeys = ["__proto__", "constructor", "prototype"];
+  const hasDangerousKey = (obj: unknown, depth = 0): boolean => {
+    if (depth > 5 || obj === null || typeof obj !== "object") return false;
+    for (const key of Object.keys(obj as object)) {
+      if (dangerousKeys.includes(key)) return true;
+      if (hasDangerousKey((obj as Record<string, unknown>)[key], depth + 1)) return true;
+    }
+    return false;
+  };
+  if (req.body && hasDangerousKey(req.body)) {
+    _res.status(400).json({ error: "invalid_input", message: "Invalid request body" });
+    return;
+  }
+  next();
+});
+
 // Apply rate limiters to specific route groups
 app.use("/api/auth", authLimiter);
 app.use("/api/payments/nowpayments", paymentLimiter);

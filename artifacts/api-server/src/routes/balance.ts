@@ -390,75 +390,101 @@ router.post("/use", requireAuth, async (req: Request, res: Response) => {
       return;
     }
 
-    // Check slot is free
     const { slotsTable } = await import("@workspace/db");
-    const slotRows = await db.select().from(slotsTable).where(eq(slotsTable.slotNumber, slotNumber)).limit(1);
-    if (slotRows.length && slotRows[0].isActive) {
-      res.status(409).json({ error: "slot_taken", message: "Slot is already taken" });
-      return;
-    }
 
-    // Atomically deduct balance — the WHERE clause also checks balance >= chargeAmount,
-    // preventing race conditions where concurrent requests overdraw the account.
-    const deducted = await db.update(usersTable)
-      .set({ balance: sql`${usersTable.balance} - ${chargeAmount.toFixed(2)}::numeric`, updatedAt: new Date() })
-      .where(and(eq(usersTable.id, userId), sql`${usersTable.balance} >= ${chargeAmount.toFixed(2)}::numeric`))
-      .returning({ balance: usersTable.balance });
-
-    if (!deducted.length) {
-      res.status(400).json({ error: "insufficient_balance", message: "Insufficient balance." });
-      return;
-    }
-
-    // Create completed payment record
-    const paymentId = crypto.randomUUID();
-    await db.insert(paymentsTable).values({
-      id: paymentId,
-      userId,
-      slotNumber,
-      method: "balance",
-      status: "completed",
-      amount: chargeAmount.toFixed(2),
-      currency: "USD",
-      derivationIndex: hourlyPricingEnabled ? purchasedHours : null,
-      ...(couponId && couponApplied ? { couponId } : {}),
-    });
-
-    // Activate slot
-    const durationMs = hourlyPricingEnabled
-      ? purchasedHours * 60 * 60 * 1000
-      : slotDurationHours * 60 * 60 * 1000;
-
-    const expiresAt = new Date(Date.now() + durationMs);
-
-    let luarmorUserId: string | null = null;
-    if (isLuarmorConfigured() && userRows[0]) {
-      try {
-        const luarmorUser = await createLuarmorUser(
-          userRows[0].discordId,
-          userRows[0].username,
-          expiresAt
-        );
-        luarmorUserId = luarmorUser.user_key;
-      } catch (e) {
-        req.log.warn({ e }, "Luarmor user creation failed (balance payment)");
+    // Acquire a PostgreSQL advisory lock on the slot number so that two concurrent
+    // requests cannot both see the slot as "free" and both activate it.
+    // The DB releases this lock automatically if the connection drops.
+    await db.execute(sql`SELECT pg_advisory_lock(${slotNumber}::bigint)`);
+    let slotLockReleased = false;
+    const releaseSlotLock = async () => {
+      if (!slotLockReleased) {
+        slotLockReleased = true;
+        await db.execute(sql`SELECT pg_advisory_unlock(${slotNumber}::bigint)`).catch(() => {});
       }
-    }
-
-    const slotData = {
-      userId,
-      isActive: true,
-      purchasedAt: new Date(),
-      expiresAt,
-      ...(luarmorUserId ? { luarmorUserId } : {}),
     };
 
-    if (slotRows.length) {
-      await db.update(slotsTable).set(slotData).where(
-        and(eq(slotsTable.userId, userId), eq(slotsTable.slotNumber, slotNumber))
-      );
-    } else {
-      await db.insert(slotsTable).values({ slotNumber, ...slotData });
+    let expiresAt: Date = new Date();
+    let luarmorUserId: string | null = null;
+
+    try {
+      // Re-check slot availability NOW that we hold the lock (prevents TOCTOU race)
+      const anyActive = await db
+        .select({ id: slotsTable.id })
+        .from(slotsTable)
+        .where(and(eq(slotsTable.slotNumber, slotNumber), eq(slotsTable.isActive, true)))
+        .limit(1);
+
+      if (anyActive.length) {
+        await releaseSlotLock();
+        res.status(409).json({ error: "slot_taken", message: "Slot is already taken" });
+        return;
+      }
+
+      // Atomically deduct balance — WHERE also checks balance >= chargeAmount
+      const deducted = await db.update(usersTable)
+        .set({ balance: sql`${usersTable.balance} - ${chargeAmount.toFixed(2)}::numeric`, updatedAt: new Date() })
+        .where(and(eq(usersTable.id, userId), sql`${usersTable.balance} >= ${chargeAmount.toFixed(2)}::numeric`))
+        .returning({ balance: usersTable.balance });
+
+      if (!deducted.length) {
+        await releaseSlotLock();
+        res.status(400).json({ error: "insufficient_balance", message: "Insufficient balance." });
+        return;
+      }
+
+      // Create completed payment record
+      const paymentId = crypto.randomUUID();
+      await db.insert(paymentsTable).values({
+        id: paymentId,
+        userId,
+        slotNumber,
+        method: "balance",
+        status: "completed",
+        amount: chargeAmount.toFixed(2),
+        currency: "USD",
+        derivationIndex: hourlyPricingEnabled ? purchasedHours : null,
+        ...(couponId && couponApplied ? { couponId } : {}),
+      });
+
+      // Activate slot
+      const durationMs = hourlyPricingEnabled
+        ? purchasedHours * 60 * 60 * 1000
+        : slotDurationHours * 60 * 60 * 1000;
+
+      expiresAt = new Date(Date.now() + durationMs);
+
+      if (isLuarmorConfigured() && userRows[0]) {
+        try {
+          const luarmorUser = await createLuarmorUser(userRows[0].discordId, userRows[0].username, expiresAt);
+          luarmorUserId = luarmorUser.user_key;
+        } catch (e) {
+          req.log.warn({ e }, "Luarmor user creation failed (balance payment)");
+        }
+      }
+
+      const slotData = {
+        userId,
+        isActive: true,
+        purchasedAt: new Date(),
+        expiresAt,
+        ...(luarmorUserId ? { luarmorUserId } : {}),
+      };
+
+      // Check specifically if THIS user already has a row for this slot (for upsert)
+      const mySlotRow = await db
+        .select({ id: slotsTable.id })
+        .from(slotsTable)
+        .where(and(eq(slotsTable.userId, userId), eq(slotsTable.slotNumber, slotNumber)))
+        .limit(1);
+
+      if (mySlotRow.length) {
+        await db.update(slotsTable).set(slotData).where(eq(slotsTable.id, mySlotRow[0].id));
+      } else {
+        await db.insert(slotsTable).values({ slotNumber, ...slotData });
+      }
+    } finally {
+      await releaseSlotLock();
     }
 
     // Discord webhook

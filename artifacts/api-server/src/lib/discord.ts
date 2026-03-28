@@ -49,7 +49,7 @@ export async function sendPaymentWebhook(data: {
   durationHours?: number | null;
   expiresAt?: Date | null;
 }): Promise<void> {
-  const webhookUrl = process.env.DISCORD_WEBHOOK_URL || "https://discord.com/api/webhooks/1485003373932449924/PtxZcUAA-mFsqK4mqaSHY-zpegH0somwQKk_bRjmFiD-BinTAq-71iUfQyxOf52RZFNx";
+  const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
   if (!webhookUrl) return;
 
   const purchaseType = data.purchaseType ?? "slot";
