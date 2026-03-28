@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation } from 'wouter';
-import { LogOut, LayoutGrid, Trophy, History, Settings, Clock, TrendingUp, X, Crown, Gavel, Plus, Wallet } from 'lucide-react';
+import { LogOut, LayoutGrid, Trophy, History, Settings, TrendingUp, X, Crown, Gavel, Plus, Wallet } from 'lucide-react';
 import { useGetMe, useLogout } from '@workspace/api-client-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { SlotCard, type PublicSlot } from '@/components/SlotCard';
@@ -11,26 +11,6 @@ import { DepositModal } from '@/components/DepositModal';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { motion } from 'framer-motion';
-
-function useCountdown(target: string | null) {
-  const [timeLeft, setTimeLeft] = useState<{ h: number; m: number; s: number } | null>(null);
-  useEffect(() => {
-    if (!target) { setTimeLeft(null); return; }
-    const tick = () => {
-      const diff = new Date(target).getTime() - Date.now();
-      if (diff <= 0) { setTimeLeft({ h: 0, m: 0, s: 0 }); return; }
-      setTimeLeft({
-        s: Math.floor(diff / 1000) % 60,
-        m: Math.floor(diff / 60000) % 60,
-        h: Math.floor(diff / 3600000),
-      });
-    };
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [target]);
-  return timeLeft;
-}
 
 type Tab = 'slots' | 'leaderboard' | 'deposit';
 
@@ -132,7 +112,6 @@ export default function Dashboard() {
   });
 
   const { mutate: logoutMutate } = useLogout();
-  const countdown = useCountdown(slotsRes?.nextExpiresAt ?? null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -258,14 +237,6 @@ export default function Dashboard() {
               style={{ width: `${slotFillPct}%` }}
             />
           </div>
-          {countdown && (
-            <div className="mt-3">
-              <p className="text-[10px] font-mono text-white/30 uppercase tracking-widest mb-0.5">Next slot in</p>
-              <p className="text-sm font-mono font-bold text-primary tabular-nums">
-                {String(countdown.h).padStart(2, '0')}:{String(countdown.m).padStart(2, '0')}:{String(countdown.s).padStart(2, '0')}
-              </p>
-            </div>
-          )}
         </div>
 
         {/* Navigation */}
@@ -346,28 +317,11 @@ export default function Dashboard() {
               {allFull && (
                 <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="mt-8">
                   <div className="border border-primary/18 bg-primary/4 rounded-xl overflow-hidden">
-                    <div className="border-b border-primary/12 p-5 flex flex-col sm:flex-row sm:items-center gap-4">
-                      <div className="flex-1">
-                        <h3 className="font-bold text-primary flex items-center gap-2 text-sm">
-                          <Gavel className="w-4 h-4" /> Slot Queue
-                        </h3>
-                        <p className="text-xs text-white/40 mt-1">All slots occupied — highest bid gets the next free slot.</p>
-                      </div>
-                      {countdown && (
-                        <div className="flex items-center gap-3 border border-primary/20 bg-black/30 px-4 py-2.5 rounded-lg shrink-0">
-                          <Clock className="w-4 h-4 text-primary" />
-                          <div>
-                            <p className="font-mono text-[10px] text-white/30 uppercase tracking-wider mb-0.5">Next slot in</p>
-                            <div className="flex items-center font-bold text-primary text-lg tabular-nums font-mono">
-                              <span>{String(countdown.h).padStart(2, '0')}</span>
-                              <span className="opacity-40 mx-0.5">:</span>
-                              <span>{String(countdown.m).padStart(2, '0')}</span>
-                              <span className="opacity-40 mx-0.5">:</span>
-                              <span>{String(countdown.s).padStart(2, '0')}</span>
-                            </div>
-                          </div>
-                        </div>
-                      )}
+                    <div className="border-b border-primary/12 p-5">
+                      <h3 className="font-bold text-primary flex items-center gap-2 text-sm">
+                        <Gavel className="w-4 h-4" /> Slot Queue
+                      </h3>
+                      <p className="text-xs text-white/40 mt-1">All slots occupied — highest bid gets the next free slot.</p>
                     </div>
 
                     <div className="p-5 grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -601,40 +555,40 @@ export default function Dashboard() {
       </main>
 
       {/* Modals */}
-      {purchasingSlot !== null && (
-        <PaymentModal
-          slotNumber={purchasingSlot}
-          pricePerDay={pricePerDay}
-          slotDurationHours={slotDurationHours}
-          hourlyPricingEnabled={hourlyPricingEnabled}
-          pricePerHour={pricePerHour}
-          minHours={minHours}
-          userBalance={userBalance}
-          onClose={() => setPurchasingSlot(null)}
-          onSuccess={() => { setPurchasingSlot(null); refetchSlots(); refetchBalance(); }}
-        />
-      )}
-      {managingSlot && (
-        <ManageSlotModal
-          slot={managingSlot}
-          onClose={() => setManagingSlot(null)}
-          onSuccess={() => { setManagingSlot(null); refetchSlots(); }}
-        />
-      )}
-      {showPreorderModal && (
-        <PreorderModal
-          pricePerDay={pricePerDay}
-          userBalance={userBalance}
-          onClose={() => setShowPreorderModal(false)}
-          onSuccess={() => { setShowPreorderModal(false); refetchPreorders(); refetchBalance(); }}
-        />
-      )}
-      {showDepositModal && (
-        <DepositModal
-          onClose={() => setShowDepositModal(false)}
-          onSuccess={() => { setShowDepositModal(false); refetchBalance(); }}
-        />
-      )}
+      <PaymentModal
+        isOpen={purchasingSlot !== null}
+        slotNumber={purchasingSlot ?? 0}
+        pricePerDay={pricePerDay}
+        slotDurationHours={slotDurationHours}
+        hourlyPricingEnabled={hourlyPricingEnabled}
+        pricePerHour={pricePerHour}
+        minHours={minHours}
+        userBalance={userBalance}
+        onClose={() => setPurchasingSlot(null)}
+        onSuccess={() => { setPurchasingSlot(null); refetchSlots(); refetchBalance(); }}
+      />
+      <ManageSlotModal
+        slot={managingSlot}
+        onClose={() => setManagingSlot(null)}
+        onSuccess={() => { setManagingSlot(null); refetchSlots(); }}
+      />
+      <PreorderModal
+        isOpen={showPreorderModal}
+        pricePerDay={pricePerDay}
+        slotDurationHours={slotDurationHours}
+        nextExpiresAt={nextExpiresAt}
+        balance={userBalance}
+        hourlyPricingEnabled={hourlyPricingEnabled}
+        pricePerHour={pricePerHour}
+        minHours={minHours}
+        onClose={() => setShowPreorderModal(false)}
+        onSuccess={() => { setShowPreorderModal(false); refetchPreorders(); refetchBalance(); }}
+      />
+      <DepositModal
+        isOpen={showDepositModal}
+        onClose={() => setShowDepositModal(false)}
+        onSuccess={() => { setShowDepositModal(false); refetchBalance(); }}
+      />
     </div>
   );
 }
