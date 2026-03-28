@@ -31,7 +31,7 @@ export function ManageSlotModal({ slot, onClose, onSuccess }: ManageSlotModalPro
     if (!slot?.id || hwidOnCooldown) return;
     setIsResettingHwid(true);
     try {
-      const res = await fetch(`/api/slots/${slot.id}/reset-hwid`, {
+      const res = await fetch(`${import.meta.env.BASE_URL}api/slots/${slot.id}/reset-hwid`, {
         method: 'POST',
         credentials: 'include',
       });
@@ -208,7 +208,7 @@ export function ManageSlotModal({ slot, onClose, onSuccess }: ManageSlotModalPro
               )}
 
               {/* HWID Reset */}
-              {slot.luarmorUserId && (
+              {slot.scriptKey && (
                 <div className="space-y-2">
                   <label className="text-xs font-mono uppercase text-muted-foreground flex items-center gap-2">
                     <RefreshCw className="w-3 h-3" /> HWID Reset
