@@ -365,10 +365,17 @@ router.post("/use", requireAuth, async (req: Request, res: Response) => {
       return;
     }
 
-    // Deduct balance atomically
-    await db.update(usersTable)
+    // Atomically deduct balance — the WHERE clause also checks balance >= chargeAmount,
+    // preventing race conditions where concurrent requests overdraw the account.
+    const deducted = await db.update(usersTable)
       .set({ balance: sql`${usersTable.balance} - ${chargeAmount.toFixed(2)}::numeric`, updatedAt: new Date() })
-      .where(and(eq(usersTable.id, userId)));
+      .where(and(eq(usersTable.id, userId), sql`${usersTable.balance} >= ${chargeAmount.toFixed(2)}::numeric`))
+      .returning({ balance: usersTable.balance });
+
+    if (!deducted.length) {
+      res.status(400).json({ error: "insufficient_balance", message: "Insufficient balance." });
+      return;
+    }
 
     // Create completed payment record
     const paymentId = crypto.randomUUID();

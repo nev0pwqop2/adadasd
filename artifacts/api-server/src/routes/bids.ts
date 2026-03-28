@@ -1,7 +1,6 @@
 import { Router } from "express";
 import { db, bidsTable, usersTable, preordersTable } from "@workspace/db";
-import { eq, desc } from "drizzle-orm";
-import { sql } from "drizzle-orm";
+import { eq, desc, and, sql } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
 
 const router = Router();
@@ -125,11 +124,17 @@ router.post("/", requireAuth, async (req, res) => {
       return;
     }
 
-    // Deduct the difference from balance
+    // Atomically deduct the difference — WHERE clause prevents race-condition overdrafts
     if (netCost > 0) {
-      await db.update(usersTable)
+      const deducted = await db.update(usersTable)
         .set({ balance: sql`${usersTable.balance} - ${netCost.toFixed(2)}::numeric`, updatedAt: new Date() })
-        .where(eq(usersTable.id, userId));
+        .where(and(eq(usersTable.id, userId), sql`${usersTable.balance} >= ${netCost.toFixed(2)}::numeric`))
+        .returning({ balance: usersTable.balance });
+
+      if (!deducted.length) {
+        res.status(400).json({ error: "insufficient_balance", message: "Insufficient balance." });
+        return;
+      }
     }
 
     if (existing.length) {
