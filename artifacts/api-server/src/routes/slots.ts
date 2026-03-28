@@ -227,9 +227,9 @@ router.get("/", requireAuth, async (req, res) => {
 
     const now = new Date();
 
-    // Step 1: Expire any slots whose time is up — delete Luarmor keys first
+    // Step 1: Expire any slots whose time is up — skip paused slots (their expiry is extended on unpause)
     const expiring = await db.select().from(slotsTable)
-      .where(and(eq(slotsTable.isActive, true), lte(slotsTable.expiresAt, now)));
+      .where(and(eq(slotsTable.isActive, true), eq(slotsTable.isPaused, false), lte(slotsTable.expiresAt, now)));
     if (isLuarmorConfigured() && expiring.length > 0) {
       // Delete keys we have stored
       await Promise.allSettled(
@@ -253,7 +253,7 @@ router.get("/", requireAuth, async (req, res) => {
     if (expiring.length > 0) {
       await db.update(slotsTable)
         .set({ isActive: false, expiresAt: null, purchasedAt: null, label: null, luarmorUserId: null })
-        .where(and(eq(slotsTable.isActive, true), lte(slotsTable.expiresAt, now)));
+        .where(and(eq(slotsTable.isActive, true), eq(slotsTable.isPaused, false), lte(slotsTable.expiresAt, now)));
     }
 
     // Step 2: Fetch all currently active slots

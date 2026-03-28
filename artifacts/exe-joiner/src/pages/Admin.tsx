@@ -1344,7 +1344,9 @@ export default function Admin() {
                         .map((slot) => {
                           const isPaused = slot.isPaused;
                           const msLeft = slot.expiresAt
-                            ? Math.max(0, new Date(slot.expiresAt).getTime() - Date.now())
+                            ? isPaused && slot.pausedAt
+                              ? Math.max(0, new Date(slot.expiresAt).getTime() - new Date(slot.pausedAt).getTime())
+                              : Math.max(0, new Date(slot.expiresAt).getTime() - Date.now())
                             : null;
                           const totalSec = msLeft != null ? Math.floor(msLeft / 1000) : null;
                           const d = totalSec != null ? Math.floor(totalSec / 86400) : null;

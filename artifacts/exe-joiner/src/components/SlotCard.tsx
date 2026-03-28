@@ -26,25 +26,32 @@ interface SlotCardProps {
   onManage: (slot: PublicSlot) => void;
 }
 
-function useTimeLeft(expiresAt: string | null, paused?: boolean) {
-  const getMs = () => expiresAt ? Math.max(0, new Date(expiresAt).getTime() - Date.now()) : 0;
-  const [ms, setMs] = useState(getMs);
-  useEffect(() => {
-    if (!expiresAt || paused) return;
-    const id = setInterval(() => setMs(getMs()), 1000);
-    return () => clearInterval(id);
-  }, [expiresAt, paused]);
-
-  if (!expiresAt) return null;
-  const effectiveMs = paused ? Math.max(0, new Date(expiresAt).getTime() - Date.now()) : ms;
-  if (effectiveMs === 0) return null;
-  const s = Math.floor(effectiveMs / 1000);
+function formatMs(ms: number): string {
+  const s = Math.floor(ms / 1000);
   const d = Math.floor(s / 86400);
   const h = Math.floor((s % 86400) / 3600);
   const m = Math.floor((s % 3600) / 60);
   const sec = s % 60;
   if (d > 0) return `${d}d ${h}h ${String(m).padStart(2, '0')}m`;
   return `${h}h ${String(m).padStart(2, '0')}m ${String(sec).padStart(2, '0')}s`;
+}
+
+function useTimeLeft(expiresAt: string | null, pausedAt: string | null | undefined) {
+  const getMs = () => expiresAt ? Math.max(0, new Date(expiresAt).getTime() - Date.now()) : 0;
+  const [ms, setMs] = useState(getMs);
+  useEffect(() => {
+    if (!expiresAt || pausedAt) return;
+    const id = setInterval(() => setMs(getMs()), 1000);
+    return () => clearInterval(id);
+  }, [expiresAt, pausedAt]);
+
+  if (!expiresAt) return null;
+  // When paused: show frozen time = expiresAt - pausedAt (how much was left when paused)
+  if (pausedAt) {
+    const frozenMs = Math.max(0, new Date(expiresAt).getTime() - new Date(pausedAt).getTime());
+    return frozenMs === 0 ? null : formatMs(frozenMs);
+  }
+  return ms === 0 ? null : formatMs(ms);
 }
 
 function Avatar({ owner, size = 64 }: { owner: PublicSlot['owner']; size?: number }) {
@@ -74,7 +81,7 @@ function Avatar({ owner, size = 64 }: { owner: PublicSlot['owner']; size?: numbe
 export function SlotCard({ slotData, onPurchase, onManage }: SlotCardProps) {
   const { slotNumber, isActive, isOwner, owner, isPaused } = slotData;
   const taken = isActive && !isOwner;
-  const timeLeft = useTimeLeft(isActive ? slotData.expiresAt : null, isPaused);
+  const timeLeft = useTimeLeft(isActive ? slotData.expiresAt : null, isPaused ? slotData.pausedAt : null);
   const [keyCopied, setKeyCopied] = useState(false);
 
   const handleCopyKey = async (e: React.MouseEvent) => {
