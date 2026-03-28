@@ -138,6 +138,7 @@ export default function Admin() {
     },
   });
 
+  const [usersOpen, setUsersOpen] = useState(true);
   const [togglingAdmin, setTogglingAdmin] = useState<string | null>(null);
   const { mutate: toggleAdmin } = useMutation({
     mutationFn: async (discordId: string) => {
@@ -987,16 +988,25 @@ export default function Admin() {
             transition={{ delay: 0.1 }}
           >
             <Card className="border-primary/20">
-              <div className="p-6 border-b border-primary/20 flex items-center gap-3">
-                <Users className="w-5 h-5 text-primary" />
+              <button
+                onClick={() => setUsersOpen((o) => !o)}
+                className="w-full p-6 flex items-center gap-3 text-left hover:bg-primary/5 transition-colors"
+              >
+                <Users className="w-5 h-5 text-primary shrink-0" />
                 <h2 className="font-display font-bold uppercase tracking-wider text-primary">
                   User Management
                 </h2>
-                <span className="ml-auto text-xs font-mono text-muted-foreground">
+                <span className="ml-auto text-xs font-mono text-muted-foreground mr-3">
                   {usersData?.users.length ?? 0} users
                 </span>
-              </div>
-              <div className="divide-y divide-primary/10">
+                {usersOpen ? (
+                  <ChevronUp className="w-4 h-4 text-muted-foreground shrink-0" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
+                )}
+              </button>
+              {usersOpen && (
+              <div className="divide-y divide-primary/10 border-t border-primary/20">
                 {isUsersLoading && (
                   <div className="p-8 flex justify-center">
                     <Loader2 className="w-6 h-6 text-primary animate-spin" />
@@ -1296,6 +1306,7 @@ export default function Admin() {
                   </div>
                 ))}
               </div>
+              )}
             </Card>
           </motion.div>
 
