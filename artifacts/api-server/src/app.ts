@@ -55,11 +55,27 @@ app.use(
       // Allow requests with no origin (server-to-server, curl, Postman)
       if (!origin) return callback(null, true);
       if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
-      callback(new Error("Not allowed by CORS"));
+      // Return null (not an Error) so Express sends a clean 403 CORS rejection,
+      // not a 500 internal server error.
+      callback(null, false);
     },
     credentials: true,
   })
 );
+
+// Returns the real client IP in a way that cannot be spoofed via X-Forwarded-For headers.
+// In production (behind Render's proxy), Render always APPENDS the true source IP as the
+// last comma-separated entry in X-Forwarded-For. A client can prepend fake IPs but cannot
+// forge the entry that Render itself adds. We therefore take the LAST entry.
+// Direct connections (no XFF) fall back to the raw socket address.
+function getRealIp(req: express.Request): string {
+  const xff = req.headers["x-forwarded-for"];
+  if (typeof xff === "string") {
+    const parts = xff.split(",").map((s) => s.trim()).filter(Boolean);
+    if (parts.length > 0) return parts[parts.length - 1];
+  }
+  return req.socket.remoteAddress ?? "unknown";
+}
 
 // Rate limiters
 const authLimiter = rateLimit({
@@ -67,6 +83,8 @@ const authLimiter = rateLimit({
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: getRealIp,
+  validate: { xForwardedForHeader: false },
   message: { error: "too_many_requests", message: "Too many requests. Please slow down." },
 });
 
@@ -76,7 +94,7 @@ const paymentLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   // Key by user ID so limits are per-account; unauthenticated requests share one bucket
-  keyGenerator: (req) => (req.session as any)?.userId ?? "unauthenticated",
+  keyGenerator: (req) => (req.session as any)?.userId ?? getRealIp(req),
   validate: { xForwardedForHeader: false },
   message: { error: "too_many_requests", message: "Too many payment requests. Please slow down." },
 });
@@ -86,7 +104,7 @@ const balanceLimiter = rateLimit({
   max: 15,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => (req.session as any)?.userId ?? "unauthenticated",
+  keyGenerator: (req) => (req.session as any)?.userId ?? getRealIp(req),
   validate: { xForwardedForHeader: false },
   message: { error: "too_many_requests", message: "Too many requests. Please slow down." },
 });
@@ -96,6 +114,8 @@ const strictLimiter = rateLimit({
   max: 30,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: (req) => (req.session as any)?.userId ?? getRealIp(req),
+  validate: { xForwardedForHeader: false },
   message: { error: "too_many_requests", message: "Too many requests. Please slow down." },
 });
 
