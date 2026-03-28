@@ -8,7 +8,6 @@ import bidsRouter from "./bids.js";
 import preordersRouter from "./preorders.js";
 import balanceRouter from "./balance.js";
 import couponsRouter from "./coupons.js";
-import wsTokenRouter from "./wsToken.js";
 
 const router: IRouter = Router();
 
@@ -21,6 +20,5 @@ router.use("/bids", bidsRouter);
 router.use("/preorders", preordersRouter);
 router.use("/balance", balanceRouter);
 router.use("/coupons", couponsRouter);
-router.use("/", wsTokenRouter);
 
 export default router;
