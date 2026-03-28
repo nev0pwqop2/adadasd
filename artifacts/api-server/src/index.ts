@@ -71,6 +71,12 @@ async function runMigrations() {
     await db.execute(sql`
       ALTER TABLE payments ADD COLUMN IF NOT EXISTS coupon_id INTEGER
     `);
+    await db.execute(sql`
+      ALTER TABLE slots ADD COLUMN IF NOT EXISTS is_paused BOOLEAN NOT NULL DEFAULT FALSE
+    `);
+    await db.execute(sql`
+      ALTER TABLE slots ADD COLUMN IF NOT EXISTS paused_at TIMESTAMP
+    `);
     logger.info("DB migrations applied");
   } catch (err) {
     logger.warn({ err }, "DB migration step skipped or failed");

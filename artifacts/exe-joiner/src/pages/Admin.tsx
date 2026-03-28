@@ -41,6 +41,9 @@ import {
   Trash2,
   ToggleLeft,
   ToggleRight,
+  Pause,
+  Play,
+  Layers,
 } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -86,6 +89,54 @@ export default function Admin() {
     useUpdateAdminSettings();
   const { mutate: updateUserSlots, isPending: isUpdatingSlots } =
     useAdminUpdateUserSlots();
+
+  type AdminSlot = {
+    slotNumber: number;
+    isActive: boolean;
+    isPaused: boolean;
+    pausedAt: string | null;
+    expiresAt: string | null;
+    owner: { username: string; discordId: string; avatar: string | null } | null;
+  };
+  const {
+    data: adminSlotsData,
+    refetch: refetchAdminSlots,
+  } = useQuery<{ slots: AdminSlot[] }>({
+    queryKey: ["admin-slots"],
+    queryFn: () => apiFetch<{ slots: AdminSlot[] }>("api/admin/slots"),
+    enabled: isSuperAdmin,
+    refetchInterval: 15000,
+  });
+
+  const [togglingPause, setTogglingPause] = useState<number | null>(null);
+  const { mutate: togglePause } = useMutation({
+    mutationFn: async (slotNumber: number) => {
+      const res = await fetch(
+        `${import.meta.env.BASE_URL}api/admin/slots/${slotNumber}/toggle-pause`,
+        { method: "POST", credentials: "include" },
+      );
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.message || "Failed");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: data.isPaused ? "Slot paused" : "Slot unpaused",
+        description: data.message,
+        className: data.isPaused
+          ? "bg-amber-600 text-white border-none"
+          : "bg-primary text-primary-foreground",
+      });
+      setTogglingPause(null);
+      refetchAdminSlots();
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+      setTogglingPause(null);
+    },
+  });
 
   const [togglingAdmin, setTogglingAdmin] = useState<string | null>(null);
   const { mutate: toggleAdmin } = useMutation({
@@ -1247,6 +1298,131 @@ export default function Admin() {
               </div>
             </Card>
           </motion.div>
+
+          {/* Slot Control — superadmin only */}
+          {isSuperAdmin && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.13 }}
+            >
+              <Card className="border-amber-500/30 bg-amber-500/5">
+                <div className="p-6 border-b border-amber-500/20 flex items-center gap-3">
+                  <Layers className="w-5 h-5 text-amber-400" />
+                  <h2 className="font-display font-bold uppercase tracking-wider text-amber-400">
+                    Slot Control
+                  </h2>
+                  <span className="ml-auto text-xs font-mono text-muted-foreground">
+                    {adminSlotsData?.slots.filter((s) => s.isActive).length ?? 0} active
+                  </span>
+                </div>
+                <div className="p-6">
+                  {!adminSlotsData && (
+                    <div className="flex items-center gap-2 text-muted-foreground font-mono text-sm">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Loading slots…
+                    </div>
+                  )}
+                  {adminSlotsData && adminSlotsData.slots.filter((s) => s.isActive).length === 0 && (
+                    <p className="text-muted-foreground font-mono text-sm">No active slots right now.</p>
+                  )}
+                  {adminSlotsData && adminSlotsData.slots.filter((s) => s.isActive).length > 0 && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {adminSlotsData.slots
+                        .filter((s) => s.isActive)
+                        .map((slot) => {
+                          const isPaused = slot.isPaused;
+                          const expiry = slot.isPaused
+                            ? slot.pausedAt
+                              ? new Date(slot.pausedAt)
+                              : null
+                            : slot.expiresAt
+                              ? new Date(slot.expiresAt)
+                              : null;
+                          const msLeft = expiry
+                            ? slot.isPaused
+                              ? (slot.expiresAt ? new Date(slot.expiresAt).getTime() - new Date(slot.pausedAt!).getTime() : 0)
+                              : expiry.getTime() - Date.now()
+                            : null;
+                          const hoursLeft = msLeft != null ? Math.max(0, Math.floor(msLeft / 3600000)) : null;
+                          const minsLeft = msLeft != null ? Math.max(0, Math.floor((msLeft % 3600000) / 60000)) : null;
+
+                          return (
+                            <div
+                              key={slot.slotNumber}
+                              className={`border rounded p-4 flex flex-col gap-3 transition-colors ${
+                                isPaused
+                                  ? "border-amber-500/40 bg-amber-500/10"
+                                  : "border-primary/20 bg-primary/5"
+                              }`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono text-xs font-bold text-muted-foreground bg-muted/30 px-2 py-0.5 rounded">
+                                  #{slot.slotNumber}
+                                </span>
+                                {isPaused && (
+                                  <span className="text-xs font-mono font-bold text-amber-400 bg-amber-500/20 px-2 py-0.5 rounded flex items-center gap-1">
+                                    <Pause className="w-3 h-3" />
+                                    PAUSED
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {slot.owner?.avatar ? (
+                                  <img
+                                    src={`https://cdn.discordapp.com/avatars/${slot.owner.discordId}/${slot.owner.avatar}.webp?size=32`}
+                                    alt={slot.owner.username}
+                                    className="w-6 h-6 rounded-full shrink-0"
+                                  />
+                                ) : (
+                                  <div className="w-6 h-6 rounded-full bg-primary/20 shrink-0" />
+                                )}
+                                <span className="font-mono text-sm text-foreground truncate">
+                                  {slot.owner?.username ?? "Unknown"}
+                                </span>
+                              </div>
+                              {msLeft != null && (
+                                <div className="font-mono text-xs text-muted-foreground flex items-center gap-1">
+                                  {isPaused ? (
+                                    <Pause className="w-3 h-3 text-amber-400 shrink-0" />
+                                  ) : null}
+                                  <span>
+                                    {hoursLeft}h {minsLeft}m {isPaused ? "remaining (frozen)" : "left"}
+                                  </span>
+                                </div>
+                              )}
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={togglingPause === slot.slotNumber}
+                                onClick={() => {
+                                  setTogglingPause(slot.slotNumber);
+                                  togglePause(slot.slotNumber);
+                                }}
+                                className={
+                                  isPaused
+                                    ? "border-green-500/50 text-green-400 hover:bg-green-500/10 font-mono text-xs"
+                                    : "border-amber-500/50 text-amber-400 hover:bg-amber-500/10 font-mono text-xs"
+                                }
+                              >
+                                {togglingPause === slot.slotNumber ? (
+                                  <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                                ) : isPaused ? (
+                                  <Play className="w-3 h-3 mr-1" />
+                                ) : (
+                                  <Pause className="w-3 h-3 mr-1" />
+                                )}
+                                {isPaused ? "Resume Slot" : "Pause Slot"}
+                              </Button>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  )}
+                </div>
+              </Card>
+            </motion.div>
+          )}
 
           {/* Coupon Management */}
           <motion.div

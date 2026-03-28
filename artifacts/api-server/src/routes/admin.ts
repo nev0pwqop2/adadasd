@@ -6,7 +6,7 @@ import { invalidateBanCache } from "../middlewares/requireAuth.js";
 import { generateSlotToken, verifySlotToken } from "../lib/slotToken.js";
 import { getSettings, setSetting } from "../lib/settings.js";
 import { runAutoFulfillment } from "../lib/fulfillment.js";
-import { isLuarmorConfigured, createLuarmorUser, deleteLuarmorUser, getLuarmorUsers } from "../lib/luarmor.js";
+import { isLuarmorConfigured, createLuarmorUser, deleteLuarmorUser, getLuarmorUsers, pauseLuarmorUser, unpauseLuarmorUser } from "../lib/luarmor.js";
 import { sendPaymentWebhook, sendDiscordDM } from "../lib/discord.js";
 
 const router = Router();
@@ -214,6 +214,8 @@ router.get("/slots", async (req, res) => {
         owner: active ? (owners[active.userId] ?? null) : null,
         expiresAt: active?.expiresAt?.toISOString() ?? null,
         purchasedAt: active?.purchasedAt?.toISOString() ?? null,
+        isPaused: active?.isPaused ?? false,
+        pausedAt: active?.pausedAt?.toISOString() ?? null,
         tokenStatus: active
           ? verifySlotToken(active.purchaseToken, active.userId, active.slotNumber, active.purchasedAt)
           : null,
@@ -224,6 +226,78 @@ router.get("/slots", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to get admin slots");
     res.status(500).json({ error: "server_error", message: "Failed to get slots" });
+  }
+});
+
+router.post("/slots/:slotNumber/toggle-pause", async (req, res) => {
+  try {
+    if (!isSuperAdmin(req.session.discordId!)) {
+      res.status(403).json({ error: "forbidden", message: "Only super admins can pause/unpause slots" });
+      return;
+    }
+
+    const slotNumber = parseInt(req.params.slotNumber as string, 10);
+    if (isNaN(slotNumber) || slotNumber < 1) {
+      res.status(400).json({ error: "invalid_slot", message: "Invalid slot number" });
+      return;
+    }
+
+    const slots = await db
+      .select()
+      .from(slotsTable)
+      .where(and(eq(slotsTable.slotNumber, slotNumber), eq(slotsTable.isActive, true)))
+      .limit(1);
+
+    if (!slots.length) {
+      res.status(404).json({ error: "not_found", message: "No active slot found at that number" });
+      return;
+    }
+
+    const slot = slots[0];
+    const now = new Date();
+
+    if (!slot.isPaused) {
+      // Pause: freeze expiry, disable Luarmor key
+      if (isLuarmorConfigured() && slot.luarmorUserId) {
+        try {
+          await pauseLuarmorUser(slot.luarmorUserId);
+        } catch (e) {
+          req.log.warn({ e }, "Luarmor pause failed");
+        }
+      }
+
+      await db
+        .update(slotsTable)
+        .set({ isPaused: true, pausedAt: now })
+        .where(eq(slotsTable.id, slot.id));
+
+      req.log.info({ adminDiscordId: req.session.discordId, slotNumber }, "Slot paused");
+      res.json({ success: true, isPaused: true, message: `Slot #${slotNumber} paused` });
+    } else {
+      // Unpause: extend expiresAt by the time it was paused, re-enable Luarmor key
+      const pausedMs = now.getTime() - (slot.pausedAt?.getTime() ?? now.getTime());
+      const currentExpiry = slot.expiresAt ?? now;
+      const newExpiresAt = new Date(currentExpiry.getTime() + pausedMs);
+
+      if (isLuarmorConfigured() && slot.luarmorUserId) {
+        try {
+          await unpauseLuarmorUser(slot.luarmorUserId, newExpiresAt);
+        } catch (e) {
+          req.log.warn({ e }, "Luarmor unpause failed");
+        }
+      }
+
+      await db
+        .update(slotsTable)
+        .set({ isPaused: false, pausedAt: null, expiresAt: newExpiresAt })
+        .where(eq(slotsTable.id, slot.id));
+
+      req.log.info({ adminDiscordId: req.session.discordId, slotNumber, newExpiresAt }, "Slot unpaused");
+      res.json({ success: true, isPaused: false, message: `Slot #${slotNumber} unpaused — expiry extended by ${Math.round(pausedMs / 60000)} min` });
+    }
+  } catch (err) {
+    req.log.error({ err }, "Failed to toggle slot pause");
+    res.status(500).json({ error: "server_error", message: "Failed to toggle pause" });
   }
 });
 
