@@ -44,14 +44,20 @@ import {
   Pause,
   Play,
   Layers,
+  CheckCircle,
 } from "lucide-react";
 import { motion } from "framer-motion";
 
-async function apiFetch<T>(path: string): Promise<T> {
+async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${import.meta.env.BASE_URL}${path}`, {
     credentials: "include",
+    ...options,
   });
-  if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+  if (!res.ok) {
+    let msg = `Request failed: ${res.status}`;
+    try { const j = await res.json(); msg = j.message ?? j.error ?? msg; } catch {}
+    throw new Error(msg);
+  }
   return res.json();
 }
 
@@ -559,6 +565,7 @@ export default function Admin() {
   };
   const [paymentsStatusFilter, setPaymentsStatusFilter] =
     useState<string>("all");
+  const [verifyingPaymentId, setVerifyingPaymentId] = useState<string | null>(null);
   const {
     data: allPaymentsData,
     isLoading: isAllPaymentsLoading,
@@ -571,6 +578,17 @@ export default function Admin() {
       ),
     enabled: !!user?.isAdmin,
     refetchInterval: 30000,
+  });
+  const { mutate: verifyPayment } = useMutation({
+    mutationFn: (paymentId: string) =>
+      apiFetch<{ success: boolean; message: string }>(`api/admin/payments/${paymentId}/verify`, { method: "POST" }),
+    onMutate: (paymentId) => setVerifyingPaymentId(paymentId),
+    onSettled: () => setVerifyingPaymentId(null),
+    onSuccess: (data) => {
+      toast({ title: "Payment verified", description: data.message ?? "Payment completed" });
+      refetchAllPayments();
+    },
+    onError: (err: Error) => toast({ title: "Verification failed", description: err.message ?? "Could not verify payment", variant: "destructive" }),
   });
 
   type AdminBid = { id: number; amount: number; username: string; discordId: string; userId: string; createdAt: string };
@@ -2173,6 +2191,7 @@ export default function Admin() {
                             <th className="text-left px-4 py-3">Ref / Hash</th>
                             <th className="text-left px-4 py-3">Created</th>
                             <th className="text-left px-4 py-3">Updated</th>
+                            <th className="text-left px-4 py-3">Actions</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-primary/5">
@@ -2259,6 +2278,24 @@ export default function Admin() {
                                   {p.updatedAt
                                     ? new Date(p.updatedAt).toLocaleString()
                                     : "—"}
+                                </td>
+                                <td className="px-4 py-3">
+                                  {p.status === "pending" && (p.method?.includes("stripe") || p.method?.includes("crypto") || p.method === "crypto") ? (
+                                    <button
+                                      onClick={() => verifyPayment(p.id)}
+                                      disabled={verifyingPaymentId === p.id}
+                                      className="flex items-center gap-1 px-2 py-1 text-[10px] font-mono font-bold uppercase tracking-wide border border-green-500/50 text-green-400 hover:bg-green-500/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                                    >
+                                      {verifyingPaymentId === p.id ? (
+                                        <Loader2 className="w-3 h-3 animate-spin" />
+                                      ) : (
+                                        <CheckCircle className="w-3 h-3" />
+                                      )}
+                                      Verify
+                                    </button>
+                                  ) : (
+                                    <span className="text-muted-foreground/40">—</span>
+                                  )}
                                 </td>
                               </tr>
                             );

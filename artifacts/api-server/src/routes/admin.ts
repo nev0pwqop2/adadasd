@@ -463,6 +463,187 @@ router.post("/test-script", async (req, res) => {
   }
 });
 
+// POST /api/admin/payments/:id/verify — manually verify and complete a pending payment
+router.post("/payments/:id/verify", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const rows = await db.select().from(paymentsTable).where(eq(paymentsTable.id, id)).limit(1);
+    if (!rows.length) {
+      res.status(404).json({ error: "not_found", message: "Payment not found" });
+      return;
+    }
+    const payment = rows[0];
+    if (payment.status === "completed") {
+      res.json({ success: true, message: "Already completed" });
+      return;
+    }
+
+    const isStripe = payment.method?.includes("stripe");
+    const isCrypto = payment.method?.includes("crypto") || payment.method === "crypto";
+    const isBalanceDeposit = payment.method?.startsWith("balance-deposit");
+
+    // ── Stripe verification ───────────────────────────────────────────────
+    if (isStripe) {
+      const stripeKey = process.env.STRIPE_SECRET_KEY;
+      if (!stripeKey) {
+        res.status(503).json({ error: "payment_unavailable", message: "Stripe not configured" });
+        return;
+      }
+      if (!payment.stripeSessionId) {
+        res.status(400).json({ error: "no_ref", message: "No Stripe session ID on record" });
+        return;
+      }
+      const Stripe = (await import("stripe")).default;
+      const stripe = new Stripe(stripeKey);
+      const session = await stripe.checkout.sessions.retrieve(payment.stripeSessionId);
+      if (session.payment_status !== "paid") {
+        res.status(402).json({ error: "not_paid", message: `Stripe session status: ${session.payment_status}` });
+        return;
+      }
+
+      if (isBalanceDeposit) {
+        // Credit balance
+        const amount = parseFloat(payment.amount ?? "0");
+        await db.update(paymentsTable).set({ status: "completed", updatedAt: new Date() }).where(eq(paymentsTable.id, id));
+        await db.update(usersTable)
+          .set({ balance: sql`${usersTable.balance} + ${amount.toFixed(2)}::numeric`, updatedAt: new Date() })
+          .where(eq(usersTable.id, payment.userId));
+        const userRows = await db.select().from(usersTable).where(eq(usersTable.id, payment.userId)).limit(1);
+        if (userRows.length) {
+          await sendPaymentWebhook({
+            username: userRows[0].username,
+            discordId: userRows[0].discordId,
+            method: payment.method,
+            currency: "USD",
+            amount: amount.toFixed(2),
+            purchaseType: "balance_deposit",
+          });
+        }
+        req.log.info({ id, amount }, "Admin manually completed balance-deposit-stripe");
+        res.json({ success: true, message: `Balance of $${amount.toFixed(2)} credited` });
+        return;
+      }
+
+      // Slot stripe payment — activate slot inline
+      const { slotDurationHours } = await getSettings();
+      const hours = payment.derivationIndex ?? slotDurationHours;
+      const expiryMs = hours * 60 * 60 * 1000;
+      const expiresAt = new Date(Date.now() + expiryMs);
+      await db.update(paymentsTable).set({ status: "completed", updatedAt: new Date() }).where(eq(paymentsTable.id, id));
+      const existing = await db.select().from(slotsTable).where(and(eq(slotsTable.userId, payment.userId), eq(slotsTable.slotNumber, payment.slotNumber))).limit(1);
+      const purchasedAt = new Date();
+      const slotData = { isActive: true, purchasedAt, expiresAt, purchaseToken: generateSlotToken(payment.userId, payment.slotNumber, purchasedAt) };
+      if (existing.length) {
+        await db.update(slotsTable).set(slotData).where(and(eq(slotsTable.userId, payment.userId), eq(slotsTable.slotNumber, payment.slotNumber)));
+      } else {
+        await db.insert(slotsTable).values({ userId: payment.userId, slotNumber: payment.slotNumber, ...slotData });
+      }
+      const userRows2 = await db.select().from(usersTable).where(eq(usersTable.id, payment.userId)).limit(1);
+      if (userRows2.length) {
+        await sendPaymentWebhook({
+          username: userRows2[0].username,
+          discordId: userRows2[0].discordId,
+          method: payment.method,
+          currency: "USD",
+          amount: payment.amount,
+          slotNumber: payment.slotNumber,
+          purchaseType: "slot",
+          durationHours: hours,
+          expiresAt,
+        });
+      }
+      req.log.info({ id }, "Admin manually completed stripe slot payment");
+      res.json({ success: true, message: `Slot #${payment.slotNumber} activated` });
+      return;
+    }
+
+    // ── NOWPayments crypto verification ───────────────────────────────────
+    if (isCrypto) {
+      const apiKey = process.env.NOWPAYMENTS_API_KEY;
+      if (!apiKey) {
+        res.status(503).json({ error: "payment_unavailable", message: "NOWPayments not configured" });
+        return;
+      }
+      if (!payment.txHash) {
+        res.status(400).json({ error: "no_ref", message: "No NOWPayments payment ID on record" });
+        return;
+      }
+      const npRes = await fetch(`https://api.nowpayments.io/v1/payment/${payment.txHash}`, {
+        headers: { "x-api-key": apiKey },
+      });
+      if (!npRes.ok) {
+        res.status(502).json({ error: "nowpayments_error", message: `NOWPayments returned ${npRes.status}` });
+        return;
+      }
+      const npData = await npRes.json() as { payment_status: string };
+      const confirmed = npData.payment_status === "finished" || npData.payment_status === "confirmed";
+      if (!confirmed) {
+        res.status(402).json({ error: "not_confirmed", message: `NOWPayments status: ${npData.payment_status}` });
+        return;
+      }
+
+      if (isBalanceDeposit) {
+        const amount = parseFloat(payment.amount ?? "0");
+        await db.update(paymentsTable).set({ status: "completed", updatedAt: new Date() }).where(eq(paymentsTable.id, id));
+        await db.update(usersTable)
+          .set({ balance: sql`${usersTable.balance} + ${amount.toFixed(2)}::numeric`, updatedAt: new Date() })
+          .where(eq(usersTable.id, payment.userId));
+        const userRows = await db.select().from(usersTable).where(eq(usersTable.id, payment.userId)).limit(1);
+        if (userRows.length) {
+          await sendPaymentWebhook({
+            username: userRows[0].username,
+            discordId: userRows[0].discordId,
+            method: payment.method,
+            currency: payment.currency,
+            amount: amount.toFixed(2),
+            purchaseType: "balance_deposit",
+          });
+        }
+        req.log.info({ id, amount }, "Admin manually completed balance-deposit-crypto");
+        res.json({ success: true, message: `Balance of $${amount.toFixed(2)} credited` });
+        return;
+      }
+
+      // Crypto slot payment
+      const { slotDurationHours } = await getSettings();
+      const hours = payment.derivationIndex ?? slotDurationHours;
+      const expiryMs = hours * 60 * 60 * 1000;
+      const expiresAt = new Date(Date.now() + expiryMs);
+      await db.update(paymentsTable).set({ status: "completed", updatedAt: new Date() }).where(eq(paymentsTable.id, id));
+      const existing = await db.select().from(slotsTable).where(and(eq(slotsTable.userId, payment.userId), eq(slotsTable.slotNumber, payment.slotNumber))).limit(1);
+      const purchasedAt = new Date();
+      const slotData2 = { isActive: true, purchasedAt, expiresAt, purchaseToken: generateSlotToken(payment.userId, payment.slotNumber, purchasedAt) };
+      if (existing.length) {
+        await db.update(slotsTable).set(slotData2).where(and(eq(slotsTable.userId, payment.userId), eq(slotsTable.slotNumber, payment.slotNumber)));
+      } else {
+        await db.insert(slotsTable).values({ userId: payment.userId, slotNumber: payment.slotNumber, ...slotData2 });
+      }
+      const userRows3 = await db.select().from(usersTable).where(eq(usersTable.id, payment.userId)).limit(1);
+      if (userRows3.length) {
+        await sendPaymentWebhook({
+          username: userRows3[0].username,
+          discordId: userRows3[0].discordId,
+          method: payment.method,
+          currency: payment.currency,
+          amount: payment.amount,
+          slotNumber: payment.slotNumber,
+          purchaseType: "slot",
+          durationHours: hours,
+          expiresAt,
+        });
+      }
+      req.log.info({ id }, "Admin manually completed crypto slot payment");
+      res.json({ success: true, message: `Slot #${payment.slotNumber} activated` });
+      return;
+    }
+
+    res.status(400).json({ error: "unsupported_method", message: `Cannot verify method: ${payment.method}` });
+  } catch (err) {
+    req.log.error({ err }, "Admin payment verify failed");
+    res.status(500).json({ error: "server_error", message: err instanceof Error ? err.message : "Unknown error" });
+  }
+});
+
 router.get("/all-payments", async (req, res) => {
   try {
     const payments = await db
