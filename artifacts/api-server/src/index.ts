@@ -4,6 +4,7 @@ import { db, slotsTable, usersTable } from "@workspace/db";
 import { sql, eq, and, gt, lte } from "drizzle-orm";
 import { sendDiscordDM } from "./lib/discord.js";
 import { runSlotCleanup, runAutoFulfillment } from "./lib/fulfillment.js";
+import { runPaymentPoller } from "./lib/paymentPoller.js";
 import { spawn } from "child_process";
 import path from "path";
 
@@ -196,6 +197,10 @@ runMigrations().then(() => {
     // Cleanup + fulfillment every 60 seconds as a safety net
     setInterval(cleanupThenFulfill, 60 * 1000);
     setTimeout(cleanupThenFulfill, 15_000);
+
+    // Payment poller — auto-complete pending Stripe/crypto payments every 2 minutes
+    setInterval(() => runPaymentPoller().catch(err => logger.warn({ err }, "Payment poller error")), 2 * 60 * 1000);
+    setTimeout(() => runPaymentPoller().catch(err => logger.warn({ err }, "Payment poller error")), 30_000);
 
     startDiscordBot();
   });
