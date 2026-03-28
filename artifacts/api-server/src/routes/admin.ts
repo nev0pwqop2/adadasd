@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db, slotsTable, usersTable, paymentsTable, couponsTable, bidsTable } from "@workspace/db";
 import { eq, sql, inArray, and, lte, desc, ne } from "drizzle-orm";
 import { requireAdmin, isSuperAdmin } from "../middlewares/requireAdmin.js";
+import { invalidateBanCache } from "../middlewares/requireAuth.js";
 import { generateSlotToken, verifySlotToken } from "../lib/slotToken.js";
 import { getSettings, setSetting } from "../lib/settings.js";
 import { runAutoFulfillment } from "../lib/fulfillment.js";
@@ -659,6 +660,9 @@ router.post("/users/:discordId/ban", async (req, res) => {
     }
     const newBanned = !users[0].isBanned;
     await db.update(usersTable).set({ isBanned: newBanned, updatedAt: new Date() }).where(eq(usersTable.discordId, discordId));
+    // Immediately purge from ban cache so the ban/unban takes effect on the user's
+    // very next request rather than waiting for the 30-second cache TTL to expire.
+    invalidateBanCache(users[0].id);
     req.log.info({ adminId: req.session.userId, targetDiscordId: discordId, isBanned: newBanned }, "User ban toggled");
     res.json({ success: true, isBanned: newBanned, message: `${users[0].username} has been ${newBanned ? "banned" : "unbanned"}` });
   } catch (err) {

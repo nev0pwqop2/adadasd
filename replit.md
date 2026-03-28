@@ -16,6 +16,33 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - **API codegen**: Orval (from OpenAPI spec)
 - **Build**: esbuild (CJS bundle)
 
+## Security Hardening (complete)
+
+All known attack vectors have been mitigated. Current protections:
+
+| Layer | Protection |
+|---|---|
+| **Network** | Render proxy — unforgeable real-IP via last X-Forwarded-For entry |
+| **Slowloris / slow HTTP** | `requestTimeout 30s`, `headersTimeout 35s`, `keepAliveTimeout 5s` on the Node `http.Server` |
+| **Rate limiting** | Auth 20/min · Payments 10/min · Balance 15/min · All API 30/min — keyed by real IP or user ID |
+| **CORS** | Locked to `exenotifier.com` + Replit dev domain; rejected origins get clean 403, not 500 |
+| **Security headers** | Helmet (HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, etc.) |
+| **Session security** | SameSite=Lax, HttpOnly, Secure in prod; **7-day lifetime**; session ID **regenerated after login** (prevents fixation) |
+| **Session error leak** | Token exchange errors logged server-side only — no details in redirect URL |
+| **Cache-Control** | All `/api/*` responses: `Cache-Control: no-store, Pragma: no-cache` |
+| **Ban enforcement** | `requireAuth` checks ban status via in-memory cache (30s TTL); cache invalidated **immediately** on admin ban action |
+| **Prototype pollution** | Middleware rejects any body with `__proto__`, `constructor`, `prototype` keys (recursive, 5 levels deep) |
+| **HTTP Parameter Pollution** | Middleware rejects any body with array values (prevents `{"amount":[1,999999]}` tricks) |
+| **Slot double-purchase** | PostgreSQL advisory lock (`pg_advisory_lock`) inside a transaction |
+| **Purchase token** | HMAC-SHA256 slot token tied to userId + slotNumber + purchasedAt — forged DB rows have invalid tokens |
+| **Coupon abuse** | Per-user reuse check + expiry + max-uses enforcement |
+| **CSRF (OAuth)** | DB-stored state token, single-use, 10-min TTL |
+| **Webhook integrity** | Stripe: `stripe.webhooks.constructEvent`; NOWPayments: HMAC-SHA512 IPN verification + live payment API check |
+| **SQL injection** | Drizzle ORM with parameterized queries throughout |
+| **Internal endpoints** | Loopback-only (`127.0.0.1 / ::1`) enforced at socket level |
+| **Dependency ReDoS** | `path-to-regexp` forced to `>=8.4.0` via pnpm overrides (patches CVE in Express router) |
+| **Admin hardening** | Super-admin IDs hardcoded in server; DB `isAdmin` can be revoked but not bypass hardcoded list |
+
 ## Exe Joiner Features
 
 - **Discord OAuth2 login** with CSRF state verification

@@ -147,6 +147,29 @@ app.use((req, _res, next) => {
   next();
 });
 
+// HTTP Parameter Pollution — reject request bodies that contain array values.
+// e.g. {"amount": [1, 99999]} could confuse parseInt/parseFloat into returning NaN
+// or trick code that expects a single scalar value.
+// Webhook endpoints receive raw buffers (not JSON objects) so they are excluded.
+app.use((req, _res, next) => {
+  if (req.body && typeof req.body === "object" && !Buffer.isBuffer(req.body)) {
+    const hasArray = Object.values(req.body as object).some((v) => Array.isArray(v));
+    if (hasArray) {
+      _res.status(400).json({ error: "invalid_input", message: "Invalid request body" });
+      return;
+    }
+  }
+  next();
+});
+
+// Prevent API responses from being cached by browsers or CDNs.
+// Stale cached responses could expose data to unintended parties.
+app.use("/api", (_req, res, next) => {
+  res.setHeader("Cache-Control", "no-store");
+  res.setHeader("Pragma", "no-cache");
+  next();
+});
+
 // Apply rate limiters to specific route groups
 app.use("/api/auth", authLimiter);
 app.use("/api/payments/nowpayments", paymentLimiter);

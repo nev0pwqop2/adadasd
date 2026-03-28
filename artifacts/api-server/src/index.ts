@@ -180,7 +180,7 @@ app.post("/api/internal/trigger-fulfillment", (req, res) => {
 });
 
 runMigrations().then(() => {
-  app.listen(port, () => {
+  const server = app.listen(port, () => {
     logger.info({ port }, "Server listening");
 
     // Expiry notifications every 5 minutes
@@ -193,4 +193,12 @@ runMigrations().then(() => {
 
     startDiscordBot();
   });
+
+  // Slowloris / slow-client protection:
+  // requestTimeout  — max ms to receive a complete request (headers + body)
+  // headersTimeout  — max ms to receive request headers (must be > requestTimeout)
+  // keepAliveTimeout — close idle keep-alive connections after 5 s
+  server.requestTimeout = 30_000;
+  server.headersTimeout = 35_000;
+  server.keepAliveTimeout = 5_000;
 });
