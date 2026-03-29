@@ -11,6 +11,7 @@ import Admin from "@/pages/Admin";
 import LeaderboardPage from "@/pages/Leaderboard";
 import PlansPage from "@/pages/Plans";
 import CustomCursor from "@/components/CustomCursor";
+import PageTransition from "@/components/PageTransition";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -37,14 +38,16 @@ function AdminRoute() {
 
 function Router() {
   return (
-    <Switch>
-      <Route path="/" component={Landing} />
-      <Route path="/plans" component={PlansPage} />
-      <Route path="/leaderboard" component={LeaderboardPage} />
-      <Route path="/dashboard" component={Dashboard} />
-      <Route path="/admin" component={AdminRoute} />
-      <Route component={NotFound} />
-    </Switch>
+    <PageTransition>
+      <Switch>
+        <Route path="/" component={Landing} />
+        <Route path="/plans" component={PlansPage} />
+        <Route path="/leaderboard" component={LeaderboardPage} />
+        <Route path="/dashboard" component={Dashboard} />
+        <Route path="/admin" component={AdminRoute} />
+        <Route component={NotFound} />
+      </Switch>
+    </PageTransition>
   );
 }
 
