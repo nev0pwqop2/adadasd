@@ -41,8 +41,8 @@ export default function Navbar({ current }: NavbarProps) {
   ];
 
   return (
-    <div className="flex-shrink-0 w-full px-4 pt-3 pb-1 sticky top-0 z-50">
-      <header className="w-full bg-[#18120a]/90 backdrop-blur-md border border-[#f5a623]/10 rounded-2xl px-5 h-14 flex items-center justify-between shadow-[0_4px_32px_rgba(0,0,0,0.5)]">
+    <div className="flex-shrink-0 w-full px-4 pt-3 pb-1 sticky top-0 z-50 flex justify-center">
+      <header className="w-full max-w-3xl bg-[#18120a]/90 backdrop-blur-md border border-[#f5a623]/10 rounded-2xl px-5 h-12 flex items-center justify-between shadow-[0_4px_32px_rgba(0,0,0,0.5)]">
 
         {/* Brand */}
         <a href={`${base}`} className="flex items-center gap-2.5 flex-shrink-0">
