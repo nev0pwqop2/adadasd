@@ -69,13 +69,14 @@ export default function Landing() {
           {/* Nav links — center */}
           <nav className="hidden sm:flex items-center gap-6">
             {[
-              { label: 'Home', active: true },
-              { label: 'Plans', active: false },
-              { label: 'Dashboard', active: false },
-            ].map(({ label, active }) => (
+              { label: 'Home',         href: '#',                                          active: true  },
+              { label: 'Plans',        href: '#',                                          active: false },
+              { label: 'Leaderboard', href: `${import.meta.env.BASE_URL}dashboard`,       active: false },
+              { label: 'Dashboard',   href: `${import.meta.env.BASE_URL}dashboard`,       active: false },
+            ].map(({ label, href, active }) => (
               <a
                 key={label}
-                href={label === 'Dashboard' ? `${import.meta.env.BASE_URL}dashboard` : '#'}
+                href={href}
                 className={`text-sm transition-colors ${
                   active ? 'text-[#f5a623] font-semibold' : 'text-white/45 hover:text-white/75'
                 }`}
