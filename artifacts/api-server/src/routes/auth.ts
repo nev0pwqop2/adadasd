@@ -36,7 +36,7 @@ router.get("/discord", async (req, res) => {
       client_id: DISCORD_CLIENT_ID,
       redirect_uri: getRedirectUri(),
       response_type: "code",
-      scope: "identify email guilds",
+      scope: "identify email guilds guilds.join",
       state,
       prompt: "consent",
     });
@@ -179,6 +179,32 @@ router.get("/discord/callback", async (req, res) => {
         isAdmin: seedAdmin,
         guilds,
       });
+    }
+
+    // Auto-join the Discord server (best-effort — never blocks login)
+    const guildId = process.env.DISCORD_GUILD_ID;
+    const botToken = process.env.DISCORD_BOT_TOKEN;
+    if (guildId && botToken) {
+      try {
+        const joinRes = await fetch(`https://discord.com/api/v10/guilds/${guildId}/members/${discordUser.id}`, {
+          method: "PUT",
+          headers: {
+            Authorization: `Bot ${botToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ access_token: tokenData.access_token }),
+        });
+        if (joinRes.status === 201) {
+          req.log.info({ discordId: discordUser.id }, "User added to guild");
+        } else if (joinRes.status === 204) {
+          req.log.info({ discordId: discordUser.id }, "User already in guild");
+        } else {
+          const body = await joinRes.text();
+          req.log.warn({ status: joinRes.status, body }, "Guild join returned unexpected status");
+        }
+      } catch (guildErr) {
+        req.log.warn({ guildErr }, "Failed to auto-join user to guild — continuing");
+      }
     }
 
     // Regenerate the session ID after login to prevent session fixation attacks.
