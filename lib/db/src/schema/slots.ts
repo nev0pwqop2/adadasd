@@ -13,6 +13,11 @@ export const slotsTable = pgTable("slots", {
   label: text("label"),
   luarmorUserId: text("luarmor_user_id"),
   hwidResetAt: timestamp("hwid_reset_at"),
+  purchaseToken: text("purchase_token"),
+  notified24h: boolean("notified_24h").notNull().default(false),
+  notified1h: boolean("notified_1h").notNull().default(false),
+  isPaused: boolean("is_paused").notNull().default(false),
+  pausedAt: timestamp("paused_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

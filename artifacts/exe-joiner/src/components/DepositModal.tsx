@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, CreditCard, Bitcoin, Loader2, Wallet, Copy, Check, CheckCircle } from 'lucide-react';
+import { X, CreditCard, Bitcoin, Loader2, Wallet, Copy, Check, CheckCircle, MessageSquare } from 'lucide-react';
 import { Button } from './ui/button';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -11,7 +11,7 @@ interface DepositModalProps {
   onSuccess: () => void;
 }
 
-type Method = 'stripe' | 'crypto';
+type Method = 'stripe' | 'crypto' | 'paypal';
 type Currency = 'BTC' | 'LTC' | 'USDT' | 'ETH' | 'SOL';
 
 const PRESET_AMOUNTS = [10, 25, 50, 100];
@@ -58,7 +58,9 @@ export function DepositModal({ isOpen, onClose, onSuccess }: DepositModalProps) 
   };
 
   const handleClose = () => {
-    cancelPendingDeposit();
+    if (!cryptoSession) {
+      cancelPendingDeposit();
+    }
     reset();
     onClose();
   };
@@ -218,7 +220,7 @@ export function DepositModal({ isOpen, onClose, onSuccess }: DepositModalProps) 
                   {/* Method */}
                   <div>
                     <p className="text-xs font-mono text-muted-foreground mb-2.5 uppercase tracking-wider">Payment Method</p>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-3 gap-2">
                       <button
                         onClick={() => setMethod('stripe')}
                         className={cn(
@@ -249,6 +251,21 @@ export function DepositModal({ isOpen, onClose, onSuccess }: DepositModalProps) 
                           <p className="font-mono text-[10px] text-muted-foreground">BTC · LTC · USDT · ETH · SOL</p>
                         </div>
                       </button>
+                      <button
+                        onClick={() => setMethod('paypal')}
+                        className={cn(
+                          'flex items-center gap-2.5 p-3.5 rounded-xl border transition-all',
+                          method === 'paypal'
+                            ? 'border-primary bg-primary/10 text-primary'
+                            : 'border-border bg-card/50 text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                        )}
+                      >
+                        <MessageSquare className="w-4 h-4 shrink-0" />
+                        <div className="text-left">
+                          <p className="font-mono text-xs font-semibold">PayPal</p>
+                          <p className="font-mono text-[10px] text-muted-foreground">Discord ticket</p>
+                        </div>
+                      </button>
                     </div>
                   </div>
 
@@ -268,14 +285,34 @@ export function DepositModal({ isOpen, onClose, onSuccess }: DepositModalProps) 
                                 : 'border-border bg-card/50 text-muted-foreground hover:border-primary/50 hover:text-foreground'
                             )}
                           >
-                            {c === 'USDT' ? 'USDT TRC20' : c === 'ETH' ? 'Ethereum' : c === 'SOL' ? 'Solana' : c}
+                            {c === 'BTC' ? 'Bitcoin' : c === 'LTC' ? 'Litecoin' : c === 'USDT' ? 'USDT' : c === 'ETH' ? 'Ethereum' : c === 'SOL' ? 'Solana' : c}
                           </button>
                         ))}
                       </div>
                     </div>
                   )}
 
+                  {/* PayPal Discord message */}
+                  {method === 'paypal' && (
+                    <div className="flex flex-col items-center justify-center gap-3 py-6 text-center bg-secondary/20 rounded-xl border border-primary/20">
+                      <MessageSquare className="w-10 h-10 text-primary opacity-80" />
+                      <div className="space-y-1">
+                        <p className="font-mono text-sm font-bold text-foreground">Pay with PayPal</p>
+                        <p className="font-mono text-xs text-muted-foreground">For PayPal payments, open a ticket in our Discord and a staff member will assist you.</p>
+                      </div>
+                      <a
+                        href="https://discord.gg/exenotifier"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-1 inline-flex items-center gap-2 px-5 py-2.5 bg-[#5865F2] hover:bg-[#4752C4] text-white font-mono text-xs font-bold uppercase tracking-wider transition-colors rounded-lg"
+                      >
+                        <MessageSquare className="w-4 h-4" /> Join Discord
+                      </a>
+                    </div>
+                  )}
+
                   {/* Summary + CTA */}
+                  {method !== 'paypal' && (
                   <div className="bg-secondary/20 rounded-xl p-4 flex items-center justify-between">
                     <div>
                       <p className="font-mono text-xs text-muted-foreground">Depositing</p>
@@ -289,6 +326,7 @@ export function DepositModal({ isOpen, onClose, onSuccess }: DepositModalProps) 
                       {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : method === 'stripe' ? 'Pay with Card' : 'Get Address'}
                     </Button>
                   </div>
+                  )}
                 </>
               ) : (
                 /* Crypto address display */

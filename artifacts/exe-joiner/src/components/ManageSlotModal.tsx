@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Settings, Loader2, Tag, Key, Copy, Check, RefreshCw, AlertCircle } from 'lucide-react';
+import { X, Settings, Loader2, Key, Copy, Check, RefreshCw, AlertCircle, Gift } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
 import { useToast } from '@/hooks/use-toast';
@@ -18,6 +18,9 @@ export function ManageSlotModal({ slot, onClose, onSuccess }: ManageSlotModalPro
   const [keyCopied, setKeyCopied] = useState(false);
   const [scriptCopied, setScriptCopied] = useState(false);
   const [isResettingHwid, setIsResettingHwid] = useState(false);
+  const [showGiftPanel, setShowGiftPanel] = useState(false);
+  const [giftDiscordId, setGiftDiscordId] = useState('');
+  const [isGifting, setIsGifting] = useState(false);
   const { toast } = useToast();
 
   const hwidResetAt = slot?.hwidResetAt ? new Date(slot.hwidResetAt) : null;
@@ -28,7 +31,7 @@ export function ManageSlotModal({ slot, onClose, onSuccess }: ManageSlotModalPro
     if (!slot?.id || hwidOnCooldown) return;
     setIsResettingHwid(true);
     try {
-      const res = await fetch(`/api/slots/${slot.id}/reset-hwid`, {
+      const res = await fetch(`${import.meta.env.BASE_URL}api/slots/${slot.id}/reset-hwid`, {
         method: 'POST',
         credentials: 'include',
       });
@@ -56,6 +59,29 @@ export function ManageSlotModal({ slot, onClose, onSuccess }: ManageSlotModalPro
     await navigator.clipboard.writeText(slot.script);
     setScriptCopied(true);
     setTimeout(() => setScriptCopied(false), 2000);
+  };
+
+  const handleGift = async () => {
+    if (!slot?.id || !giftDiscordId.trim()) return;
+    setIsGifting(true);
+    try {
+      const res = await fetch(`${import.meta.env.BASE_URL}api/slots/gift`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slotId: slot.id, recipientDiscordId: giftDiscordId.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || 'Failed to gift slot');
+      toast({ title: 'Slot Gifted!', description: `Slot #${slot.slotNumber} has been transferred.`, className: 'bg-primary text-primary-foreground border-none' });
+      onSuccess();
+      onClose();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Something went wrong';
+      toast({ title: 'Error', description: message, variant: 'destructive' });
+    } finally {
+      setIsGifting(false);
+    }
   };
 
   if (!slot) return null;
@@ -115,26 +141,7 @@ export function ManageSlotModal({ slot, onClose, onSuccess }: ManageSlotModalPro
             </div>
 
             <div className="p-6 space-y-6">
-              <div className="space-y-2">
-                <label className="text-xs font-mono uppercase text-muted-foreground flex items-center gap-2">
-                  <Tag className="w-3 h-3" /> Slot Label
-                </label>
-                <input
-                  type="text"
-                  value={label}
-                  onChange={(e) => setLabel(e.target.value)}
-                  placeholder="e.g. Main Bot, Server #1..."
-                  maxLength={64}
-                  className="w-full bg-secondary border border-primary/20 text-foreground font-mono text-sm px-3 py-2 focus:outline-none focus:border-primary/60 transition-colors"
-                />
-                <p className="text-xs text-muted-foreground font-mono">Give this slot a custom name to identify it.</p>
-              </div>
-
               <div className="bg-secondary/50 border border-primary/10 p-3 space-y-1 font-mono text-xs">
-                <div className="flex justify-between text-muted-foreground">
-                  <span>SLOT ID</span>
-                  <span className="text-primary">#{slot.slotNumber}</span>
-                </div>
                 <div className="flex justify-between text-muted-foreground">
                   <span>STATUS</span>
                   <span className="text-primary">ONLINE</span>
@@ -142,7 +149,13 @@ export function ManageSlotModal({ slot, onClose, onSuccess }: ManageSlotModalPro
                 {slot.expiresAt && (
                   <div className="flex justify-between text-muted-foreground">
                     <span>EXPIRES</span>
-                    <span className="text-primary">{new Date(slot.expiresAt).toLocaleDateString()}</span>
+                    <span className="text-primary">{(() => {
+                      const diff = new Date(slot.expiresAt).getTime() - Date.now();
+                      if (diff <= 0) return 'Expired';
+                      const h = Math.floor(diff / 3600000);
+                      const m = Math.floor((diff % 3600000) / 60000);
+                      return h > 0 ? `${h}h ${m}m` : `${m}m`;
+                    })()}</span>
                   </div>
                 )}
               </div>
@@ -154,13 +167,11 @@ export function ManageSlotModal({ slot, onClose, onSuccess }: ManageSlotModalPro
                       <Key className="w-3 h-3" /> Script Key
                     </label>
                     <div className="bg-secondary/60 border border-primary/20 p-3 rounded flex items-start justify-between gap-2">
-                      <p className="font-mono text-xs text-primary/90 break-all leading-relaxed flex-1">
-                        {slot.scriptKey}
-                      </p>
+                      <pre className="font-mono text-xs text-primary/90 break-all leading-relaxed flex-1 whitespace-pre-wrap">{slot.scriptKey}</pre>
                       <button
                         onClick={handleCopyKey}
                         className="shrink-0 text-muted-foreground hover:text-primary transition-colors mt-0.5"
-                        title="Copy script key"
+                        title="Copy script"
                       >
                         {keyCopied ? <Check className="w-3.5 h-3.5 text-primary" /> : <Copy className="w-3.5 h-3.5" />}
                       </button>
@@ -196,37 +207,63 @@ export function ManageSlotModal({ slot, onClose, onSuccess }: ManageSlotModalPro
                 </div>
               )}
 
+              {/* HWID Reset */}
               {slot.scriptKey && (
                 <div className="space-y-2">
                   <label className="text-xs font-mono uppercase text-muted-foreground flex items-center gap-2">
                     <RefreshCw className="w-3 h-3" /> HWID Reset
                   </label>
-                  <div className="bg-secondary/50 border border-primary/10 p-3 space-y-2">
-                    {hwidOnCooldown && nextHwidReset ? (
-                      <div className="flex items-start gap-2 text-xs font-mono text-yellow-400/80">
-                        <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                        <span>On cooldown — next reset available {nextHwidReset.toLocaleString()}</span>
-                      </div>
-                    ) : hwidResetAt ? (
-                      <p className="text-xs font-mono text-muted-foreground/60">Last reset: {hwidResetAt.toLocaleString()}{slot?.hwidUnlimited ? ' — unlimited resets' : ''}</p>
-                    ) : (
-                      <p className="text-xs font-mono text-muted-foreground/60">{slot?.hwidUnlimited ? 'Unlimited resets enabled.' : 'No resets used today.'}</p>
-                    )}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full border-primary/20 text-primary hover:bg-primary/5 font-mono text-xs"
-                      onClick={handleResetHwid}
-                      disabled={isResettingHwid || hwidOnCooldown}
-                    >
-                      {isResettingHwid
-                        ? <><Loader2 className="w-3.5 h-3.5 animate-spin mr-2" />Resetting...</>
-                        : <><RefreshCw className="w-3.5 h-3.5 mr-2" />Reset HWID</>}
+                  {hwidOnCooldown && nextHwidReset ? (
+                    <div className="flex items-center gap-2 text-xs font-mono text-muted-foreground border border-border/30 p-2.5 rounded bg-secondary/30">
+                      <AlertCircle className="w-3.5 h-3.5 text-yellow-500 shrink-0" />
+                      <span>Next reset available {nextHwidReset.toLocaleString()}</span>
+                    </div>
+                  ) : (
+                    <Button variant="outline" size="sm" onClick={handleResetHwid} disabled={isResettingHwid} className="font-mono text-xs border-primary/30">
+                      {isResettingHwid ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <RefreshCw className="w-3.5 h-3.5 mr-1.5" />}
+                      Reset HWID
                     </Button>
-                    <p className="text-[10px] font-mono text-muted-foreground/40">1 reset per 24 hours. Use this if you changed your PC.</p>
-                  </div>
+                  )}
                 </div>
               )}
+
+              {/* Gift Slot */}
+              <div className="space-y-2 border-t border-primary/10 pt-4">
+                {!showGiftPanel ? (
+                  <button
+                    onClick={() => setShowGiftPanel(true)}
+                    className="flex items-center gap-2 text-xs font-mono text-muted-foreground hover:text-primary transition-colors"
+                  >
+                    <Gift className="w-3.5 h-3.5" /> Gift this slot to another user
+                  </button>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 text-xs font-mono text-yellow-400 bg-yellow-500/10 border border-yellow-500/20 p-2.5 rounded">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                      <span>You will lose access to this slot when it is gifted.</span>
+                    </div>
+                    <label className="text-xs font-mono uppercase text-muted-foreground flex items-center gap-2">
+                      <Gift className="w-3 h-3" /> Recipient Discord ID
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 123456789012345678"
+                      value={giftDiscordId}
+                      onChange={e => setGiftDiscordId(e.target.value.replace(/\D/g, ''))}
+                      className="w-full bg-secondary/50 border border-primary/20 text-foreground font-mono text-sm px-3 py-2 focus:outline-none focus:border-primary/50"
+                    />
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" className="flex-1 font-mono text-xs" onClick={() => { setShowGiftPanel(false); setGiftDiscordId(''); }}>
+                        Cancel
+                      </Button>
+                      <Button size="sm" className="flex-[2] font-mono text-xs" onClick={handleGift} disabled={isGifting || !giftDiscordId.trim()}>
+                        {isGifting ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <Gift className="w-3.5 h-3.5 mr-1.5" />}
+                        Gift Slot
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
 
               <div className="flex gap-3">
                 <Button variant="outline" className="flex-1" onClick={onClose} disabled={isSaving}>

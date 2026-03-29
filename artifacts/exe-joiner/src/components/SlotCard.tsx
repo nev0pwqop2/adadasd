@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Button } from './ui/button';
-import { Clock, Copy, Check, Key } from 'lucide-react';
+import { Clock, Copy, Check, Pause } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export interface PublicSlot {
@@ -16,6 +15,9 @@ export interface PublicSlot {
   script?: string | null;
   hwidResetAt?: string | null;
   hwidUnlimited?: boolean;
+  luarmorUserId?: string | null;
+  isPaused?: boolean;
+  pausedAt?: string | null;
 }
 
 interface SlotCardProps {
@@ -24,174 +26,173 @@ interface SlotCardProps {
   onManage: (slot: PublicSlot) => void;
 }
 
-function useTimeLeft(expiresAt: string | null) {
-  const getMs = () => expiresAt ? Math.max(0, new Date(expiresAt).getTime() - Date.now()) : 0;
-  const [ms, setMs] = useState(getMs);
-  useEffect(() => {
-    if (!expiresAt) return;
-    const id = setInterval(() => setMs(getMs()), 1000);
-    return () => clearInterval(id);
-  }, [expiresAt]);
-  if (!expiresAt || ms === 0) return null;
+function formatMs(ms: number): string {
   const s = Math.floor(ms / 1000);
   const d = Math.floor(s / 86400);
   const h = Math.floor((s % 86400) / 3600);
   const m = Math.floor((s % 3600) / 60);
   const sec = s % 60;
-  if (d > 0) return `${d}d ${h}h`;
-  if (h > 0) return `${h}h ${String(m).padStart(2, '0')}m`;
-  return `${String(m).padStart(2, '0')}m ${String(sec).padStart(2, '0')}s`;
+  if (d > 0) return `${d}d ${h}h ${String(m).padStart(2, '0')}m`;
+  return `${h}h ${String(m).padStart(2, '0')}m ${String(sec).padStart(2, '0')}s`;
 }
 
-function CopyKeyButton({ scriptKey }: { scriptKey: string }) {
-  const [copied, setCopied] = useState(false);
+function useTimeLeft(expiresAt: string | null, pausedAt: string | null | undefined) {
+  const getMs = () => expiresAt ? Math.max(0, new Date(expiresAt).getTime() - Date.now()) : 0;
+  const [ms, setMs] = useState(getMs);
+  useEffect(() => {
+    if (!expiresAt || pausedAt) return;
+    const id = setInterval(() => setMs(getMs()), 1000);
+    return () => clearInterval(id);
+  }, [expiresAt, pausedAt]);
 
-  const handleCopy = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    await navigator.clipboard.writeText(scriptKey);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
+  if (!expiresAt) return null;
+  // When paused: show frozen time = expiresAt - pausedAt (how much was left when paused)
+  if (pausedAt) {
+    const frozenMs = Math.max(0, new Date(expiresAt).getTime() - new Date(pausedAt).getTime());
+    return frozenMs === 0 ? null : formatMs(frozenMs);
+  }
+  return ms === 0 ? null : formatMs(ms);
+}
 
+function Avatar({ owner, size = 64 }: { owner: PublicSlot['owner']; size?: number }) {
+  if (owner?.avatar) {
+    return (
+      <img
+        src={`https://cdn.discordapp.com/avatars/${owner.discordId}/${owner.avatar}.webp?size=128`}
+        alt={owner.username}
+        className="rounded-full object-cover border-2 border-white/10"
+        style={{ width: size, height: size }}
+      />
+    );
+  }
   return (
-    <button
-      onClick={handleCopy}
-      className="flex items-center gap-1 text-primary/60 hover:text-primary transition-colors"
-      title="Copy script key"
+    <div
+      className="rounded-full bg-white/6 border-2 border-white/8 flex items-center justify-center"
+      style={{ width: size, height: size }}
     >
-      {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-    </button>
+      <svg width={size * 0.45} height={size * 0.45} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-white/20">
+        <circle cx="12" cy="8" r="4" />
+        <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
+      </svg>
+    </div>
   );
 }
 
 export function SlotCard({ slotData, onPurchase, onManage }: SlotCardProps) {
-  const { slotNumber, isActive, isOwner, owner } = slotData;
+  const { slotNumber, isActive, isOwner, owner, isPaused } = slotData;
   const taken = isActive && !isOwner;
-  const timeLeft = useTimeLeft(isActive ? slotData.expiresAt : null);
+  const timeLeft = useTimeLeft(isActive ? slotData.expiresAt : null, isPaused ? slotData.pausedAt : null);
+  const [keyCopied, setKeyCopied] = useState(false);
+
+  const handleCopyKey = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!slotData.scriptKey) return;
+    await navigator.clipboard.writeText(slotData.scriptKey);
+    setKeyCopied(true);
+    setTimeout(() => setKeyCopied(false), 2000);
+  };
 
   return (
     <div className={cn(
-      'flex flex-col rounded-xl border transition-all duration-200 overflow-hidden',
+      'rounded-2xl border flex flex-col items-center p-4 pt-3 gap-3 transition-all duration-200 relative',
       isOwner
-        ? 'border-primary/35 bg-primary/[0.04]'
+        ? isPaused
+          ? 'border-amber-500/30 bg-[#16140e]'
+          : 'border-primary/25 bg-[#131209]'
         : taken
-          ? 'border-border bg-secondary/20'
-          : 'border-border/60 bg-transparent hover:border-border hover:bg-secondary/10'
+          ? 'border-white/8 bg-[#111115]'
+          : 'border-white/8 bg-[#111115] hover:border-white/14 hover:bg-[#121216] cursor-pointer'
     )}>
-      {/* Slot number + status */}
-      <div className={cn(
-        'flex items-center justify-between px-4 py-3 border-b',
-        isOwner ? 'border-primary/20' : 'border-border/50'
-      )}>
-        <span className={cn(
-          'font-mono text-xs font-semibold tracking-widest',
-          isOwner ? 'text-primary' : taken ? 'text-muted-foreground' : 'text-muted-foreground/60'
-        )}>
+      {/* Top row: slot number + status badge */}
+      <div className="w-full flex items-center justify-between">
+        <span className="font-mono text-[11px] font-bold bg-white/6 border border-white/8 px-2 py-0.5 rounded text-white/50 tracking-widest">
           #{String(slotNumber).padStart(2, '0')}
         </span>
-        <span className={cn(
-          'text-[10px] font-mono font-bold tracking-widest uppercase px-2 py-0.5 rounded-full',
-          isOwner
-            ? 'text-primary bg-primary/15'
-            : taken
-              ? 'text-muted-foreground bg-secondary'
-              : 'text-muted-foreground/40 bg-secondary/50'
-        )}>
-          {isOwner ? 'Active' : taken ? 'Taken' : 'Open'}
-        </span>
-      </div>
 
-      {/* Body */}
-      <div className="flex-1 flex flex-col items-center justify-center px-4 py-5 gap-3">
-        {isOwner ? (
-          <>
-            <div className="text-center space-y-1.5 w-full">
-              <p className="font-semibold text-sm text-primary tracking-wide">
-                {slotData.label || 'Running'}
-              </p>
-              {timeLeft && (
-                <div className="flex items-center justify-center gap-1.5 text-xs font-mono text-muted-foreground">
-                  <Clock className="w-3 h-3 text-primary/50" />
-                  <span>{timeLeft} left</span>
-                </div>
-              )}
-            </div>
-
-            {slotData.scriptKey ? (
-              <div className="w-full bg-secondary/60 border border-primary/15 rounded px-2.5 py-1.5">
-                <div className="flex items-center justify-between gap-1 mb-0.5">
-                  <span className="text-[9px] font-mono uppercase tracking-widest text-muted-foreground flex items-center gap-1">
-                    <Key className="w-2.5 h-2.5" /> Script Key
-                  </span>
-                  <CopyKeyButton scriptKey={slotData.scriptKey} />
-                </div>
-                <p className="font-mono text-[10px] text-primary/80 break-all leading-tight">
-                  {slotData.scriptKey}
-                </p>
-              </div>
-            ) : (
-              <div className="w-full bg-secondary/30 border border-border/30 rounded px-2.5 py-1.5">
-                <p className="text-[10px] font-mono text-muted-foreground/40 text-center">
-                  No script key assigned
-                </p>
-              </div>
-            )}
-
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full h-8 border-primary/25 text-primary hover:border-primary/50 hover:bg-primary/5 text-xs font-mono"
-              onClick={() => onManage(slotData)}
-            >
-              Manage
-            </Button>
-          </>
-        ) : taken ? (
-          <>
-            <div className="flex flex-col items-center gap-1.5 w-full">
-              {owner && (
-                <div className="flex items-center gap-2">
-                  {owner.avatar ? (
-                    <img
-                      src={`https://cdn.discordapp.com/avatars/${owner.discordId}/${owner.avatar}.png`}
-                      alt=""
-                      className="w-6 h-6 rounded-full border border-border"
-                    />
-                  ) : (
-                    <div className="w-6 h-6 rounded-full bg-secondary border border-border" />
-                  )}
-                  <span className="font-mono text-xs text-muted-foreground truncate max-w-[100px]">{owner.username}</span>
-                </div>
-              )}
-              {timeLeft && (
-                <div className="flex items-center gap-1 text-[11px] font-mono text-muted-foreground/50">
-                  <Clock className="w-2.5 h-2.5" />
-                  <span>{timeLeft}</span>
-                </div>
-              )}
-            </div>
-            <Button
-              disabled
-              size="sm"
-              variant="outline"
-              className="w-full h-8 border-border/40 text-muted-foreground/30 cursor-not-allowed text-xs font-mono"
-            >
+        {isActive ? (
+          isPaused ? (
+            <span className="flex items-center gap-1.5 text-[11px] font-mono font-semibold text-amber-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+              Paused
+            </span>
+          ) : isOwner ? (
+            <span className="flex items-center gap-1.5 text-[11px] font-mono font-semibold text-primary">
+              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+              Active
+            </span>
+          ) : (
+            <span className="flex items-center gap-1.5 text-[11px] font-mono font-semibold text-white/30">
+              <span className="w-1.5 h-1.5 rounded-full bg-white/20" />
               Taken
-            </Button>
-          </>
+            </span>
+          )
         ) : (
-          <>
-            <p className="text-muted-foreground/40 font-mono text-xs">Available</p>
-            <Button
-              size="sm"
-              className="w-full h-8 text-xs font-semibold"
-              onClick={() => onPurchase(slotNumber)}
-            >
-              Purchase
-            </Button>
-          </>
+          <span className="flex items-center gap-1.5 text-[11px] font-mono font-semibold text-emerald-400">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+            Open
+          </span>
         )}
       </div>
+
+      {/* Avatar */}
+      {isActive ? (
+        <Avatar owner={owner} size={62} />
+      ) : (
+        <div className="w-[62px] h-[62px] rounded-full border-2 border-dashed border-white/10 flex items-center justify-center">
+          <span className="text-white/15 text-xl font-bold">+</span>
+        </div>
+      )}
+
+      {/* Username / label */}
+      {isActive ? (
+        <p className="text-sm text-white/60 font-medium truncate max-w-full px-1 text-center">
+          {owner?.username ?? 'Unknown'}
+        </p>
+      ) : (
+        <p className="text-xs text-white/25 font-mono text-center">Available</p>
+      )}
+
+      {/* Timer */}
+      {isActive && timeLeft && (
+        <div className="flex items-center gap-1.5 text-[11px] font-mono text-white/35">
+          {isPaused
+            ? <Pause className="w-3 h-3 text-amber-400/70" />
+            : <Clock className="w-3 h-3 text-white/25" />
+          }
+          <span className={isPaused ? 'text-amber-400/70' : ''}>{timeLeft}</span>
+        </div>
+      )}
+
+      {/* Script key (owner only) */}
+      {isOwner && slotData.scriptKey && (
+        <div className="w-full rounded-lg bg-white/4 border border-white/6 px-2.5 py-2 flex items-center justify-between gap-2">
+          <p className="font-mono text-[10px] text-primary/60 truncate flex-1">{slotData.scriptKey}</p>
+          <button onClick={handleCopyKey} className="shrink-0 text-white/20 hover:text-primary transition-colors">
+            {keyCopied ? <Check className="w-3 h-3 text-primary" /> : <Copy className="w-3 h-3" />}
+          </button>
+        </div>
+      )}
+
+      {/* Action button */}
+      {isOwner ? (
+        <button
+          onClick={() => onManage(slotData)}
+          className="w-full h-8 rounded-lg border border-primary/20 text-primary/80 text-xs font-medium hover:bg-primary/8 hover:border-primary/35 transition-all"
+        >
+          Manage
+        </button>
+      ) : taken ? (
+        <button disabled className="w-full h-8 rounded-lg border border-white/5 text-white/15 text-xs cursor-not-allowed">
+          Taken
+        </button>
+      ) : (
+        <button
+          onClick={() => onPurchase(slotNumber)}
+          className="w-full h-8 rounded-lg bg-primary text-[#0a0a0c] text-xs font-bold hover:brightness-110 active:brightness-95 transition-all"
+        >
+          Purchase
+        </button>
+      )}
     </div>
   );
 }

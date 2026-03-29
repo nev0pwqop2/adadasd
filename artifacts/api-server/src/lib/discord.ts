@@ -1,4 +1,42 @@
+import { logger } from "./logger.js";
+
 export type PurchaseType = "slot" | "balance_deposit" | "preorder";
+
+export async function sendDiscordDM(discordId: string, content: string): Promise<void> {
+  const botToken = process.env.DISCORD_BOT_TOKEN;
+  if (!botToken) {
+    logger.warn({ discordId }, "[discord dm] DISCORD_BOT_TOKEN not set — skipping DM");
+    return;
+  }
+
+  try {
+    const channelRes = await fetch("https://discord.com/api/v10/users/@me/channels", {
+      method: "POST",
+      headers: { Authorization: `Bot ${botToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ recipient_id: discordId }),
+    });
+    if (!channelRes.ok) {
+      const text = await channelRes.text().catch(() => "");
+      logger.warn({ discordId, status: channelRes.status, body: text }, "[discord dm] failed to open DM channel");
+      return;
+    }
+    const channel = (await channelRes.json()) as { id: string };
+
+    const msgRes = await fetch(`https://discord.com/api/v10/channels/${channel.id}/messages`, {
+      method: "POST",
+      headers: { Authorization: `Bot ${botToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ content }),
+    });
+    if (!msgRes.ok) {
+      const text = await msgRes.text().catch(() => "");
+      logger.warn({ discordId, status: msgRes.status, body: text }, "[discord dm] failed to send message");
+    } else {
+      logger.info({ discordId }, "[discord dm] sent successfully");
+    }
+  } catch (err) {
+    logger.warn({ err, discordId }, "[discord dm] fetch error");
+  }
+}
 
 export async function sendPaymentWebhook(data: {
   username: string;
@@ -11,7 +49,7 @@ export async function sendPaymentWebhook(data: {
   durationHours?: number | null;
   expiresAt?: Date | null;
 }): Promise<void> {
-  const webhookUrl = process.env.DISCORD_WEBHOOK_URL || "https://discord.com/api/webhooks/1481718051270299649/42cS67FWAVDv5v5B2i0XxwmgclnOZuKcJ9fLEOgPUuoPLpM7LUOh_GH_wOcC_umoB68j";
+  const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
   if (!webhookUrl) return;
 
   const purchaseType = data.purchaseType ?? "slot";

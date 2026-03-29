@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { QRCodeSVG } from 'qrcode.react';
-import { X, CreditCard, Bitcoin, Loader2, CheckCircle, Copy, Plus, Minus, Wallet } from 'lucide-react';
+import { X, CreditCard, Bitcoin, Loader2, CheckCircle, Copy, Plus, Minus, Wallet, Tag, Check, MessageSquare } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
 import { cn } from '@/lib/utils';
@@ -26,7 +26,7 @@ interface PaymentModalProps {
   onSuccess: () => void;
 }
 
-type Tab = 'crypto' | 'stripe' | 'balance';
+type Tab = 'crypto' | 'stripe' | 'balance' | 'paypal';
 
 export function PaymentModal({
   isOpen,
@@ -46,29 +46,60 @@ export function PaymentModal({
   const [isBalanceLoading, setIsBalanceLoading] = useState(false);
   const { toast } = useToast();
 
+  const [couponInput, setCouponInput] = useState('');
+  const [isValidatingCoupon, setIsValidatingCoupon] = useState(false);
+  const [appliedCoupon, setAppliedCoupon] = useState<{ couponId: number; discountAmount: number; finalPrice: number; code: string } | null>(null);
+
   useEffect(() => {
     setSelectedHours(minHours);
+    setCouponInput('');
+    setAppliedCoupon(null);
   }, [minHours, isOpen]);
 
   const { mutate: createStripe, isPending: isStripeLoading } = useCreateStripeSession();
   const { mutate: createCrypto, data: cryptoSession, isPending: isCryptoLoading, reset: resetCrypto } = useCreateCryptoSession();
   const { mutate: verifyCrypto, isPending: isVerifyLoading } = useVerifyCryptoPayment();
 
-  const totalPrice = hourlyPricingEnabled
-    ? selectedHours * pricePerHour
-    : pricePerDay;
+  const basePrice = hourlyPricingEnabled ? selectedHours * pricePerHour : pricePerDay;
+  const totalPrice = appliedCoupon ? appliedCoupon.finalPrice : basePrice;
 
-  const durationLabel = hourlyPricingEnabled
-    ? `${selectedHours}h`
-    : `${slotDurationHours}h`;
+  const durationLabel = hourlyPricingEnabled ? `${selectedHours}h` : `${slotDurationHours}h`;
 
   const handleClose = () => {
-    fetch(`${import.meta.env.BASE_URL}api/payments/cancel-pending`, {
-      method: 'DELETE',
-      credentials: 'include',
-    }).catch(() => {});
+    if (!cryptoSession) {
+      fetch(`${import.meta.env.BASE_URL}api/payments/cancel-pending`, {
+        method: 'DELETE',
+        credentials: 'include',
+      }).catch(() => {});
+    }
     resetCrypto();
     onClose();
+  };
+
+  const handleApplyCoupon = async () => {
+    if (!couponInput.trim()) return;
+    setIsValidatingCoupon(true);
+    try {
+      const res = await fetch(`${import.meta.env.BASE_URL}api/coupons/validate`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: couponInput.trim().toUpperCase(), price: basePrice }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Invalid coupon');
+      setAppliedCoupon({ ...data, code: couponInput.trim().toUpperCase() });
+      toast({ title: 'Coupon applied!', description: `Saved $${data.discountAmount.toFixed(2)}`, className: 'bg-primary text-primary-foreground border-none' });
+    } catch (e: any) {
+      toast({ title: 'Invalid coupon', description: e.message, variant: 'destructive' });
+    } finally {
+      setIsValidatingCoupon(false);
+    }
+  };
+
+  const removeCoupon = () => {
+    setAppliedCoupon(null);
+    setCouponInput('');
   };
 
   const handleBalancePay = async () => {
@@ -76,6 +107,7 @@ export function PaymentModal({
     try {
       const body: any = { slotNumber };
       if (hourlyPricingEnabled) body.hours = selectedHours;
+      if (appliedCoupon) body.couponId = appliedCoupon.couponId;
       const res = await fetch(`${import.meta.env.BASE_URL}api/balance/use`, {
         method: 'POST',
         credentials: 'include',
@@ -99,6 +131,7 @@ export function PaymentModal({
   const handleStripePay = () => {
     const data: any = { slotNumber };
     if (hourlyPricingEnabled) data.hours = selectedHours;
+    if (appliedCoupon) data.couponId = appliedCoupon.couponId;
     createStripe({ data }, {
       onSuccess: (res) => { window.location.href = res.url; },
       onError: (err) => {
@@ -110,6 +143,7 @@ export function PaymentModal({
   const handleCryptoGenerate = () => {
     const data: any = { slotNumber, currency };
     if (hourlyPricingEnabled) data.hours = selectedHours;
+    if (appliedCoupon) data.couponId = appliedCoupon.couponId;
     createCrypto({ data }, {
       onError: (err) => {
         toast({ title: "Error", description: err.message || "Failed to generate crypto session", variant: "destructive" });
@@ -183,18 +217,33 @@ export function PaymentModal({
   );
 
   const PriceSummary = () => (
-    <div className="bg-secondary/50 p-4 border border-primary/20 flex justify-between items-center">
-      <span className="text-muted-foreground font-mono text-sm uppercase">Total</span>
-      <div className="text-right">
-        <span className="text-2xl font-display font-bold text-primary glow-text">${totalPrice.toFixed(2)}</span>
-        <p className="text-xs text-muted-foreground font-mono mt-0.5">
-          {hourlyPricingEnabled
-            ? `${selectedHours}h × $${pricePerHour.toFixed(2)}/hr`
-            : `/ ${slotDurationHours}h · $${(pricePerDay / slotDurationHours).toFixed(2)}/hr`}
-        </p>
+    <div className="bg-secondary/50 p-4 border border-primary/20 space-y-1">
+      {appliedCoupon && (
+        <div className="flex justify-between items-center">
+          <span className="text-muted-foreground font-mono text-xs uppercase">Original</span>
+          <span className="font-mono text-sm text-muted-foreground line-through">${basePrice.toFixed(2)}</span>
+        </div>
+      )}
+      {appliedCoupon && (
+        <div className="flex justify-between items-center">
+          <span className="text-green-400 font-mono text-xs uppercase">Discount ({appliedCoupon.code})</span>
+          <span className="font-mono text-sm text-green-400">-${appliedCoupon.discountAmount.toFixed(2)}</span>
+        </div>
+      )}
+      <div className="flex justify-between items-center pt-1">
+        <span className="text-muted-foreground font-mono text-sm uppercase">Total</span>
+        <div className="text-right">
+          <span className="text-2xl font-display font-bold text-primary glow-text">${totalPrice.toFixed(2)}</span>
+          <p className="text-xs text-muted-foreground font-mono mt-0.5">
+            {hourlyPricingEnabled
+              ? `${selectedHours}h × $${pricePerHour.toFixed(2)}/hr`
+              : `/ ${slotDurationHours}h · $${(pricePerDay / slotDurationHours).toFixed(2)}/hr`}
+          </p>
+        </div>
       </div>
     </div>
   );
+
 
   return (
     <AnimatePresence>
@@ -245,6 +294,40 @@ export function PaymentModal({
                 </div>
               )}
 
+              {/* Coupon input */}
+              <div className="mb-4">
+                {appliedCoupon ? (
+                  <div className="flex items-center gap-2 p-2.5 border border-green-500/30 bg-green-500/5 rounded-lg">
+                    <Check className="w-3.5 h-3.5 text-green-400 shrink-0" />
+                    <span className="font-mono text-xs text-green-400 flex-1">Coupon <span className="font-bold">{appliedCoupon.code}</span> applied — saves ${appliedCoupon.discountAmount.toFixed(2)}</span>
+                    <button onClick={removeCoupon} className="text-muted-foreground hover:text-red-400 transition-colors">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Tag className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                      <input
+                        type="text"
+                        placeholder="Coupon code"
+                        value={couponInput}
+                        onChange={e => setCouponInput(e.target.value.toUpperCase())}
+                        onKeyDown={e => e.key === 'Enter' && handleApplyCoupon()}
+                        className="w-full bg-secondary/50 border border-primary/20 text-foreground font-mono text-xs px-3 py-2 pl-8 focus:outline-none focus:border-primary/50 uppercase placeholder:normal-case"
+                      />
+                    </div>
+                    <button
+                      onClick={handleApplyCoupon}
+                      disabled={isValidatingCoupon || !couponInput.trim()}
+                      className="px-3 py-2 border border-primary/30 font-mono text-xs text-primary hover:bg-primary/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {isValidatingCoupon ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Apply'}
+                    </button>
+                  </div>
+                )}
+              </div>
+
               <div className="flex p-1 bg-secondary rounded-none mb-6 chamfered">
                 <button
                   onClick={() => setTab('crypto')}
@@ -263,6 +346,15 @@ export function PaymentModal({
                   )}
                 >
                   <CreditCard className="w-4 h-4" /> Card
+                </button>
+                <button
+                  onClick={() => setTab('paypal')}
+                  className={cn(
+                    "flex-1 py-2 text-sm font-mono uppercase tracking-wider transition-colors chamfered flex items-center justify-center gap-2",
+                    tab === 'paypal' ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <MessageSquare className="w-4 h-4" /> PayPal
                 </button>
               </div>
 
@@ -297,7 +389,7 @@ export function PaymentModal({
                               : "border-primary/20 bg-transparent text-muted-foreground hover:border-primary/50"
                           )}
                         >
-                          {c === 'USDT' ? 'USDT TRC20' : c}
+                          {c === 'BTC' ? 'Bitcoin' : c === 'LTC' ? 'Litecoin' : c === 'USDT' ? 'USDT' : c === 'ETH' ? 'Ethereum' : c === 'SOL' ? 'Solana' : c}
                         </button>
                       ))}
                     </div>
@@ -350,7 +442,13 @@ export function PaymentModal({
                     <Button 
                       variant="outline" 
                       className="flex-1" 
-                      onClick={() => resetCrypto()}
+                      onClick={() => {
+                        fetch(`${import.meta.env.BASE_URL}api/payments/cancel-pending`, {
+                          method: 'DELETE',
+                          credentials: 'include',
+                        }).catch(() => {});
+                        resetCrypto();
+                      }}
                       disabled={isVerifyLoading}
                     >
                       Cancel
@@ -395,6 +493,26 @@ export function PaymentModal({
                   >
                     {isBalanceLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Wallet className="w-4 h-4 mr-2" /> Pay with Balance</>}
                   </Button>
+                </div>
+              )}
+
+              {tab === 'paypal' && (
+                <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
+                  <div className="flex flex-col items-center justify-center gap-3 py-8 text-center bg-secondary/30 border border-primary/20 chamfered">
+                    <MessageSquare className="w-10 h-10 text-primary opacity-80" />
+                    <div className="space-y-1">
+                      <p className="font-mono text-sm font-bold text-foreground">Pay with PayPal</p>
+                      <p className="font-mono text-xs text-muted-foreground">For PayPal payments, open a ticket in our Discord and a staff member will assist you.</p>
+                    </div>
+                    <a
+                      href="https://discord.gg/exenotifier"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-2 inline-flex items-center gap-2 px-5 py-2.5 bg-[#5865F2] hover:bg-[#4752C4] text-white font-mono text-xs font-bold uppercase tracking-wider transition-colors chamfered-btn"
+                    >
+                      <MessageSquare className="w-4 h-4" /> Join Discord
+                    </a>
+                  </div>
                 </div>
               )}
             </div>

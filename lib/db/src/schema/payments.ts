@@ -1,4 +1,4 @@
-import { pgTable, text, integer, timestamp, varchar } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, timestamp, varchar, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { usersTable } from "./users";
@@ -16,6 +16,9 @@ export const paymentsTable = pgTable("payments", {
   derivationIndex: integer("derivation_index"),
   stripeSessionId: text("stripe_session_id"),
   expiresAt: timestamp("expires_at"),
+  splitSent: boolean("split_sent").notNull().default(false),
+  usdAmount: text("usd_amount"),
+  couponId: integer("coupon_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

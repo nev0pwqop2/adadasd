@@ -14,6 +14,9 @@ function getRedirectUri(): string {
   if (process.env.DISCORD_REDIRECT_URI) {
     return process.env.DISCORD_REDIRECT_URI;
   }
+  if (process.env.RENDER_EXTERNAL_URL) {
+    return `${process.env.RENDER_EXTERNAL_URL}/api/auth/discord/callback`;
+  }
   if (process.env.REPLIT_DEV_DOMAIN) {
     return `https://${process.env.REPLIT_DEV_DOMAIN}/api/auth/discord/callback`;
   }
@@ -106,8 +109,8 @@ router.get("/discord/callback", async (req, res) => {
         res.redirect("/?error=rate_limited");
         return;
       }
-      const detail = encodeURIComponent(`status=${tokenResponse.status} body=${errBody} redirect_uri=${getRedirectUri()}`);
-      res.redirect(`/?error=token_exchange_failed&detail=${detail}`);
+      req.log.error({ status: tokenResponse.status, body: errBody, redirectUri: getRedirectUri() }, "Token exchange failed (detail in server logs only)");
+      res.redirect("/?error=token_exchange_failed");
       return;
     }
 
@@ -178,15 +181,21 @@ router.get("/discord/callback", async (req, res) => {
       });
     }
 
-    req.session.userId = userId;
-    req.session.discordId = discordUser.id;
-    req.session.username = displayName;
-
-    req.session.save((err) => {
-      if (err) {
-        req.log.error({ err }, "Session save failed after login");
+    // Regenerate the session ID after login to prevent session fixation attacks.
+    // A pre-login session ID known to an attacker becomes worthless after this.
+    req.session.regenerate((regenErr) => {
+      if (regenErr) {
+        req.log.error({ regenErr }, "Session regeneration failed after login");
+        res.redirect("/?error=server_error");
+        return;
       }
-      res.redirect("/dashboard");
+      req.session.userId = userId;
+      req.session.discordId = discordUser.id;
+      req.session.username = displayName;
+      req.session.save((saveErr) => {
+        if (saveErr) req.log.error({ saveErr }, "Session save failed after login");
+        res.redirect("/dashboard");
+      });
     });
   } catch (err) {
     req.log.error({ err }, "Discord OAuth callback error");
@@ -203,6 +212,11 @@ router.get("/me", requireAuth, async (req, res) => {
       return;
     }
     const user = users[0];
+    if (user.isBanned) {
+      req.session.destroy(() => {});
+      res.status(403).json({ error: "banned", message: "Your account has been banned." });
+      return;
+    }
     const isAdmin = user.isAdmin || isSuperAdmin(user.discordId);
     res.json({
       id: user.id,

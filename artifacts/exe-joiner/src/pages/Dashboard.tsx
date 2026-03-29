@@ -1,6 +1,6 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useLocation } from 'wouter';
-import { LogOut, LayoutGrid, Settings, Trophy, History, Gavel, Clock, TrendingUp, X, Crown, CalendarClock, Wallet, Plus } from 'lucide-react';
+import { LogOut, LayoutGrid, Trophy, History, Settings, TrendingUp, X, Crown, Gavel, Plus, Wallet } from 'lucide-react';
 import { useGetMe, useLogout } from '@workspace/api-client-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { SlotCard, type PublicSlot } from '@/components/SlotCard';
@@ -11,26 +11,6 @@ import { DepositModal } from '@/components/DepositModal';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { motion } from 'framer-motion';
-import { format } from 'date-fns';
-
-function useCountdown(target: string | null) {
-  const [timeLeft, setTimeLeft] = useState<{ h: number; m: number; s: number } | null>(null);
-  useEffect(() => {
-    if (!target) { setTimeLeft(null); return; }
-    const tick = () => {
-      const diff = new Date(target).getTime() - Date.now();
-      if (diff <= 0) { setTimeLeft({ h: 0, m: 0, s: 0 }); return; }
-      const s = Math.floor(diff / 1000) % 60;
-      const m = Math.floor(diff / 60000) % 60;
-      const h = Math.floor(diff / 3600000);
-      setTimeLeft({ h, m, s });
-    };
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [target]);
-  return timeLeft;
-}
 
 type Tab = 'slots' | 'leaderboard' | 'deposit';
 
@@ -48,7 +28,7 @@ export default function Dashboard() {
   const [managingSlot, setManagingSlot] = useState<PublicSlot | null>(null);
   const queryClient = useQueryClient();
 
-  const { data: user, isError: isUserError, isLoading: isUserLoading } = useGetMe({ query: { retry: false } });
+  const { data: user, isError: isUserError, isLoading: isUserLoading } = useGetMe({ query: { retry: false } as any });
 
   const [bidAmount, setBidAmount] = useState('');
   const [showBidForm, setShowBidForm] = useState(false);
@@ -63,20 +43,19 @@ export default function Dashboard() {
     refetchIntervalInBackground: false,
   });
 
-  type BidEntry = { id: number; amount: number; username: string; discordId: string; avatar: string | null; isOwn: boolean; createdAt: string };
+  type BidEntry = { id: number; amount: number; username: string; discordId: string; avatar: string | null; isOwn: boolean; paidWithBalance: boolean; createdAt: string };
   const { data: bidsRes, refetch: refetchBids } = useQuery({
     queryKey: ['bids'],
-    queryFn: () => apiFetch<{ bids: BidEntry[]; myBid: { id: number; amount: number; rank: number } | null }>('api/bids'),
+    queryFn: () => apiFetch<{ bids: BidEntry[]; myBid: { id: number; amount: number; rank: number; paidWithBalance: boolean } | null; topPreorderAmount: number | null }>('api/bids'),
     enabled: !!user,
     refetchInterval: 5000,
     refetchIntervalInBackground: false,
   });
 
   const { mutate: placeBid, isPending: isPlacingBid } = useMutation({
-    mutationFn: async (amount: number) => {
+    mutationFn: async ({ amount }: { amount: number }) => {
       const res = await fetch(`${import.meta.env.BASE_URL}api/bids`, {
-        method: 'POST',
-        credentials: 'include',
+        method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ amount }),
       });
@@ -84,10 +63,8 @@ export default function Dashboard() {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: 'Bid placed!', description: 'You are in the queue.', className: 'bg-primary text-primary-foreground border-none' });
-      setShowBidForm(false);
-      setBidAmount('');
-      refetchBids();
+      toast({ title: 'Bid placed!', description: 'Balance held — you are in the queue.', className: 'bg-primary text-primary-foreground border-none' });
+      setShowBidForm(false); setBidAmount(''); refetchBids(); refetchBalance();
     },
     onError: (e: any) => toast({ title: 'Error', description: e.message, variant: 'destructive' }),
   });
@@ -100,7 +77,7 @@ export default function Dashboard() {
     },
     onSuccess: () => {
       toast({ title: 'Bid cancelled', description: 'You have left the queue.' });
-      refetchBids();
+      refetchBids(); refetchBalance();
     },
     onError: () => toast({ title: 'Error', description: 'Could not cancel bid.', variant: 'destructive' }),
   });
@@ -120,7 +97,7 @@ export default function Dashboard() {
     enabled: !!user && activeTab === 'leaderboard',
   });
 
-  const { data: historyRes, isLoading: isHistoryLoading, refetch: refetchHistory } = useQuery({
+  const { data: historyRes, isLoading: isHistoryLoading } = useQuery({
     queryKey: ['history'],
     queryFn: () => apiFetch<{ payments: { id: string; slotNumber: number; method: string; currency: string | null; amount: string | null; status: string; createdAt: string }[] }>('api/slots/history'),
     enabled: !!user && activeTab === 'deposit',
@@ -136,30 +113,26 @@ export default function Dashboard() {
 
   const { mutate: logoutMutate } = useLogout();
 
-  // Must be called before early returns (Rules of Hooks)
-  const countdown = useCountdown(slotsRes?.nextExpiresAt ?? null);
-
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('payment') === 'success') {
-      toast({ title: "Payment Successful", description: "Your slot has been activated.", className: "bg-primary text-primary-foreground border-none" });
+      toast({ title: 'Payment Successful', description: 'Your slot has been activated.', className: 'bg-primary text-primary-foreground border-none' });
       window.history.replaceState({}, document.title, window.location.pathname);
       refetchSlots();
     } else if (params.get('payment') === 'cancelled') {
-      toast({ title: "Payment Cancelled", description: "The transaction was aborted.", variant: "destructive" });
+      toast({ title: 'Payment Cancelled', description: 'The transaction was aborted.', variant: 'destructive' });
       window.history.replaceState({}, document.title, window.location.pathname);
     } else if (params.get('preorder') === 'success') {
-      toast({ title: "Pre-order Placed!", description: "You'll automatically get the next slot when one opens.", className: "bg-primary text-primary-foreground border-none" });
+      toast({ title: 'Pre-order Placed!', description: "You'll automatically get the next slot when one opens.", className: 'bg-primary text-primary-foreground border-none' });
       window.history.replaceState({}, document.title, window.location.pathname);
       refetchPreorders();
     } else if (params.get('preorder') === 'cancelled') {
-      toast({ title: "Pre-order Cancelled", description: "No charge was made.", variant: "destructive" });
+      toast({ title: 'Pre-order Cancelled', description: 'No charge was made.', variant: 'destructive' });
       window.history.replaceState({}, document.title, window.location.pathname);
     } else if (params.get('deposit') === 'success') {
-      toast({ title: "Funds Added!", description: "Your balance has been credited.", className: "bg-primary text-primary-foreground border-none" });
+      toast({ title: 'Funds Added!', description: 'Your balance has been credited.', className: 'bg-primary text-primary-foreground border-none' });
       window.history.replaceState({}, document.title, window.location.pathname);
-      refetchBalance();
-      setActiveTab('deposit');
+      refetchBalance(); setActiveTab('deposit');
     }
   }, [toast, refetchSlots]);
 
@@ -176,7 +149,7 @@ export default function Dashboard() {
 
   if (isUserLoading || isSlotsLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="min-h-screen bg-[#0a0a0c] flex items-center justify-center">
         <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
       </div>
     );
@@ -199,167 +172,185 @@ export default function Dashboard() {
   const preorderQueue = preordersRes?.queue ?? [];
   const myPreorder = preordersRes?.myPreorder ?? null;
   const userBalance = balanceRes?.balanceNum ?? 0;
+  const slotFillPct = totalSlots > 0 ? Math.round((activeCount / totalSlots) * 100) : 0;
 
-  const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
-    { id: 'slots', label: 'Slots', icon: <LayoutGrid className="w-4 h-4" /> },
-    { id: 'leaderboard', label: 'Leaderboard', icon: <Trophy className="w-4 h-4" /> },
-    { id: 'deposit', label: 'Deposits', icon: <Wallet className="w-4 h-4" /> },
+  const navItems: { id: Tab; label: string; icon: React.ReactNode }[] = [
+    { id: 'slots',       label: 'Slots',       icon: <LayoutGrid className="w-5 h-5" /> },
+    { id: 'leaderboard', label: 'Ranks',       icon: <Trophy className="w-5 h-5" /> },
+    { id: 'deposit',     label: 'History',     icon: <History className="w-5 h-5" /> },
   ];
 
   return (
-    <div className="min-h-screen bg-background relative overflow-x-hidden">
-      <div className="flex flex-col min-h-screen">
-        <header className="border-b border-border/50 bg-background/90 backdrop-blur-md sticky top-0 z-40">
-          <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between gap-4">
-            <div className="flex items-center gap-2.5 shrink-0">
-              <img src={`${import.meta.env.BASE_URL}exe-logo.png`} alt="EXE" className="w-6 h-6" />
-              <span className="font-display font-bold text-sm text-foreground hidden sm:block">Exe Joiner</span>
+    <div className="flex h-screen overflow-hidden bg-[#0a0a0c]">
+
+      {/* ── Sidebar (desktop only) ─────────────────────────────────────── */}
+      <aside className="hidden md:flex w-48 flex-shrink-0 flex-col border-r border-white/6 bg-[#0f0f13] overflow-y-auto">
+        <div className="px-4 py-4 border-b border-white/6">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg bg-primary/15 border border-primary/20 flex items-center justify-center">
+              <img src={`${import.meta.env.BASE_URL}exe-logo.png`} alt="EXE" className="w-5 h-5 object-contain" />
             </div>
-
-            <div className="flex items-center gap-2">
-              <div className="hidden sm:flex items-center gap-1.5 text-xs font-mono text-muted-foreground mr-1">
-                <span className="relative flex h-1.5 w-1.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-50" />
-                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-primary" />
-                </span>
-                {activeCount}/{totalSlots}
-              </div>
-
-              {user.isAdmin && (
-                <Button variant="ghost" size="sm" onClick={() => setLocation('/admin')} className="text-muted-foreground hover:text-foreground text-xs h-8 px-2.5">
-                  <Settings className="w-3.5 h-3.5" />
-                </Button>
-              )}
-
-              <div className="flex items-center gap-2 border border-border/50 rounded-lg px-2.5 py-1.5">
-                {user.avatar ? (
-                  <img src={`https://cdn.discordapp.com/avatars/${user.discordId}/${user.avatar}.png`} alt="Avatar" className="w-5 h-5 rounded-full" />
-                ) : (
-                  <div className="w-5 h-5 rounded-full bg-secondary" />
-                )}
-                <span className="font-mono text-xs text-muted-foreground hidden sm:block">{user.username}</span>
-              </div>
-
-              <Button variant="ghost" size="sm" onClick={handleLogout} className="text-muted-foreground hover:text-foreground h-8 px-2.5">
-                <LogOut className="w-3.5 h-3.5" />
-              </Button>
-            </div>
-          </div>
-        </header>
-
-        {/* Tab bar */}
-        <div className="border-b border-border/40 sticky top-14 z-30 bg-background/80 backdrop-blur-md">
-          <div className="max-w-7xl mx-auto px-4 py-2.5 flex gap-1">
-            {tabs.map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-4 py-1.5 rounded-full font-mono text-xs tracking-wide transition-all ${
-                  activeTab === tab.id
-                    ? 'bg-primary/15 text-primary border border-primary/30'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-white/5 border border-transparent'
-                }`}
-              >
-                {tab.icon}
-                {tab.label}
-              </button>
-            ))}
+            <span className="font-bold text-sm text-white tracking-tight">Exe Joiner</span>
           </div>
         </div>
 
-        <main className="flex-1 max-w-7xl mx-auto px-4 py-8 w-full">
+        <div className="px-4 py-4 border-b border-white/6">
+          <div className="flex items-center gap-2.5 mb-3">
+            {user.avatar ? (
+              <img src={`https://cdn.discordapp.com/avatars/${user.discordId}/${user.avatar}.png`} alt="Avatar" className="w-8 h-8 rounded-full border border-white/10 flex-shrink-0" />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-primary/20 border border-primary/25 flex items-center justify-center flex-shrink-0">
+                <span className="text-primary text-xs font-bold">{user.username?.[0]?.toUpperCase()}</span>
+              </div>
+            )}
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-white/90 truncate">{user.username}</p>
+              <p className="text-xs font-mono text-primary">${userBalance.toFixed(2)}</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowDepositModal(true)}
+            className="w-full flex items-center justify-center gap-1.5 h-7 rounded-lg bg-primary/10 border border-primary/20 text-primary text-xs font-medium hover:bg-primary/18 transition-colors"
+          >
+            <Plus className="w-3 h-3" /> Add Funds
+          </button>
+        </div>
 
-          {/* SLOTS TAB */}
+        <div className="px-4 py-4 border-b border-white/6">
+          <p className="text-[10px] font-mono uppercase tracking-widest text-white/30 mb-2.5">Slots</p>
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-xs text-white/50">Active</span>
+            <span className="text-xs font-mono text-white/80 tabular-nums">{activeCount}/{totalSlots}</span>
+          </div>
+          <div className="h-1 rounded-full bg-white/8 overflow-hidden">
+            <div className="h-full rounded-full bg-primary transition-all duration-500" style={{ width: `${slotFillPct}%` }} />
+          </div>
+        </div>
+
+        <nav className="flex-1 p-2 pt-3">
+          {navItems.map(item => (
+            <button
+              key={item.id}
+              onClick={() => setActiveTab(item.id)}
+              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium mb-0.5 transition-all ${
+                activeTab === item.id
+                  ? 'bg-primary/12 text-primary border border-primary/15'
+                  : 'text-white/40 hover:text-white/80 hover:bg-white/5 border border-transparent'
+              }`}
+            >
+              {item.icon}
+              {item.label}
+              {activeTab === item.id && <span className="ml-auto w-1 h-1 rounded-full bg-primary" />}
+            </button>
+          ))}
+          {user.isAdmin && (
+            <button
+              onClick={() => setLocation('/admin')}
+              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium mb-0.5 text-white/40 hover:text-white/80 hover:bg-white/5 border border-transparent transition-all mt-1"
+            >
+              <Settings className="w-4 h-4" /> Admin
+            </button>
+          )}
+        </nav>
+
+        <div className="p-3 border-t border-white/6">
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs text-white/30 hover:text-white/70 hover:bg-white/5 transition-colors"
+          >
+            <LogOut className="w-3.5 h-3.5" /> Logout
+          </button>
+        </div>
+      </aside>
+
+      {/* ── Mobile top header ──────────────────────────────────────────── */}
+      <div className="md:hidden fixed top-0 left-0 right-0 z-30 bg-[#0f0f13] border-b border-white/6 flex items-center justify-between px-4 h-14">
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-lg bg-primary/15 border border-primary/20 flex items-center justify-center">
+            <img src={`${import.meta.env.BASE_URL}exe-logo.png`} alt="EXE" className="w-5 h-5 object-contain" />
+          </div>
+          <span className="font-bold text-sm text-white tracking-tight">Exe Joiner</span>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowDepositModal(true)}
+            className="flex items-center gap-1 h-7 px-2.5 rounded-lg bg-primary/10 border border-primary/20 text-primary text-xs font-medium"
+          >
+            <span className="font-mono">${userBalance.toFixed(2)}</span>
+            <Plus className="w-3 h-3" />
+          </button>
+          {user.avatar ? (
+            <img src={`https://cdn.discordapp.com/avatars/${user.discordId}/${user.avatar}.png`} alt="Avatar" className="w-7 h-7 rounded-full border border-white/10" />
+          ) : (
+            <div className="w-7 h-7 rounded-full bg-primary/20 border border-primary/25 flex items-center justify-center">
+              <span className="text-primary text-xs font-bold">{user.username?.[0]?.toUpperCase()}</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Main Content ──────────────────────────────────────────────── */}
+      <main className="flex-1 overflow-y-auto pt-14 md:pt-0 pb-20 md:pb-0">
+        <div className="max-w-6xl mx-auto px-4 md:px-6 py-5 md:py-8">
+
+          {/* ── SLOTS TAB ── */}
           {activeTab === 'slots' && (
             <>
-              <div className="mb-6 flex items-center justify-between">
+              <div className="mb-4 md:mb-6 flex items-center justify-between">
                 <div>
-                  <h2 className="text-lg font-display font-bold text-foreground">Slots</h2>
-                  <p className="text-muted-foreground font-mono text-xs mt-0.5">
+                  <h1 className="text-lg md:text-xl font-bold text-white mb-0.5">Dashboard</h1>
+                  <p className="text-xs text-white/40 font-mono">
                     {hourlyPricingEnabled
                       ? <><span className="text-primary">${pricePerHour.toFixed(2)}/hr</span> · min {minHours}h</>
                       : <><span className="text-primary">${pricePerDay.toFixed(2)}</span> for {slotDurationHours}h</>}
+                    {' '}· {activeCount}/{totalSlots} active
                   </p>
                 </div>
-                <span className="font-mono text-xs text-muted-foreground/50">{activeCount}/{totalSlots} active</span>
               </div>
+
               <motion.div
-                initial={{ opacity: 0, y: 20 }}
+                initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5"
+                className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3"
               >
                 {slots.map((slot, idx) => (
-                  <motion.div key={slot.slotNumber} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.05 }}>
-                    <SlotCard
-                      slotData={slot}
-                      onPurchase={setPurchasingSlot}
-                      onManage={setManagingSlot}
-                    />
+                  <motion.div key={slot.slotNumber} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.04 }}>
+                    <SlotCard slotData={slot} onPurchase={setPurchasingSlot} onManage={setManagingSlot} />
                   </motion.div>
                 ))}
               </motion.div>
 
-              {/* QUEUE / BID SECTION — visible when all slots are full */}
+              {/* Queue / Bid section */}
               {allFull && (
-                <motion.div
-                  initial={{ opacity: 0, y: 30 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.2 }}
-                  className="mt-10"
-                >
-                  <div className="border border-primary/20 bg-primary/5 rounded-xl overflow-hidden">
-                    {/* Header */}
-                    <div className="border-b border-primary/15 p-5 flex flex-col sm:flex-row sm:items-center gap-4">
-                      <div className="flex-1">
-                        <h3 className="font-display font-bold text-primary flex items-center gap-2 text-base">
-                          <Gavel className="w-4 h-4" /> Slot Queue
-                        </h3>
-                        <p className="font-mono text-xs text-muted-foreground mt-1">All slots occupied — highest bid gets the next free slot.</p>
-                      </div>
-                      {countdown && (
-                        <div className="flex items-center gap-3 border border-primary/20 bg-background/50 px-4 py-2.5 rounded-lg shrink-0">
-                          <Clock className="w-4 h-4 text-primary" />
-                          <div>
-                            <p className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Next slot in</p>
-                            <div className="flex items-center font-display font-bold text-primary text-lg tabular-nums">
-                              <span>{String(countdown.h).padStart(2, '0')}</span>
-                              <span className="opacity-50 mx-0.5">:</span>
-                              <span>{String(countdown.m).padStart(2, '0')}</span>
-                              <span className="opacity-50 mx-0.5">:</span>
-                              <span>{String(countdown.s).padStart(2, '0')}</span>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                      {!countdown && !nextExpiresAt && (
-                        <div className="flex items-center gap-2 border border-border px-3 py-2 rounded-lg text-muted-foreground font-mono text-xs">
-                          <Clock className="w-3.5 h-3.5" /> Expiry unknown
-                        </div>
-                      )}
+                <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="mt-6 md:mt-8">
+                  <div className="border border-primary/18 bg-primary/4 rounded-xl overflow-hidden">
+                    <div className="border-b border-primary/12 p-4 md:p-5">
+                      <h3 className="font-bold text-primary flex items-center gap-2 text-sm">
+                        <Gavel className="w-4 h-4" /> Slot Queue
+                      </h3>
+                      <p className="text-xs text-white/40 mt-1">All slots occupied — highest bid gets the next free slot.</p>
                     </div>
 
-                    <div className="p-5 grid grid-cols-1 lg:grid-cols-2 gap-6">
-                      {/* Your bid panel */}
+                    <div className="p-4 md:p-5 grid grid-cols-1 lg:grid-cols-2 gap-5 md:gap-6">
+                      {/* Your bid */}
                       <div>
-                        <h4 className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-2">
+                        <h4 className="text-[10px] font-mono uppercase tracking-widest text-white/30 mb-3 flex items-center gap-2">
                           <TrendingUp className="w-3.5 h-3.5" /> Your Bid
                         </h4>
-
                         {myBid && !showBidForm ? (
-                          <div className="border border-primary/30 bg-primary/8 rounded-lg p-4">
+                          <div className="border border-primary/25 bg-primary/6 rounded-xl p-4">
                             <div className="flex items-center justify-between mb-3">
                               <div>
-                                <p className="font-display font-bold text-primary text-2xl">${myBid.amount.toFixed(2)}</p>
-                                <p className="font-mono text-xs text-muted-foreground mt-1">
-                                  {myBid.rank === 1
-                                    ? '🏆 Top bidder!'
-                                    : `Rank #${myBid.rank} — outbid by $${(bids[0]?.amount - myBid.amount).toFixed(2)}`}
+                                <p className="font-bold text-primary text-2xl font-mono">${myBid.amount.toFixed(2)}</p>
+                                <p className="text-xs text-white/40 mt-0.5">
+                                  {myBid.rank === 1 ? '🏆 Top bidder!' : `Rank #${myBid.rank}`}
                                 </p>
                               </div>
-                              <span className={`font-mono text-xs px-2.5 py-1 rounded-full border ${myBid.rank === 1 ? 'border-primary/40 text-primary bg-primary/10' : 'border-orange-500/30 text-orange-400 bg-orange-500/10'}`}>
+                              <span className={`text-xs px-2.5 py-1 rounded-full border font-mono ${myBid.rank === 1 ? 'border-primary/40 text-primary bg-primary/10' : 'border-orange-500/30 text-orange-400 bg-orange-500/10'}`}>
                                 #{myBid.rank}
                               </span>
                             </div>
+                            <p className="text-xs text-primary/60 mb-3 font-mono">${myBid.amount.toFixed(2)} held · cancelling refunds it</p>
                             <div className="flex gap-2">
                               <Button size="sm" variant="outline" className="border-primary/30 text-primary text-xs flex-1" onClick={() => { setBidAmount(String(myBid.amount)); setShowBidForm(true); }}>
                                 Raise Bid
@@ -370,35 +361,43 @@ export default function Dashboard() {
                             </div>
                           </div>
                         ) : showBidForm ? (
-                          <div className="border border-primary/25 p-4 rounded-lg space-y-3">
-                            <p className="font-mono text-xs text-muted-foreground">
-                              {myBid ? `Current bid: $${myBid.amount.toFixed(2)}. Enter a higher amount.` : 'Enter your max bid in USD. Highest bidder gets first pick on the next open slot.'}
+                          <div className="border border-primary/20 p-4 rounded-xl space-y-3">
+                            <p className="text-xs text-white/40">
+                              {myBid ? `Current bid: $${myBid.amount.toFixed(2)}. Enter a higher amount.` : 'Bids are paid from your balance. Highest bidder wins the next open slot.'}
                             </p>
+                            {bidsRes?.topPreorderAmount != null && (
+                              <p className="text-xs text-amber-400">
+                                Highest pre-order: <span className="font-bold">${bidsRes.topPreorderAmount.toFixed(2)}</span> — your bid must exceed this.
+                              </p>
+                            )}
                             <div className="flex items-center gap-2">
-                              <span className="font-mono text-muted-foreground text-sm">$</span>
+                              <span className="text-white/40 font-mono text-sm">$</span>
                               <input
                                 type="number"
-                                min={myBid ? myBid.amount + 0.01 : 0.01}
+                                min={Math.max(myBid?.amount ?? 0, bidsRes?.topPreorderAmount ?? 0) + 0.01}
+                                max={balanceRes?.balanceNum ?? 0}
                                 step={0.01}
                                 value={bidAmount}
                                 onChange={e => setBidAmount(e.target.value)}
-                                placeholder={myBid ? (myBid.amount + 1).toFixed(2) : '0.00'}
-                                className="flex-1 bg-background border border-border rounded text-foreground font-mono px-3 py-2 text-sm focus:outline-none focus:border-primary/60"
+                                placeholder="0.00"
+                                className="flex-1 bg-white/5 border border-white/10 rounded-lg text-white font-mono px-3 py-2 text-sm focus:outline-none focus:border-primary/50"
                                 autoFocus
                               />
                             </div>
+                            <div className="flex items-center justify-between px-3 py-2 rounded-lg border border-primary/15 bg-primary/5 text-xs font-mono">
+                              <span className="text-white/40">Balance available</span>
+                              <span className="text-primary font-bold">${(balanceRes?.balanceNum ?? 0).toFixed(2)}</span>
+                            </div>
                             <div className="flex gap-2">
-                              <Button size="sm" className="flex-1 text-xs" disabled={isPlacingBid || !bidAmount || parseFloat(bidAmount) <= (myBid?.amount ?? 0)} onClick={() => placeBid(parseFloat(bidAmount))}>
-                                {isPlacingBid ? (myBid ? 'Updating…' : 'Placing…') : (myBid ? 'Update Bid' : 'Place Bid')}
+                              <Button size="sm" className="flex-1 text-xs" disabled={isPlacingBid || !bidAmount || parseFloat(bidAmount) <= (myBid?.amount ?? 0) || parseFloat(bidAmount) > (balanceRes?.balanceNum ?? 0) + (myBid?.amount ?? 0)} onClick={() => placeBid({ amount: parseFloat(bidAmount) })}>
+                                {isPlacingBid ? 'Placing…' : myBid ? 'Raise Bid' : 'Place Bid'}
                               </Button>
-                              <Button size="sm" variant="outline" className="border-border text-xs" onClick={() => { setShowBidForm(false); setBidAmount(''); }}>
-                                Cancel
-                              </Button>
+                              <Button size="sm" variant="outline" className="border-white/10 text-xs" onClick={() => { setShowBidForm(false); setBidAmount(''); }}>Cancel</Button>
                             </div>
                           </div>
                         ) : (
-                          <div className="border border-border p-4 rounded-lg text-center">
-                            <p className="font-mono text-xs text-muted-foreground mb-3">No active bid. Place one to join the queue.</p>
+                          <div className="border border-white/8 p-4 rounded-xl text-center">
+                            <p className="text-xs text-white/30 mb-3">No active bid. Place one to join the queue.</p>
                             <Button size="sm" onClick={() => setShowBidForm(true)} className="text-xs w-full">
                               <Gavel className="w-3 h-3 mr-2" /> Place a Bid
                             </Button>
@@ -408,135 +407,58 @@ export default function Dashboard() {
 
                       {/* Bid leaderboard */}
                       <div>
-                        <h4 className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-2">
+                        <h4 className="text-[10px] font-mono uppercase tracking-widest text-white/30 mb-3 flex items-center gap-2">
                           <Crown className="w-3.5 h-3.5" /> Bid Queue ({bids.length})
                         </h4>
                         {bids.length === 0 ? (
-                          <div className="border border-border p-4 rounded-lg text-center font-mono text-xs text-muted-foreground">
-                            No bids yet — be the first!
-                          </div>
+                          <div className="border border-white/8 p-4 rounded-xl text-center text-xs text-white/30">No bids yet</div>
                         ) : (
-                          <div className="space-y-1.5 max-h-64 overflow-y-auto">
-                            {bids.map((b, i) => (
-                              <div
-                                key={b.id}
-                                className={`flex items-center gap-3 p-2.5 rounded-lg border ${b.isOwn ? 'border-primary/30 bg-primary/8' : 'border-border bg-card/40'}`}
-                              >
-                                <span className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${i === 0 ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground'}`}>
-                                  {i + 1}
-                                </span>
-                                {b.avatar ? (
-                                  <img src={`https://cdn.discordapp.com/avatars/${b.discordId}/${b.avatar}.png`} alt="" className="w-6 h-6 rounded-full border border-border shrink-0" />
+                          <div className="space-y-2">
+                            {bids.slice(0, 5).map((bid, i) => (
+                              <div key={bid.id} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border ${bid.isOwn ? 'border-primary/25 bg-primary/6' : 'border-white/6 bg-white/3'}`}>
+                                <span className="font-mono text-xs text-white/30 w-4 text-center">#{i + 1}</span>
+                                {bid.avatar ? (
+                                  <img src={`https://cdn.discordapp.com/avatars/${bid.discordId}/${bid.avatar}.png`} className="w-5 h-5 rounded-full flex-shrink-0" alt="" />
                                 ) : (
-                                  <div className="w-6 h-6 rounded-full bg-secondary border border-border shrink-0" />
+                                  <div className="w-5 h-5 rounded-full bg-white/10 flex-shrink-0" />
                                 )}
-                                <span className={`font-mono text-xs flex-1 truncate ${b.isOwn ? 'text-primary font-semibold' : 'text-foreground'}`}>
-                                  {b.username}{b.isOwn ? ' (you)' : ''}
-                                </span>
-                                <span className="font-mono text-sm font-bold text-primary shrink-0">${b.amount.toFixed(2)}</span>
+                                <span className="text-xs text-white/70 font-medium flex-1 truncate">{bid.username}</span>
+                                <span className="text-xs font-mono font-bold text-primary">${bid.amount.toFixed(2)}</span>
                               </div>
                             ))}
                           </div>
                         )}
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
 
-              {/* PRE-ORDER SECTION — visible when all slots are full */}
-              {allFull && (
-                <motion.div
-                  initial={{ opacity: 0, y: 30 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.3 }}
-                  className="mt-5"
-                >
-                  <div className="border border-border rounded-xl overflow-hidden">
-                    <div className="border-b border-border/60 p-5 flex flex-col sm:flex-row sm:items-center gap-4">
-                      <div className="flex-1">
-                        <h3 className="font-display font-bold text-foreground flex items-center gap-2 text-base">
-                          <CalendarClock className="w-4 h-4 text-primary" /> Pre-order Next Slot
-                        </h3>
-                        <p className="font-mono text-xs text-muted-foreground mt-1">
-                          Pay now · get a full {slotDurationHours}h slot automatically when the next one opens
-                          {nextExpiresAt && countdown ? ` in ${String(countdown.h).padStart(2,'0')}:${String(countdown.m).padStart(2,'0')}:${String(countdown.s).padStart(2,'0')}` : ''}
-                        </p>
-                      </div>
-                      {!myPreorder && (
-                        <Button
-                          size="sm"
-                          className="text-xs shrink-0"
-                          onClick={() => setShowPreorderModal(true)}
-                        >
-                          <CalendarClock className="w-3.5 h-3.5 mr-1.5" />
-                          Pre-order — ${pricePerDay.toFixed(2)}
-                        </Button>
-                      )}
-                    </div>
-
-                    <div className="p-5 grid grid-cols-1 lg:grid-cols-2 gap-6">
-                      {/* My pre-order status */}
-                      <div>
-                        <h4 className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-2">
-                          <CalendarClock className="w-3.5 h-3.5" /> Your Pre-order
-                        </h4>
-                        {myPreorder ? (
-                          <div className="border border-primary/30 bg-primary/8 rounded-xl p-4">
-                            <div className="flex items-center justify-between mb-3">
-                              <div>
-                                <p className="font-display font-bold text-primary text-2xl">${myPreorder.amount.toFixed(2)}</p>
-                                <p className="font-mono text-xs text-muted-foreground mt-1">
-                                  {myPreorder.rank === 1 ? '🏆 First in queue — you get the next slot!' : `Rank #${myPreorder.rank} in pre-order queue`}
-                                </p>
-                              </div>
-                              <span className="font-mono text-xs px-2.5 py-1 rounded-full border border-primary/40 text-primary bg-primary/10">
-                                #{myPreorder.rank}
-                              </span>
+                        {preorderQueue.length > 0 && (
+                          <div className="mt-4">
+                            <h4 className="text-[10px] font-mono uppercase tracking-widest text-white/30 mb-2">Pre-order Queue ({preorderQueue.length})</h4>
+                            <div className="space-y-1.5">
+                              {preorderQueue.slice(0, 3).map((p, i) => (
+                                <div key={p.id} className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs ${p.isOwn ? 'border-primary/20 bg-primary/5' : 'border-white/6 bg-white/2'}`}>
+                                  <span className="font-mono text-white/30 w-4 text-center">#{i + 1}</span>
+                                  <span className="text-white/60 flex-1 truncate">{p.username}</span>
+                                  <span className="font-mono text-primary">${p.amount.toFixed(2)}</span>
+                                </div>
+                              ))}
                             </div>
                           </div>
-                        ) : (
-                          <div className="border border-border p-4 rounded-xl text-center">
-                            <p className="font-mono text-xs text-muted-foreground mb-3">No pre-order placed. Reserve your spot now.</p>
-                            <Button size="sm" className="text-xs w-full" onClick={() => setShowPreorderModal(true)}>
-                              <CalendarClock className="w-3 h-3 mr-2" /> Pre-order — ${pricePerDay.toFixed(2)}
-                            </Button>
-                          </div>
                         )}
-                      </div>
 
-                      {/* Pre-order queue */}
-                      <div>
-                        <h4 className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-2">
-                          <Crown className="w-3.5 h-3.5" /> Pre-order Queue ({preorderQueue.length})
-                        </h4>
-                        {preorderQueue.length === 0 ? (
-                          <div className="border border-border p-4 rounded-xl text-center font-mono text-xs text-muted-foreground">
-                            No pre-orders yet — be first in line!
-                          </div>
-                        ) : (
-                          <div className="space-y-1.5 max-h-64 overflow-y-auto">
-                            {preorderQueue.map((p, i) => (
-                              <div
-                                key={p.id}
-                                className={`flex items-center gap-3 p-2.5 rounded-lg border ${p.isOwn ? 'border-primary/30 bg-primary/8' : 'border-border bg-card/40'}`}
-                              >
-                                <span className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${i === 0 ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground'}`}>
-                                  {i + 1}
-                                </span>
-                                {p.avatar ? (
-                                  <img src={`https://cdn.discordapp.com/avatars/${p.discordId}/${p.avatar}.png`} alt="" className="w-6 h-6 rounded-full border border-border shrink-0" />
-                                ) : (
-                                  <div className="w-6 h-6 rounded-full bg-secondary border border-border shrink-0" />
-                                )}
-                                <span className={`font-mono text-xs flex-1 truncate ${p.isOwn ? 'text-primary font-semibold' : 'text-foreground'}`}>
-                                  {p.username}{p.isOwn ? ' (you)' : ''}
-                                </span>
-                                <span className="font-mono text-sm font-bold text-primary shrink-0">${p.amount.toFixed(2)}</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                        <div className="mt-3 flex gap-2">
+                          {!myBid && !showBidForm && (
+                            <Button size="sm" variant="outline" className="border-primary/25 text-primary text-xs flex-1" onClick={() => setShowBidForm(true)}>
+                              <Gavel className="w-3 h-3 mr-1.5" /> Bid for Slot
+                            </Button>
+                          )}
+                          {!myPreorder && (
+                            <Button size="sm" variant="outline" className="border-white/12 text-white/60 text-xs flex-1" onClick={() => setShowPreorderModal(true)}>
+                              Pre-order
+                            </Button>
+                          )}
+                          {myPreorder && (
+                            <p className="text-xs text-primary/70 font-mono">Pre-order active · ${myPreorder.amount.toFixed(2)}</p>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -545,192 +467,210 @@ export default function Dashboard() {
             </>
           )}
 
-          {/* LEADERBOARD TAB */}
-          {activeTab === 'leaderboard' && (
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-              <div className="mb-6">
-                <h2 className="text-xl font-display font-bold text-foreground flex items-center gap-2.5">
-                  <Trophy className="w-5 h-5 text-primary" /> Leaderboard
-                </h2>
-                <p className="text-muted-foreground font-mono mt-1 text-sm">Top depositors ranked by total spend</p>
+          {/* ── LEADERBOARD TAB ── */}
+          {activeTab === 'leaderboard' && (() => {
+            const all = leaderboardRes?.leaderboard ?? [];
+            const bySpent = [...all].sort((a, b) => b.totalSpent - a.totalSpent);
+            const byHours = [...all].sort((a, b) => b.totalHours - a.totalHours);
+
+            const MedalIcon = ({ rank }: { rank: number }) => {
+              if (rank === 1) return <span className="text-base">👑</span>;
+              if (rank === 2) return <span className="text-base">🥈</span>;
+              if (rank === 3) return <span className="text-base">🥉</span>;
+              return <span className="font-mono text-xs text-white/30 w-5 text-center">{rank}</span>;
+            };
+
+            const AvatarEl = ({ entry }: { entry: typeof all[0] }) => entry.avatar ? (
+              <img src={`https://cdn.discordapp.com/avatars/${entry.discordId}/${entry.avatar}.png`} className="w-8 h-8 rounded-full flex-shrink-0" alt="" />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-primary/20 border border-primary/20 flex items-center justify-center flex-shrink-0">
+                <span className="text-xs font-bold text-primary">{entry.username[0]?.toUpperCase()}</span>
+              </div>
+            );
+
+            const topCardStyle = (rank: number) =>
+              rank === 1 ? 'border-primary/30 bg-primary/[0.07]' :
+              rank === 2 ? 'border-white/10 bg-white/[0.04]' :
+              'border-white/8 bg-white/[0.03]';
+
+            const LeaderColumn = ({ title, icon, entries, valueKey, formatValue }: {
+              title: string; icon: React.ReactNode; entries: typeof all;
+              valueKey: 'totalSpent' | 'totalHours'; formatValue: (v: number) => string;
+            }) => (
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-3">
+                  {icon}
+                  <span className="text-sm font-bold text-white/80">{title}</span>
+                </div>
+                <div className="space-y-2">
+                  {entries.map((entry, i) => {
+                    const rank = i + 1;
+                    const isTop3 = rank <= 3;
+                    return (
+                      <motion.div
+                        key={`${entry.discordId}-${valueKey}`}
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: i * 0.03 }}
+                        className={`flex items-center gap-3 px-3 md:px-4 py-2.5 md:py-3 rounded-xl border transition-colors ${isTop3 ? topCardStyle(rank) : 'border-white/5 bg-transparent hover:bg-white/3'}`}
+                      >
+                        <div className="w-5 flex items-center justify-center flex-shrink-0">
+                          <MedalIcon rank={rank} />
+                        </div>
+                        <AvatarEl entry={entry} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs md:text-sm font-semibold text-white/90 truncate leading-tight">{entry.username}</p>
+                          <p className={`text-xs font-mono font-semibold ${rank === 1 ? 'text-primary' : 'text-primary/60'}`}>
+                            {formatValue(entry[valueKey])}
+                          </p>
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                  {entries.length === 0 && (
+                    <div className="text-center py-10 text-white/20 text-sm">No entries yet</div>
+                  )}
+                </div>
+              </div>
+            );
+
+            return (
+              <>
+                <div className="mb-5 md:mb-6 flex items-center gap-3">
+                  <Trophy className="w-5 h-5 text-primary" />
+                  <div>
+                    <h1 className="text-lg md:text-xl font-bold text-white leading-tight">Leaderboard</h1>
+                    <p className="text-xs text-white/35">All-time top users</p>
+                  </div>
+                </div>
+                {isLeaderboardLoading ? (
+                  <div className="flex justify-center py-20">
+                    <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                  </div>
+                ) : (
+                  <div className="flex gap-4 md:gap-6">
+                    <LeaderColumn title="Most Deposited" icon={<span className="text-primary text-sm">$</span>} entries={bySpent} valueKey="totalSpent" formatValue={v => `$${v.toFixed(2)}`} />
+                    <LeaderColumn title="Most Hours" icon={<Trophy className="w-3.5 h-3.5 text-primary" />} entries={byHours} valueKey="totalHours" formatValue={v => `${v}h`} />
+                  </div>
+                )}
+              </>
+            );
+          })()}
+
+          {/* ── HISTORY TAB ── */}
+          {activeTab === 'deposit' && (
+            <>
+              <div className="mb-5 md:mb-6 flex items-center justify-between">
+                <div>
+                  <h1 className="text-lg md:text-xl font-bold text-white mb-0.5">History</h1>
+                  <p className="text-xs text-white/40">Your payment and deposit history</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs text-white/30 font-mono">Balance</p>
+                  <p className="text-lg font-bold font-mono text-primary">${userBalance.toFixed(2)}</p>
+                </div>
               </div>
 
-              {isLeaderboardLoading ? (
+              {isHistoryLoading ? (
                 <div className="flex justify-center py-16">
-                  <div className="w-10 h-10 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                  <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                 </div>
-              ) : !leaderboardRes?.leaderboard.length ? (
-                <div className="text-center py-16 font-mono text-muted-foreground text-sm">No deposits yet. Be the first!</div>
+              ) : (historyRes?.payments ?? []).length === 0 ? (
+                <div className="border border-white/6 rounded-xl py-16 text-center">
+                  <Wallet className="w-8 h-8 text-white/15 mx-auto mb-3" />
+                  <p className="text-sm text-white/30">No transactions yet</p>
+                </div>
               ) : (
                 <div className="space-y-2">
-                  {leaderboardRes.leaderboard.map((entry) => (
-                    <div key={entry.discordId} className={`flex items-center gap-4 p-4 border rounded-xl transition-all ${
-                      entry.rank === 1 ? 'border-yellow-500/30 bg-yellow-500/5' :
-                      entry.rank === 2 ? 'border-slate-400/20 bg-slate-400/5' :
-                      entry.rank === 3 ? 'border-amber-700/25 bg-amber-700/5' :
-                      'border-border bg-card/30'
-                    }`}>
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
-                        entry.rank === 1 ? 'bg-yellow-500 text-black' :
-                        entry.rank === 2 ? 'bg-slate-400 text-black' :
-                        entry.rank === 3 ? 'bg-amber-700 text-white' :
-                        'bg-secondary text-muted-foreground'
-                      }`}>
-                        {entry.rank}
+                  {(historyRes?.payments ?? []).map(p => (
+                    <div key={p.id} className="flex items-center gap-3 md:gap-4 px-4 md:px-5 py-3 md:py-4 rounded-xl border border-white/6 bg-white/2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <p className="text-sm text-white/80 font-medium">Slot #{p.slotNumber}</p>
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono border ${
+                            p.status === 'completed' ? 'border-green-500/25 text-green-400 bg-green-500/8' :
+                            p.status === 'pending' ? 'border-amber-500/25 text-amber-400 bg-amber-500/8' :
+                            'border-white/12 text-white/30 bg-white/4'
+                          }`}>{p.status}</span>
+                        </div>
+                        <p className="text-xs text-white/30 font-mono truncate">{p.method}{p.currency ? ` · ${p.currency}` : ''} · {new Date(p.createdAt).toLocaleDateString()}</p>
                       </div>
-                      {entry.avatar ? (
-                        <img src={`https://cdn.discordapp.com/avatars/${entry.discordId}/${entry.avatar}.png`} alt="" className="w-9 h-9 rounded-full border border-border" />
-                      ) : (
-                        <div className="w-9 h-9 rounded-full bg-secondary border border-border" />
-                      )}
-                      <div className="flex-1">
-                        <p className="font-mono text-sm font-semibold text-foreground">{entry.username}</p>
-                        <p className="font-mono text-xs text-muted-foreground">{entry.totalHours}h purchased</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-mono text-sm font-bold text-primary">${entry.totalSpent.toFixed(2)}</p>
-                        <p className="font-mono text-xs text-muted-foreground">total spent</p>
-                      </div>
+                      <span className="font-mono font-bold text-primary flex-shrink-0">{p.amount ? `$${parseFloat(p.amount).toFixed(2)}` : '—'}</span>
                     </div>
                   ))}
                 </div>
               )}
-            </motion.div>
+            </>
           )}
+        </div>
+      </main>
 
-          {/* DEPOSIT TAB */}
-          {activeTab === 'deposit' && (
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-              {/* Balance card */}
-              <div className="relative overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent p-6">
-                <div className="flex items-center justify-between gap-4 flex-wrap">
-                  <div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <Wallet className="w-4 h-4 text-primary" />
-                      <p className="font-mono text-xs text-muted-foreground uppercase tracking-wider">Account Balance</p>
-                    </div>
-                    <p className="font-display font-bold text-4xl text-foreground">
-                      <span className="text-primary">$</span>{userBalance.toFixed(2)}
-                    </p>
-                    <p className="font-mono text-xs text-muted-foreground mt-1.5">Available to spend on slots</p>
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    <Button onClick={() => setShowDepositModal(true)} className="font-mono text-xs uppercase tracking-wider">
-                      <Plus className="w-3.5 h-3.5 mr-1.5" /> Add Funds
-                    </Button>
-                    {userBalance >= pricePerDay && (
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          const availableSlot = slots.find(s => !s.isActive);
-                          if (availableSlot) setPurchasingSlot(availableSlot.slotNumber);
-                          else toast({ title: "No slots available", description: "All slots are currently occupied.", variant: "destructive" });
-                        }}
-                        className="font-mono text-xs uppercase tracking-wider"
-                      >
-                        Buy a Slot
-                      </Button>
-                    )}
-                  </div>
-                </div>
-                <div className="absolute -right-8 -bottom-8 w-32 h-32 bg-primary/5 rounded-full blur-2xl pointer-events-none" />
-              </div>
+      {/* ── Mobile bottom nav ──────────────────────────────────────────── */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-[#0f0f13] border-t border-white/6 flex items-center">
+        {navItems.map(item => (
+          <button
+            key={item.id}
+            onClick={() => setActiveTab(item.id)}
+            className={`flex-1 flex flex-col items-center gap-1 py-3 transition-colors ${
+              activeTab === item.id ? 'text-primary' : 'text-white/30'
+            }`}
+          >
+            {item.icon}
+            <span className="text-[10px] font-medium">{item.label}</span>
+          </button>
+        ))}
+        {user.isAdmin && (
+          <button
+            onClick={() => setLocation('/admin')}
+            className="flex-1 flex flex-col items-center gap-1 py-3 text-white/30"
+          >
+            <Settings className="w-5 h-5" />
+            <span className="text-[10px] font-medium">Admin</span>
+          </button>
+        )}
+        <button
+          onClick={handleLogout}
+          className="flex-1 flex flex-col items-center gap-1 py-3 text-white/30"
+        >
+          <LogOut className="w-5 h-5" />
+          <span className="text-[10px] font-medium">Logout</span>
+        </button>
+      </nav>
 
-              {/* Transaction history */}
-              <div>
-                <h2 className="text-base font-display font-bold text-foreground flex items-center gap-2 mb-4">
-                  <History className="w-4 h-4 text-primary" /> Transaction History
-                </h2>
-
-                {isHistoryLoading ? (
-                  <div className="flex justify-center py-16">
-                    <div className="w-10 h-10 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                  </div>
-                ) : !historyRes?.payments.length ? (
-                  <div className="text-center py-16 font-mono text-muted-foreground text-sm">No transactions yet.</div>
-                ) : (
-                  <div className="space-y-2">
-                    {historyRes.payments.map(p => {
-                      const isDeposit = p.method === 'balance-deposit-stripe' || p.method === 'balance-deposit-crypto';
-                      const isBalancePay = p.method === 'balance';
-                      const methodLabel = p.method === 'stripe' ? 'Card'
-                        : p.method === 'balance' ? 'Balance'
-                        : p.method === 'balance-deposit-stripe' ? 'Balance Deposit (Card)'
-                        : p.method === 'balance-deposit-crypto' ? `Balance Deposit (Crypto${p.currency ? ` · ${p.currency}` : ''})`
-                        : p.method === 'preorder-stripe' ? 'Pre-order (Card)'
-                        : p.method === 'preorder-crypto' ? `Pre-order (Crypto${p.currency ? ` · ${p.currency}` : ''})`
-                        : `Crypto${p.currency ? ` · ${p.currency}` : ''}`;
-                      return (
-                        <div key={p.id} className="flex items-center gap-4 p-4 border border-border bg-card/30 rounded-xl">
-                          <div className={`px-2.5 py-1 text-[10px] font-mono font-bold rounded-full ${
-                            p.status === 'completed' ? 'bg-primary/15 text-primary' :
-                            p.status === 'pending' ? 'bg-yellow-500/15 text-yellow-400' :
-                            'bg-red-500/15 text-red-400'
-                          }`}>
-                            {p.status.toUpperCase()}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-mono text-sm text-foreground">
-                              {isDeposit ? 'Balance Deposit' : isBalancePay ? `Slot #${p.slotNumber}` : `Slot #${p.slotNumber}`}
-                            </p>
-                            <p className="font-mono text-xs text-muted-foreground truncate">
-                              {methodLabel} · {format(new Date(p.createdAt), 'MMM dd, yyyy HH:mm')}
-                            </p>
-                          </div>
-                          {p.amount && (
-                            <p className={`font-mono text-sm font-bold shrink-0 ${isDeposit ? 'text-green-400' : 'text-primary'}`}>
-                              {isDeposit ? '+' : ''}{p.method === 'crypto' ? `${p.amount} ${p.currency ?? ''}` : `$${parseFloat(p.amount).toFixed(2)}`}
-                            </p>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </motion.div>
-          )}
-        </main>
-
-        <footer className="border-t border-border/40 py-5 mt-auto">
-          <div className="max-w-7xl mx-auto px-4 text-center text-xs font-mono text-muted-foreground/40">
-            Exe Joiner · All rights reserved
-          </div>
-        </footer>
-      </div>
-
+      {/* Modals */}
       <PaymentModal
         isOpen={purchasingSlot !== null}
-        onClose={() => { setPurchasingSlot(null); refetchHistory(); }}
-        slotNumber={purchasingSlot || 1}
+        slotNumber={purchasingSlot ?? 0}
         pricePerDay={pricePerDay}
         slotDurationHours={slotDurationHours}
         hourlyPricingEnabled={hourlyPricingEnabled}
         pricePerHour={pricePerHour}
         minHours={minHours}
         userBalance={userBalance}
-        onSuccess={() => { refetchSlots(); refetchHistory(); refetchBalance(); }}
+        onClose={() => setPurchasingSlot(null)}
+        onSuccess={() => { setPurchasingSlot(null); refetchSlots(); refetchBalance(); }}
       />
-
-      <DepositModal
-        isOpen={showDepositModal}
-        onClose={() => setShowDepositModal(false)}
-        onSuccess={() => { refetchBalance(); refetchHistory(); }}
-      />
-
       <ManageSlotModal
-        slot={managingSlot as any}
+        slot={managingSlot}
         onClose={() => setManagingSlot(null)}
-        onSuccess={() => { refetchSlots(); }}
+        onSuccess={() => { setManagingSlot(null); refetchSlots(); }}
       />
-
       <PreorderModal
         isOpen={showPreorderModal}
-        onClose={() => { setShowPreorderModal(false); refetchPreorders(); }}
         pricePerDay={pricePerDay}
         slotDurationHours={slotDurationHours}
         nextExpiresAt={nextExpiresAt}
-        onSuccess={() => { refetchPreorders(); }}
+        balance={userBalance}
+        hourlyPricingEnabled={hourlyPricingEnabled}
+        pricePerHour={pricePerHour}
+        minHours={minHours}
+        onClose={() => setShowPreorderModal(false)}
+        onSuccess={() => { setShowPreorderModal(false); refetchPreorders(); refetchBalance(); }}
+      />
+      <DepositModal
+        isOpen={showDepositModal}
+        onClose={() => setShowDepositModal(false)}
+        onSuccess={() => { setShowDepositModal(false); refetchBalance(); }}
       />
     </div>
   );

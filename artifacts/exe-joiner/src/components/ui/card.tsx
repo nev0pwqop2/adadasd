@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils"
 import { motion, HTMLMotionProps } from "framer-motion"
 
 const Card = React.forwardRef<HTMLDivElement, HTMLMotionProps<"div">>(
-  ({ className, ...props }, ref) => (
+  ({ className, children, ...props }, ref) => (
     <motion.div
       ref={ref}
       className={cn(
@@ -17,7 +17,7 @@ const Card = React.forwardRef<HTMLDivElement, HTMLMotionProps<"div">>(
       <div className="absolute top-0 right-0 w-2 h-2 border-t-2 border-r-2 border-primary/50" />
       <div className="absolute bottom-0 left-0 w-2 h-2 border-b-2 border-l-2 border-primary/50" />
       <div className="absolute bottom-0 right-0 w-2 h-2 border-b-2 border-r-2 border-primary/50" />
-      {props.children}
+      {children as React.ReactNode}
     </motion.div>
   )
 )

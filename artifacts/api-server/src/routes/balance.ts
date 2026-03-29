@@ -1,11 +1,11 @@
 import { Router, Request, Response } from "express";
-import { db, paymentsTable, usersTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
-import { sql } from "drizzle-orm";
+import { db, paymentsTable, usersTable, couponsTable } from "@workspace/db";
+import { eq, and, sql } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { getSettings } from "../lib/settings.js";
 import { isLuarmorConfigured, createLuarmorUser } from "../lib/luarmor.js";
 import { sendPaymentWebhook } from "../lib/discord.js";
+import { generateSlotToken } from "../lib/slotToken.js";
 import crypto from "crypto";
 
 const router = Router();
@@ -106,6 +106,7 @@ router.post("/deposit/stripe", requireAuth, async (req: Request, res: Response) 
       method: "balance-deposit-stripe",
       status: "pending",
       amount: amount.toFixed(2),
+      usdAmount: amount.toFixed(2),
       currency: "USD",
       stripeSessionId: session.id,
       expiresAt: new Date(Date.now() + 30 * 60 * 1000),
@@ -140,8 +141,10 @@ router.post("/deposit/crypto", requireAuth, async (req: Request, res: Response) 
     const paymentId = crypto.randomUUID();
     const baseUrl = process.env.REPLIT_DEV_DOMAIN
       ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-      : process.env.BASE_URL || "http://localhost:80";
-    const ipnCallbackUrl = `${baseUrl}/api/payments/nowpayments-ipn`;
+      : process.env.BASE_URL?.startsWith("https://")
+        ? process.env.BASE_URL
+        : null;
+    const ipnCallbackUrl = baseUrl ? `${baseUrl}/api/payments/nowpayments-ipn` : undefined;
     const nowCurrency = NOWPAYMENTS_CURRENCY_MAP[currency];
 
     let minAmount = 2;
@@ -156,16 +159,18 @@ router.post("/deposit/crypto", requireAuth, async (req: Request, res: Response) 
       return;
     }
 
+    const nowBody: Record<string, unknown> = {
+      price_amount: amount,
+      price_currency: "usd",
+      pay_currency: nowCurrency,
+      order_id: paymentId,
+    };
+    if (ipnCallbackUrl) nowBody.ipn_callback_url = ipnCallbackUrl;
+
     const nowPayment = await nowpaymentsRequest("/payment", {
       method: "POST",
-      body: JSON.stringify({
-        price_amount: amount,
-        price_currency: "usd",
-        pay_currency: nowCurrency,
-        order_id: paymentId,
-        ipn_callback_url: ipnCallbackUrl,
-      }),
-    });
+      body: JSON.stringify(nowBody),
+    }) as { pay_address: string; pay_amount: number; pay_currency: string };
 
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
 
@@ -177,6 +182,7 @@ router.post("/deposit/crypto", requireAuth, async (req: Request, res: Response) 
       status: "pending",
       currency,
       amount: amount.toFixed(2),
+      usdAmount: amount.toFixed(2),
       address: nowPayment.pay_address,
       expiresAt,
     });
@@ -189,8 +195,9 @@ router.post("/deposit/crypto", requireAuth, async (req: Request, res: Response) 
       expiresAt: expiresAt.toISOString(),
     });
   } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
     req.log.error({ err }, "Balance crypto deposit failed");
-    res.status(500).json({ error: "server_error", message: "Failed to create crypto payment" });
+    res.status(500).json({ error: "server_error", message: `Failed to create crypto payment: ${detail}` });
   }
 });
 
@@ -283,22 +290,36 @@ router.delete("/deposit/cancel", requireAuth, async (req: Request, res: Response
 
 // POST /api/balance/use — buy a slot using account balance
 router.post("/use", requireAuth, async (req: Request, res: Response) => {
-  const { slotNumber, hours } = req.body as { slotNumber?: number; hours?: number };
+  const rawSlot = Number(req.body?.slotNumber);
+  const rawHours = req.body?.hours !== undefined ? Number(req.body.hours) : undefined;
+  const couponId = req.body?.couponId ? Number(req.body.couponId) : undefined;
 
-  if (slotNumber === undefined || slotNumber < 1) {
-    res.status(400).json({ error: "invalid_slot" });
+  const slotNumber = Number.isInteger(rawSlot) ? rawSlot : NaN;
+
+  if (!Number.isFinite(slotNumber) || slotNumber < 1) {
+    res.status(400).json({ error: "invalid_slot", message: "Invalid slot number." });
     return;
   }
 
   try {
     const settings = await getSettings();
-    const { pricePerDay, pricePerHour, hourlyPricingEnabled, minHours, slotDurationHours } = settings;
+    const { pricePerDay, pricePerHour, hourlyPricingEnabled, minHours, slotDurationHours, slotCount } = settings;
+
+    // Reject slot numbers above the configured max
+    if (slotNumber > slotCount) {
+      res.status(400).json({ error: "invalid_slot", message: `Slot number must be between 1 and ${slotCount}.` });
+      return;
+    }
 
     let chargeAmount: number;
     let purchasedHours: number;
 
     if (hourlyPricingEnabled) {
-      const h = Math.max(minHours, hours ?? minHours);
+      const h = rawHours !== undefined ? Math.floor(rawHours) : minHours;
+      if (!Number.isFinite(h) || h < minHours || h > 8760) {
+        res.status(400).json({ error: "invalid_hours", message: `Hours must be between ${minHours} and 8760.` });
+        return;
+      }
       chargeAmount = h * pricePerHour;
       purchasedHours = h;
     } else {
@@ -309,10 +330,59 @@ router.post("/use", requireAuth, async (req: Request, res: Response) => {
     const userId = req.session.userId!;
 
     const userRows = await db
-      .select({ balance: usersTable.balance, discordId: usersTable.discordId, username: usersTable.username })
+      .select({ balance: usersTable.balance, discordId: usersTable.discordId, username: usersTable.username, isBanned: usersTable.isBanned })
       .from(usersTable)
       .where(eq(usersTable.id, userId))
       .limit(1);
+
+    if (userRows[0]?.isBanned) {
+      res.status(403).json({ error: "banned", message: "Your account has been banned." });
+      return;
+    }
+
+    // Apply coupon discount if provided
+    let couponApplied = false;
+    if (couponId) {
+      // Per-user check: has this user already used this coupon?
+      const priorUse = await db
+        .select({ id: paymentsTable.id })
+        .from(paymentsTable)
+        .where(and(
+          eq(paymentsTable.userId, userId),
+          eq(paymentsTable.couponId, couponId),
+          eq(paymentsTable.status, "completed")
+        ))
+        .limit(1);
+
+      if (priorUse.length) {
+        res.status(400).json({ error: "coupon_already_used", message: "You have already used this coupon." });
+        return;
+      }
+
+      // Fetch coupon details to calculate discount (read-only — actual consumption is atomic below)
+      const couponRows = await db
+        .select()
+        .from(couponsTable)
+        .where(and(eq(couponsTable.id, couponId), eq(couponsTable.isActive, true)))
+        .limit(1);
+
+      if (couponRows.length) {
+        const coupon = couponRows[0];
+        const now = new Date();
+        const notExpired = !coupon.expiresAt || coupon.expiresAt > now;
+        const notExhausted = coupon.maxUses === null || coupon.usedCount < coupon.maxUses;
+
+        if (notExpired && notExhausted) {
+          const discountValue = parseFloat(coupon.discountValue);
+          if (coupon.discountType === "percent") {
+            chargeAmount = parseFloat(Math.max(0, chargeAmount - chargeAmount * (discountValue / 100)).toFixed(2));
+          } else {
+            chargeAmount = parseFloat(Math.max(0, chargeAmount - discountValue).toFixed(2));
+          }
+          couponApplied = true;
+        }
+      }
+    }
 
     const currentBalance = parseFloat(userRows[0]?.balance ?? "0");
 
@@ -321,67 +391,103 @@ router.post("/use", requireAuth, async (req: Request, res: Response) => {
       return;
     }
 
-    // Check slot is free
     const { slotsTable } = await import("@workspace/db");
-    const slotRows = await db.select().from(slotsTable).where(eq(slotsTable.slotNumber, slotNumber)).limit(1);
-    if (slotRows.length && slotRows[0].isActive) {
-      res.status(409).json({ error: "slot_taken", message: "Slot is already taken" });
-      return;
-    }
 
-    // Deduct balance atomically
-    await db.update(usersTable)
-      .set({ balance: sql`${usersTable.balance} - ${chargeAmount.toFixed(2)}::numeric`, updatedAt: new Date() })
-      .where(and(eq(usersTable.id, userId)));
-
-    // Create completed payment record
-    const paymentId = crypto.randomUUID();
-    await db.insert(paymentsTable).values({
-      id: paymentId,
-      userId,
-      slotNumber,
-      method: "balance",
-      status: "completed",
-      amount: chargeAmount.toFixed(2),
-      currency: "USD",
-      derivationIndex: hourlyPricingEnabled ? purchasedHours : null,
-    });
-
-    // Activate slot
-    const durationMs = hourlyPricingEnabled
-      ? purchasedHours * 60 * 60 * 1000
-      : slotDurationHours * 60 * 60 * 1000;
-
-    const expiresAt = new Date(Date.now() + durationMs);
-
-    let luarmorUserId: string | null = null;
-    if (isLuarmorConfigured() && userRows[0]) {
-      try {
-        const luarmorUser = await createLuarmorUser(
-          userRows[0].discordId,
-          userRows[0].username,
-          expiresAt
-        );
-        luarmorUserId = luarmorUser.user_key;
-      } catch (e) {
-        req.log.warn({ e }, "Luarmor user creation failed (balance payment)");
+    // Acquire a PostgreSQL advisory lock on the slot number so that two concurrent
+    // requests cannot both see the slot as "free" and both activate it.
+    // The DB releases this lock automatically if the connection drops.
+    await db.execute(sql`SELECT pg_advisory_lock(${slotNumber}::bigint)`);
+    let slotLockReleased = false;
+    const releaseSlotLock = async () => {
+      if (!slotLockReleased) {
+        slotLockReleased = true;
+        await db.execute(sql`SELECT pg_advisory_unlock(${slotNumber}::bigint)`).catch(() => {});
       }
-    }
-
-    const slotData = {
-      userId,
-      isActive: true,
-      purchasedAt: new Date(),
-      expiresAt,
-      ...(luarmorUserId ? { luarmorUserId } : {}),
     };
 
-    if (slotRows.length) {
-      await db.update(slotsTable).set(slotData).where(
-        and(eq(slotsTable.userId, userId), eq(slotsTable.slotNumber, slotNumber))
-      );
-    } else {
-      await db.insert(slotsTable).values({ slotNumber, ...slotData });
+    let expiresAt: Date = new Date();
+    let luarmorUserId: string | null = null;
+
+    try {
+      // Re-check slot availability NOW that we hold the lock (prevents TOCTOU race)
+      const anyActive = await db
+        .select({ id: slotsTable.id })
+        .from(slotsTable)
+        .where(and(eq(slotsTable.slotNumber, slotNumber), eq(slotsTable.isActive, true)))
+        .limit(1);
+
+      if (anyActive.length) {
+        await releaseSlotLock();
+        res.status(409).json({ error: "slot_taken", message: "Slot is already taken" });
+        return;
+      }
+
+      // Atomically deduct balance — WHERE also checks balance >= chargeAmount
+      const deducted = await db.update(usersTable)
+        .set({ balance: sql`${usersTable.balance} - ${chargeAmount.toFixed(2)}::numeric`, updatedAt: new Date() })
+        .where(and(eq(usersTable.id, userId), sql`${usersTable.balance} >= ${chargeAmount.toFixed(2)}::numeric`))
+        .returning({ balance: usersTable.balance });
+
+      if (!deducted.length) {
+        await releaseSlotLock();
+        res.status(400).json({ error: "insufficient_balance", message: "Insufficient balance." });
+        return;
+      }
+
+      // Create completed payment record
+      const paymentId = crypto.randomUUID();
+      await db.insert(paymentsTable).values({
+        id: paymentId,
+        userId,
+        slotNumber,
+        method: "balance",
+        status: "completed",
+        amount: chargeAmount.toFixed(2),
+        currency: "USD",
+        derivationIndex: hourlyPricingEnabled ? purchasedHours : null,
+        ...(couponId && couponApplied ? { couponId } : {}),
+      });
+
+      // Activate slot
+      const durationMs = hourlyPricingEnabled
+        ? purchasedHours * 60 * 60 * 1000
+        : slotDurationHours * 60 * 60 * 1000;
+
+      expiresAt = new Date(Date.now() + durationMs);
+
+      if (isLuarmorConfigured() && userRows[0]) {
+        try {
+          const luarmorUser = await createLuarmorUser(userRows[0].discordId, userRows[0].username, expiresAt);
+          luarmorUserId = luarmorUser.user_key;
+        } catch (e) {
+          req.log.warn({ e }, "Luarmor user creation failed (balance payment)");
+        }
+      }
+
+      const purchasedAt = new Date();
+      const slotData = {
+        userId,
+        isActive: true,
+        purchasedAt,
+        expiresAt,
+        purchaseToken: generateSlotToken(userId, slotNumber, purchasedAt),
+        ...(luarmorUserId ? { luarmorUserId } : {}),
+      };
+
+      // Check specifically if THIS user already has a row for this slot (for upsert)
+      const mySlotRow = await db
+        .select({ id: slotsTable.id })
+        .from(slotsTable)
+        .where(and(eq(slotsTable.userId, userId), eq(slotsTable.slotNumber, slotNumber)))
+        .limit(1);
+
+      if (mySlotRow.length) {
+        await db.update(slotsTable).set(slotData).where(eq(slotsTable.id, mySlotRow[0].id));
+      } else {
+        await db.insert(slotsTable).values({ slotNumber, ...slotData });
+      }
+    } finally {
+      await releaseSlotLock();
     }
 
     // Discord webhook
@@ -402,6 +508,18 @@ router.post("/use", requireAuth, async (req: Request, res: Response) => {
       }
     } catch (webhookErr) {
       req.log.warn({ webhookErr }, "Balance purchase webhook failed");
+    }
+
+    // Atomically consume one coupon use — WHERE ensures maxUses can never be exceeded
+    // even under concurrent requests (the DB serialises this UPDATE at row level).
+    if (couponId && couponApplied) {
+      await db.update(couponsTable)
+        .set({ usedCount: sql`${couponsTable.usedCount} + 1` })
+        .where(and(
+          eq(couponsTable.id, couponId),
+          sql`(${couponsTable.maxUses} IS NULL OR ${couponsTable.usedCount} < ${couponsTable.maxUses})`
+        ))
+        .catch(() => {});
     }
 
     res.json({ success: true, slotNumber, expiresAt: expiresAt.toISOString(), balance: (currentBalance - chargeAmount).toFixed(2) });

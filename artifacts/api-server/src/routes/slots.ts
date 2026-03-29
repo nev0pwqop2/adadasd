@@ -1,14 +1,15 @@
 import { Router } from "express";
-import { db, slotsTable, usersTable, paymentsTable, preordersTable } from "@workspace/db";
+import { db, slotsTable, usersTable, paymentsTable, preordersTable, bidsTable, couponsTable } from "@workspace/db";
 import { eq, and, sql, inArray, lte, desc } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { getSettings } from "../lib/settings.js";
 import { isLuarmorConfigured, createLuarmorUser, deleteLuarmorUser, getLuarmorUsers, resetLuarmorHwid } from "../lib/luarmor.js";
+import { sendDiscordDM } from "../lib/discord.js";
 
 const router = Router();
 
 router.patch("/:id/label", requireAuth, async (req, res) => {
-  const slotId = parseInt(req.params.id, 10);
+  const slotId = parseInt(req.params.id as string, 10);
   const { label } = req.body as { label?: string };
 
   if (isNaN(slotId)) {
@@ -35,7 +36,7 @@ router.patch("/:id/label", requireAuth, async (req, res) => {
 const HWID_RESET_UNLIMITED_IDS = new Set(["905033435817586749"]);
 
 router.post("/:id/reset-hwid", requireAuth, async (req, res) => {
-  const slotId = parseInt(req.params.id, 10);
+  const slotId = parseInt(req.params.id as string, 10);
   if (isNaN(slotId)) {
     res.status(400).json({ error: "invalid_slot", message: "Invalid slot ID" });
     return;
@@ -109,9 +110,101 @@ router.post("/:id/reset-hwid", requireAuth, async (req, res) => {
   }
 });
 
+// POST /api/slots/gift — transfer your active slot to another Discord user
+router.post("/gift", requireAuth, async (req, res) => {
+  const { slotId, recipientDiscordId } = req.body as { slotId?: number; recipientDiscordId?: string };
+
+  if (!slotId || typeof slotId !== "number") {
+    res.status(400).json({ error: "invalid_slot", message: "slotId is required" });
+    return;
+  }
+  if (!recipientDiscordId || typeof recipientDiscordId !== "string") {
+    res.status(400).json({ error: "invalid_recipient", message: "recipientDiscordId is required" });
+    return;
+  }
+
+  const senderId = req.session.userId!;
+
+  try {
+    const slot = await db.select().from(slotsTable).where(eq(slotsTable.id, slotId)).limit(1);
+    if (!slot.length || slot[0].userId !== senderId || !slot[0].isActive) {
+      res.status(404).json({ error: "not_found", message: "Active slot not found or you do not own it" });
+      return;
+    }
+
+    const senderRow = await db.select({ discordId: usersTable.discordId }).from(usersTable).where(eq(usersTable.id, senderId)).limit(1);
+    if (senderRow.length && senderRow[0].discordId === recipientDiscordId.trim()) {
+      res.status(400).json({ error: "invalid_recipient", message: "You cannot gift a slot to yourself" });
+      return;
+    }
+
+    const recipient = await db.select().from(usersTable).where(eq(usersTable.discordId, recipientDiscordId.trim())).limit(1);
+    if (!recipient.length) {
+      res.status(404).json({ error: "recipient_not_found", message: "Recipient user not found. They must have logged in at least once." });
+      return;
+    }
+    if (recipient[0].isBanned) {
+      res.status(403).json({ error: "recipient_banned", message: "That user is banned and cannot receive slots" });
+      return;
+    }
+
+    const recipientId = recipient[0].id;
+    const slotNum = slot[0].slotNumber;
+    const expiresAt = slot[0].expiresAt;
+
+    // Remove Luarmor key from sender
+    if (isLuarmorConfigured() && slot[0].luarmorUserId) {
+      try { await deleteLuarmorUser(slot[0].luarmorUserId); } catch (_) {}
+    }
+
+    // Deactivate ALL of sender's rows for this slot number (handles any duplicate rows)
+    await db.update(slotsTable)
+      .set({ isActive: false, expiresAt: null, purchasedAt: null, luarmorUserId: null, label: null, notified24h: false, notified1h: false })
+      .where(and(eq(slotsTable.userId, senderId), eq(slotsTable.slotNumber, slotNum)));
+
+    // Create Luarmor key for recipient
+    let luarmorUserId: string | null = null;
+    if (isLuarmorConfigured()) {
+      try {
+        const lu = await createLuarmorUser(recipient[0].discordId, recipient[0].username, expiresAt ?? undefined);
+        luarmorUserId = lu.user_key;
+      } catch (_) {}
+    }
+
+    // Upsert recipient's slot row
+    const existingRecipientSlot = await db.select().from(slotsTable)
+      .where(and(eq(slotsTable.userId, recipientId), eq(slotsTable.slotNumber, slotNum)))
+      .limit(1);
+
+    if (existingRecipientSlot.length) {
+      await db.update(slotsTable)
+        .set({ isActive: true, purchasedAt: new Date(), expiresAt, luarmorUserId, label: "Gift", notified24h: false, notified1h: false })
+        .where(eq(slotsTable.id, existingRecipientSlot[0].id));
+    } else {
+      await db.insert(slotsTable).values({
+        userId: recipientId, slotNumber: slotNum, isActive: true,
+        purchasedAt: new Date(), expiresAt, luarmorUserId, label: "Gift",
+      });
+    }
+
+    // DM the recipient
+    if (expiresAt) {
+      const ts = Math.floor(expiresAt.getTime() / 1000);
+      await sendDiscordDM(recipient[0].discordId,
+        `🎁 **You've been gifted a slot!** — Someone gifted you an Exe Joiner slot. It expires <t:${ts}:R> (<t:${ts}:F>). Check your dashboard to get your script key!`
+      );
+    }
+
+    res.json({ success: true, message: `Slot gifted to ${recipient[0].username}` });
+  } catch (err) {
+    req.log.error({ err }, "Failed to gift slot");
+    res.status(500).json({ error: "server_error", message: "Failed to gift slot" });
+  }
+});
+
 router.get("/", requireAuth, async (req, res) => {
   try {
-    const { slotCount, pricePerDay, slotDurationHours } = await getSettings();
+    const { slotCount, pricePerDay, slotDurationHours, hourlyPricingEnabled, pricePerHour, minHours } = await getSettings();
     const currentUserId = req.session.userId!;
 
     // Verify the user still exists in the database (session may be stale after data resets)
@@ -134,9 +227,9 @@ router.get("/", requireAuth, async (req, res) => {
 
     const now = new Date();
 
-    // Step 1: Expire any slots whose time is up — delete Luarmor keys first
+    // Step 1: Expire any slots whose time is up — skip paused slots (their expiry is extended on unpause)
     const expiring = await db.select().from(slotsTable)
-      .where(and(eq(slotsTable.isActive, true), lte(slotsTable.expiresAt, now)));
+      .where(and(eq(slotsTable.isActive, true), eq(slotsTable.isPaused, false), lte(slotsTable.expiresAt, now)));
     if (isLuarmorConfigured() && expiring.length > 0) {
       // Delete keys we have stored
       await Promise.allSettled(
@@ -160,7 +253,7 @@ router.get("/", requireAuth, async (req, res) => {
     if (expiring.length > 0) {
       await db.update(slotsTable)
         .set({ isActive: false, expiresAt: null, purchasedAt: null, label: null, luarmorUserId: null })
-        .where(and(eq(slotsTable.isActive, true), lte(slotsTable.expiresAt, now)));
+        .where(and(eq(slotsTable.isActive, true), eq(slotsTable.isPaused, false), lte(slotsTable.expiresAt, now)));
     }
 
     // Step 2: Fetch all currently active slots
@@ -169,7 +262,7 @@ router.get("/", requireAuth, async (req, res) => {
       .from(slotsTable)
       .where(and(eq(slotsTable.isActive, true), lte(slotsTable.slotNumber, slotCount)));
 
-    // Step 3: Auto-assign paid pre-orders to any free slots
+    // Step 3: Unified priority queue — bids and preorders compete by amount (highest wins)
     const freeSlotNums = Array.from({ length: slotCount }, (_, i) => i + 1)
       .filter(n => !allActiveSlots.some(s => s.slotNumber === n));
 
@@ -178,46 +271,87 @@ router.get("/", requireAuth, async (req, res) => {
         .where(eq(preordersTable.status, "paid"))
         .orderBy(sql`CAST(${preordersTable.amount} AS NUMERIC) DESC`, preordersTable.createdAt);
 
-      if (paidPreorders.length > 0) {
-        const toAssign = Math.min(freeSlotNums.length, paidPreorders.length);
-        for (let i = 0; i < toAssign; i++) {
-          const preorder = paidPreorders[i];
-          const slotNum = freeSlotNums[i];
-          const expiresAt = new Date(now.getTime() + slotDurationHours * 60 * 60 * 1000);
+      const activeBids = await db.select().from(bidsTable)
+        .where(and(eq(bidsTable.status, "active"), eq(bidsTable.paidWithBalance, true)))
+        .orderBy(sql`CAST(${bidsTable.amount} AS NUMERIC) DESC`, bidsTable.createdAt);
 
-          // Create Luarmor key for this user
-          let luarmorUserId: string | null = null;
-          if (isLuarmorConfigured()) {
-            try {
-              const preorderUser = await db.select().from(usersTable).where(eq(usersTable.id, preorder.userId)).limit(1);
-              if (preorderUser.length) {
-                const lu = await createLuarmorUser(preorderUser[0].discordId, preorderUser[0].username, expiresAt);
-                luarmorUserId = lu.user_key;
-              }
-            } catch (e) {
-              // Non-fatal — slot still activates
+      // Merge into one list, sorted by amount descending (preorder wins ties — placed first)
+      type Claimant =
+        | { kind: "preorder"; id: number; userId: string; amount: number; hoursRequested: number | null }
+        | { kind: "bid"; id: number; userId: string; amount: number };
+
+      const claimants: Claimant[] = [
+        ...paidPreorders.map(p => ({ kind: "preorder" as const, id: p.id, userId: p.userId, amount: parseFloat(p.amount), hoursRequested: p.hoursRequested ?? null })),
+        ...activeBids.map(b => ({ kind: "bid" as const, id: b.id, userId: b.userId, amount: parseFloat(b.amount) })),
+      ].sort((a, b) => {
+        if (b.amount !== a.amount) return b.amount - a.amount;
+        // tie-break: preorders beat bids (they committed first)
+        if (a.kind === "preorder" && b.kind === "bid") return -1;
+        if (a.kind === "bid" && b.kind === "preorder") return 1;
+        return 0;
+      });
+
+      const toAssign = Math.min(freeSlotNums.length, claimants.length);
+      for (let i = 0; i < toAssign; i++) {
+        const claimant = claimants[i];
+        const slotNum = freeSlotNums[i];
+        const hours = claimant.kind === "preorder" && claimant.hoursRequested
+          ? claimant.hoursRequested
+          : slotDurationHours;
+        const expiresAt = new Date(now.getTime() + hours * 60 * 60 * 1000);
+
+        let luarmorUserId: string | null = null;
+        if (isLuarmorConfigured()) {
+          try {
+            const ownerUser = await db.select().from(usersTable).where(eq(usersTable.id, claimant.userId)).limit(1);
+            if (ownerUser.length) {
+              const lu = await createLuarmorUser(ownerUser[0].discordId, ownerUser[0].username, expiresAt);
+              luarmorUserId = lu.user_key;
             }
-          }
-
-          const existingRow = await db.select().from(slotsTable)
-            .where(and(eq(slotsTable.userId, preorder.userId), eq(slotsTable.slotNumber, slotNum)))
-            .limit(1);
-          if (existingRow.length) {
-            await db.update(slotsTable)
-              .set({ isActive: true, purchasedAt: now, expiresAt, label: null, luarmorUserId })
-              .where(and(eq(slotsTable.userId, preorder.userId), eq(slotsTable.slotNumber, slotNum)));
-          } else {
-            await db.insert(slotsTable).values({ userId: preorder.userId, slotNumber: slotNum, isActive: true, purchasedAt: now, expiresAt, luarmorUserId });
-          }
-          await db.update(preordersTable).set({ status: "fulfilled" }).where(eq(preordersTable.id, preorder.id));
+          } catch (e) {}
         }
 
-        // Re-fetch active slots after assignment
-        allActiveSlots = await db
-          .select()
-          .from(slotsTable)
-          .where(and(eq(slotsTable.isActive, true), lte(slotsTable.slotNumber, slotCount)));
+        const existingRow = await db.select().from(slotsTable)
+          .where(and(eq(slotsTable.userId, claimant.userId), eq(slotsTable.slotNumber, slotNum)))
+          .limit(1);
+        if (existingRow.length) {
+          await db.update(slotsTable)
+            .set({ isActive: true, purchasedAt: now, expiresAt, label: null, luarmorUserId, notified24h: false, notified1h: false })
+            .where(and(eq(slotsTable.userId, claimant.userId), eq(slotsTable.slotNumber, slotNum)));
+        } else {
+          await db.insert(slotsTable).values({ userId: claimant.userId, slotNumber: slotNum, isActive: true, purchasedAt: now, expiresAt, luarmorUserId });
+        }
+
+        if (claimant.kind === "preorder") {
+          await db.update(preordersTable).set({ status: "fulfilled" }).where(eq(preordersTable.id, claimant.id));
+          try {
+            const u = await db.select({ discordId: usersTable.discordId, username: usersTable.username }).from(usersTable).where(eq(usersTable.id, claimant.userId)).limit(1);
+            if (u.length) {
+              const ts = Math.floor(expiresAt.getTime() / 1000);
+              await sendDiscordDM(u[0].discordId,
+                `✅ **Pre-order fulfilled!** — Hey ${u[0].username}, your Exe Joiner slot is now active! It expires <t:${ts}:R>. Check your dashboard to get your script key!`
+              );
+            }
+          } catch (_) {}
+        } else {
+          await db.update(bidsTable).set({ status: "won", updatedAt: now }).where(eq(bidsTable.id, claimant.id));
+          try {
+            const u = await db.select({ discordId: usersTable.discordId, username: usersTable.username }).from(usersTable).where(eq(usersTable.id, claimant.userId)).limit(1);
+            if (u.length) {
+              const ts = Math.floor(expiresAt.getTime() / 1000);
+              await sendDiscordDM(u[0].discordId,
+                `🏆 **Your bid won!** — Hey ${u[0].username}, your Exe Joiner bid of $${claimant.amount.toFixed(2)} won a slot! It expires <t:${ts}:R>. Check your dashboard to get your script key!`
+              );
+            }
+          } catch (_) {}
+        }
       }
+
+      // Re-fetch active slots after all assignments
+      allActiveSlots = await db
+        .select()
+        .from(slotsTable)
+        .where(and(eq(slotsTable.isActive, true), lte(slotsTable.slotNumber, slotCount)));
     }
 
     // Get owners for active slots
@@ -284,6 +418,8 @@ router.get("/", requireAuth, async (req, res) => {
           script,
           hwidResetAt: mySlot.hwidResetAt?.toISOString() ?? null,
           hwidUnlimited,
+          isPaused: mySlot.isPaused,
+          pausedAt: mySlot.pausedAt?.toISOString() ?? null,
         };
       } else if (activeSlot) {
         // Someone else owns this slot
@@ -296,6 +432,8 @@ router.get("/", requireAuth, async (req, res) => {
           purchasedAt: null,
           expiresAt: activeSlot.expiresAt?.toISOString() ?? null,
           label: null,
+          isPaused: activeSlot.isPaused,
+          pausedAt: activeSlot.pausedAt?.toISOString() ?? null,
         };
       } else {
         // Slot is free
@@ -311,8 +449,6 @@ router.get("/", requireAuth, async (req, res) => {
         };
       }
     });
-
-    const { hourlyPricingEnabled, pricePerHour, minHours } = await getSettings();
 
     // Find the earliest expiry among all active slots (for the countdown timer)
     const activeExpiries = allActiveSlots

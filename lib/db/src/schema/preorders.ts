@@ -1,4 +1,4 @@
-import { pgTable, serial, varchar, text, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, varchar, text, timestamp, integer } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
 
 export const preordersTable = pgTable("preorders", {
@@ -8,6 +8,7 @@ export const preordersTable = pgTable("preorders", {
   currency: text("currency"),
   paymentId: varchar("payment_id", { length: 64 }),
   status: text("status").notNull().default("paid"),
+  hoursRequested: integer("hours_requested"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
