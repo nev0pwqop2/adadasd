@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useLocation } from "wouter";
+import Navbar from "@/components/Navbar";
 import {
   useGetMe,
   useGetAdminSettings,
@@ -794,7 +795,7 @@ export default function Admin() {
         <p className="text-xs font-mono text-muted-foreground uppercase tracking-widest">
           {label}
         </p>
-        <p className="font-display text-2xl font-bold text-primary">
+        <p className="text-2xl font-bold text-primary">
           ${stats.total.toFixed(2)}
         </p>
         <div className="space-y-1">
@@ -835,30 +836,7 @@ export default function Admin() {
       />
 
       <div className="relative z-10 flex flex-col min-h-screen">
-        <header className="border-b border-primary/20 bg-card/80 backdrop-blur-md sticky top-0 z-40">
-          <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setLocation("/dashboard")}
-                className="text-muted-foreground hover:text-primary"
-              >
-                <ArrowLeft className="w-4 h-4 mr-2" /> Back
-              </Button>
-              <div className="h-5 w-px bg-primary/20" />
-              <div className="flex items-center gap-2">
-                <Shield className="w-5 h-5 text-yellow-400" />
-                <h1 className="font-display font-bold uppercase tracking-widest text-yellow-400">
-                  Admin Panel
-                </h1>
-              </div>
-            </div>
-            <span className="font-mono text-xs text-muted-foreground hidden sm:block">
-              ID: {user.discordId}
-            </span>
-          </div>
-        </header>
+        <Navbar current="admin" />
 
         <main className="flex-1 max-w-5xl mx-auto px-4 py-8 w-full space-y-8">
           {/* Settings Card */}
@@ -866,10 +844,10 @@ export default function Admin() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
           >
-            <Card className="border-yellow-500/30 bg-yellow-500/5">
-              <div className="p-6 border-b border-yellow-500/20 flex items-center gap-3">
-                <Settings className="w-5 h-5 text-yellow-400" />
-                <h2 className="font-display font-bold uppercase tracking-wider text-yellow-400">
+            <Card className="border-white/[0.06] bg-white/[0.02]">
+              <div className="p-6 border-b border-white/[0.06] flex items-center gap-3">
+                <Settings className="w-5 h-5 text-[#f5a623]" />
+                <h2 className="font-semibold text-[#f5a623]">
                   System Settings
                 </h2>
               </div>
@@ -924,7 +902,7 @@ export default function Admin() {
                 </div>
 
                 <div className="space-y-3 pt-2 border-t border-primary/20">
-                  <p className="text-xs font-mono text-primary uppercase tracking-wider font-bold">
+                  <p className="text-xs font-mono text-primary font-bold">
                     Hourly Pricing Mode
                   </p>
                   <label className="flex items-center gap-3 cursor-pointer select-none group">
@@ -1011,7 +989,7 @@ export default function Admin() {
                 className="w-full p-6 flex items-center gap-3 text-left hover:bg-primary/5 transition-colors"
               >
                 <Users className="w-5 h-5 text-primary shrink-0" />
-                <h2 className="font-display font-bold uppercase tracking-wider text-primary">
+                <h2 className="font-semibold text-primary">
                   User Management
                 </h2>
                 <span className="ml-auto text-xs font-mono text-muted-foreground mr-3">
@@ -1057,7 +1035,7 @@ export default function Admin() {
                               {u.username}
                             </p>
                             {u.isSuperAdmin && (
-                              <span className="flex items-center gap-1 text-xs font-mono px-2 py-0.5 bg-yellow-500/10 border border-yellow-500/30 text-yellow-400">
+                              <span className="flex items-center gap-1 text-xs font-mono px-2 py-0.5 bg-[#f5a623]/10 border border-white/10 text-[#f5a623]">
                                 <Crown className="w-3 h-3" /> Super Admin
                               </span>
                             )}
@@ -1310,7 +1288,7 @@ export default function Admin() {
                                   </span>
                                   {g.owner && (
                                     <Crown
-                                      className="w-3 h-3 text-yellow-400 shrink-0"
+                                      className="w-3 h-3 text-[#f5a623] shrink-0"
                                       aria-label="Server Owner"
                                     />
                                   )}
@@ -1338,7 +1316,7 @@ export default function Admin() {
               <Card className="border-amber-500/30 bg-amber-500/5">
                 <div className="p-6 border-b border-amber-500/20 flex items-center gap-3">
                   <Layers className="w-5 h-5 text-amber-400" />
-                  <h2 className="font-display font-bold uppercase tracking-wider text-amber-400">
+                  <h2 className="font-semibold text-amber-400">
                     Slot Control
                   </h2>
                   <span className="ml-auto text-xs font-mono text-muted-foreground">
@@ -1473,7 +1451,7 @@ export default function Admin() {
             <Card className="border-primary/20">
               <div className="p-6 border-b border-primary/20 flex items-center gap-3">
                 <Tag className="w-5 h-5 text-primary" />
-                <h2 className="font-display font-bold uppercase tracking-wider text-primary">
+                <h2 className="font-semibold text-primary">
                   Coupon Codes
                 </h2>
                 <span className="ml-auto text-xs font-mono text-muted-foreground">
@@ -1687,7 +1665,7 @@ export default function Admin() {
             <Card className="border-red-500/30 bg-red-500/5">
               <div className="p-6 border-b border-red-500/20 flex items-center gap-3">
                 <AlertTriangle className="w-5 h-5 text-red-400" />
-                <h2 className="font-display font-bold uppercase tracking-wider text-red-400">
+                <h2 className="font-semibold text-red-400">
                   Danger Zone
                 </h2>
               </div>
@@ -1810,7 +1788,7 @@ export default function Admin() {
                 <div className="flex items-center gap-3 flex-1">
                   <Server className="w-5 h-5 text-primary" />
                   <div>
-                    <h3 className="font-display font-bold uppercase tracking-widest text-primary">
+                    <h3 className="font-bold text-primary">
                       Server Explorer
                     </h3>
                     <p className="text-xs font-mono text-muted-foreground mt-0.5">
@@ -1925,7 +1903,7 @@ export default function Admin() {
             <Card className="border-primary/20">
               <div className="p-6 border-b border-primary/20 flex items-center gap-3">
                 <ScrollText className="w-5 h-5 text-primary" />
-                <h2 className="font-display font-bold uppercase tracking-wider text-primary">
+                <h2 className="font-semibold text-primary">
                   Purchase Logs
                 </h2>
                 <span className="ml-auto text-xs font-mono text-muted-foreground">
@@ -2048,7 +2026,7 @@ export default function Admin() {
             <Card className="border-primary/20">
               <div className="p-6 border-b border-primary/20 flex flex-wrap items-center gap-3">
                 <CreditCard className="w-5 h-5 text-primary" />
-                <h2 className="font-display font-bold uppercase tracking-wider text-primary">
+                <h2 className="font-semibold text-primary">
                   All Payments
                 </h2>
                 <span className="text-xs font-mono text-muted-foreground">
@@ -2077,7 +2055,7 @@ export default function Admin() {
                     const active = paymentsStatusFilter === s;
                     const colors: Record<string, string> = {
                       all: "border-primary/40 text-primary",
-                      pending: "border-yellow-500/60 text-yellow-400",
+                      pending: "border-yellow-500/60 text-[#f5a623]",
                       completed: "border-green-500/60 text-green-400",
                       failed: "border-red-500/60 text-red-400",
                       expired: "border-orange-500/60 text-orange-400",
@@ -2121,7 +2099,7 @@ export default function Admin() {
                       {
                         pending: {
                           label: "Pending",
-                          cls: "bg-yellow-500/20 text-yellow-400 border-yellow-500/40",
+                          cls: "bg-[#f5a623]/15 text-[#f5a623] border-yellow-500/40",
                         },
                         completed: {
                           label: "Completed",
@@ -2323,7 +2301,7 @@ export default function Admin() {
             <Card className="border-primary/30 bg-primary/5">
               <div className="p-6 border-b border-primary/20 flex items-center gap-3">
                 <Gavel className="w-5 h-5 text-primary" />
-                <h2 className="font-display font-bold uppercase tracking-wider text-primary">Bid Queue</h2>
+                <h2 className="font-semibold text-primary">Bid Queue</h2>
                 <span className="ml-auto text-xs font-mono text-muted-foreground">
                   {adminBidsData?.bids.length ?? 0} active bid{adminBidsData?.bids.length !== 1 ? "s" : ""}
                 </span>
@@ -2401,7 +2379,7 @@ export default function Admin() {
             <Card className="border-green-500/30 bg-green-500/5">
               <div className="p-6 border-b border-green-500/20 flex items-center gap-3">
                 <TrendingUp className="w-5 h-5 text-green-400" />
-                <h2 className="font-display font-bold uppercase tracking-wider text-green-400">
+                <h2 className="font-semibold text-green-400">
                   Revenue
                 </h2>
                 <span className="ml-auto text-xs font-mono text-muted-foreground">
@@ -2527,7 +2505,7 @@ export default function Admin() {
             <Card className="border-blue-500/30 bg-blue-500/5">
               <div className="p-6 border-b border-blue-500/20 flex items-center gap-3">
                 <FlaskConical className="w-5 h-5 text-blue-400" />
-                <h2 className="font-display font-bold uppercase tracking-wider text-blue-400">
+                <h2 className="font-semibold text-blue-400">
                   Developer Tools
                 </h2>
               </div>
@@ -2596,13 +2574,13 @@ export default function Admin() {
                 <div className="px-6 pb-6 space-y-4">
                   <div className="border border-blue-500/20 bg-background/60 p-4 space-y-4">
                     {!testScriptResult.luarmorConfigured && (
-                      <p className="text-xs font-mono text-yellow-400 bg-yellow-500/10 border border-yellow-500/20 px-3 py-2">
+                      <p className="text-xs font-mono text-[#f5a623] bg-[#f5a623]/10 border border-white/[0.06] px-3 py-2">
                         Luarmor is not configured — no real key was generated.
                         Set LUARMOR_API_KEY and LUARMOR_PROJECT_ID.
                       </p>
                     )}
                     <div>
-                      <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest mb-2 flex items-center gap-1">
+                      <p className="text-[10px] font-mono text-muted-foreground mb-2 flex items-center gap-1">
                         <Key className="w-3 h-3" /> Script Key
                       </p>
                       {testScriptResult.scriptKey ? (
@@ -2635,7 +2613,7 @@ export default function Admin() {
                     </div>
 
                     <div>
-                      <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest mb-2 flex items-center gap-1">
+                      <p className="text-[10px] font-mono text-muted-foreground mb-2 flex items-center gap-1">
                         <Key className="w-3 h-3" /> Full Loader Script
                       </p>
                       {testScriptResult.script ? (
@@ -2664,7 +2642,7 @@ export default function Admin() {
                           </button>
                         </div>
                       ) : (
-                        <p className="text-xs font-mono text-yellow-400/80">
+                        <p className="text-xs font-mono text-[#f5a623]/80">
                           Key generated but LUARMOR_SCRIPT_URL is not set — set
                           it in Render env vars to get the full loader.
                         </p>

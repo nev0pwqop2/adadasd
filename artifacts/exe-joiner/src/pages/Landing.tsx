@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { useGetMe } from '@workspace/api-client-react';
+import Navbar from '@/components/Navbar';
 
 const DiscordIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -53,49 +54,7 @@ export default function Landing() {
       {/* Warm radial glow */}
       <div className="pointer-events-none fixed inset-0 z-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_80%,hsla(30,70%,25%,0.35),transparent)]" />
 
-      {/* ── Navbar ── */}
-      <header className="relative z-20 w-full bg-[#130e06] border-b border-white/5">
-        <div className="max-w-5xl mx-auto flex items-center justify-between px-6 h-14">
-          {/* Brand — left */}
-          <div className="flex items-center gap-2.5">
-            <img
-              src={`${import.meta.env.BASE_URL}exe-logo.png`}
-              alt="Exe Joiner"
-              className="w-6 h-6 object-contain"
-            />
-            <span className="font-bold text-[15px] text-white/90">Exe Joiner</span>
-          </div>
-
-          {/* Nav links — center */}
-          <nav className="hidden sm:flex items-center gap-6">
-            {[
-              { label: 'Home',         href: '#',                                            active: true  },
-              { label: 'Plans',        href: `${import.meta.env.BASE_URL}plans`,           active: false },
-              { label: 'Leaderboard', href: `${import.meta.env.BASE_URL}leaderboard`,     active: false },
-              { label: 'Dashboard',   href: `${import.meta.env.BASE_URL}dashboard`,       active: false },
-            ].map(({ label, href, active }) => (
-              <a
-                key={label}
-                href={href}
-                className={`text-sm transition-colors ${
-                  active ? 'text-[#f5a623] font-semibold' : 'text-white/45 hover:text-white/75'
-                }`}
-              >
-                {label}
-              </a>
-            ))}
-          </nav>
-
-          {/* Login — right */}
-          <button
-            onClick={handleLogin}
-            className="flex items-center gap-2 px-4 h-8 rounded-lg border border-white/12 text-sm text-white/50 hover:text-white/80 hover:border-white/25 transition-colors"
-          >
-            <DiscordIcon />
-            Login
-          </button>
-        </div>
-      </header>
+      <Navbar current="home" />
 
       {/* ── Hero ── */}
       <main className="relative z-10 flex flex-col items-center justify-center flex-1 px-5 pt-16 pb-10 text-center">

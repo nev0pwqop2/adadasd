@@ -77,6 +77,7 @@
   }
 
   body {
+    cursor: none;
     @apply bg-background text-foreground antialiased font-sans selection:bg-primary/25 selection:text-foreground;
     background-image:
       radial-gradient(ellipse 70% 45% at 50% -5%, hsla(43,96%,56%,0.09) 0%, transparent 70%),

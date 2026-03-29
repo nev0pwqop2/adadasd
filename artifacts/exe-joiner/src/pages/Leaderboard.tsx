@@ -1,8 +1,8 @@
 import React from 'react';
-import { useLocation } from 'wouter';
 import { useQuery } from '@tanstack/react-query';
-import { Trophy, ArrowLeft } from 'lucide-react';
+import { Trophy } from 'lucide-react';
 import { motion } from 'framer-motion';
+import Navbar from '@/components/Navbar';
 
 async function apiFetch<T>(path: string): Promise<T> {
   const res = await fetch(`${import.meta.env.BASE_URL}${path}`);
@@ -20,8 +20,6 @@ type LeaderEntry = {
 };
 
 export default function LeaderboardPage() {
-  const [, setLocation] = useLocation();
-
   const { data, isLoading } = useQuery({
     queryKey: ['leaderboard-public'],
     queryFn: () => apiFetch<{ leaderboard: LeaderEntry[] }>('api/slots/leaderboard'),
@@ -107,40 +105,9 @@ export default function LeaderboardPage() {
   );
 
   return (
-    <div className="min-h-screen bg-[#0e0e10] text-white">
-      {/* Navbar */}
-      <nav className="sticky top-0 z-50 w-full bg-[#111113]/90 backdrop-blur border-b border-white/[0.06] px-4 md:px-6 h-14 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <img src={`${import.meta.env.BASE_URL}exe-logo.png`} alt="EXE" className="w-7 h-7 rounded-lg" />
-          <span className="font-bold text-[15px] text-white/90">Exe Joiner</span>
-        </div>
-        <nav className="hidden sm:flex items-center gap-6">
-          {[
-            { label: 'Home',        href: `${import.meta.env.BASE_URL}` },
-            { label: 'Plans',       href: `${import.meta.env.BASE_URL}plans` },
-            { label: 'Leaderboard', href: `${import.meta.env.BASE_URL}leaderboard`, active: true },
-            { label: 'Dashboard',  href: `${import.meta.env.BASE_URL}dashboard` },
-          ].map(({ label, href, active }) => (
-            <a
-              key={label}
-              href={href}
-              className={`text-sm transition-colors ${active ? 'text-[#f5a623] font-semibold' : 'text-white/45 hover:text-white/75'}`}
-            >
-              {label}
-            </a>
-          ))}
-        </nav>
-        <button
-          onClick={() => setLocation('/')}
-          className="flex items-center gap-1.5 text-sm text-white/50 hover:text-white/80 transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back
-        </button>
-      </nav>
-
-      {/* Content */}
-      <div className="max-w-3xl mx-auto px-4 py-10">
+    <div className="min-h-screen bg-[#0e0e10] text-white flex flex-col">
+      <Navbar current="leaderboard" />
+      <div className="max-w-3xl mx-auto w-full px-4 py-10">
         <div className="mb-8 flex items-center gap-3">
           <Trophy className="w-6 h-6 text-[#f5a623]" />
           <div>

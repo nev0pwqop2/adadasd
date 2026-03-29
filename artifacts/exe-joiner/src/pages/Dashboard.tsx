@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation } from 'wouter';
+import Navbar from '@/components/Navbar';
 import { LogOut, LayoutGrid, Trophy, History, Settings, TrendingUp, X, Crown, Gavel, Plus, Wallet } from 'lucide-react';
 import { useGetMe, useLogout } from '@workspace/api-client-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -181,7 +182,11 @@ export default function Dashboard() {
   ];
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#0a0a0c]">
+    <div className="flex flex-col h-screen overflow-hidden bg-[#0a0a0c]">
+
+      <Navbar current="dashboard" />
+
+      <div className="flex flex-1 overflow-hidden">
 
       {/* ── Sidebar (desktop only) ─────────────────────────────────────── */}
       <aside className="hidden md:flex w-48 flex-shrink-0 flex-col border-r border-white/6 bg-[#0f0f13] overflow-y-auto">
@@ -636,6 +641,8 @@ export default function Dashboard() {
           <span className="text-[10px] font-medium">Logout</span>
         </button>
       </nav>
+
+      </div>{/* end flex-1 overflow-hidden */}
 
       {/* Modals */}
       <PaymentModal
