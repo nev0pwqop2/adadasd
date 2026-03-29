@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useLocation } from 'wouter';
 import { useGetMe } from '@workspace/api-client-react';
 
@@ -21,6 +21,7 @@ const ERROR_MESSAGES: Record<string, string> = {
 export default function Landing() {
   const [, setLocation] = useLocation();
   const { data: user, isLoading } = useGetMe({ query: { retry: false } as any });
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const params = new URLSearchParams(window.location.search);
   const errorCode = params.get('error');
@@ -30,61 +31,177 @@ export default function Landing() {
   }, [user, isLoading]);
 
   const handleLogin = () => {
-    window.location.href = '/api/auth/discord';
+    window.location.href = `${import.meta.env.BASE_URL}api/auth/discord`;
   };
 
   if (isLoading) {
     return (
       <div className="min-h-screen bg-[#0a0a0c] flex items-center justify-center">
-        <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+        <div className="w-5 h-5 border-2 border-[#f5a623] border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0c] flex flex-col items-center justify-center px-4">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_50%_40%_at_50%_0%,hsla(43,96%,56%,0.07),transparent)]" />
+    <div className="min-h-screen bg-[#0a0a0c] text-white flex flex-col overflow-x-hidden">
+      {/* Ambient background glow */}
+      <div className="pointer-events-none fixed inset-0 z-0">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[900px] h-[500px] bg-[radial-gradient(ellipse_at_top,hsla(38,90%,55%,0.10),transparent_65%)]" />
+        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-[radial-gradient(ellipse_at_bottom,hsla(38,90%,55%,0.05),transparent_70%)]" />
+      </div>
 
-      <div className="relative z-10 w-full max-w-[360px]">
-        {/* Card */}
-        <div className="bg-[#111115] border border-white/8 rounded-2xl p-8 flex flex-col items-center text-center shadow-2xl">
-          {/* Logo */}
-          <div className="w-14 h-14 rounded-2xl bg-primary/15 border border-primary/25 flex items-center justify-center mb-5 shadow-[0_0_24px_hsla(43,96%,56%,0.15)]">
-            <img
-              src={`${import.meta.env.BASE_URL}exe-logo.png`}
-              alt="EXE"
-              className="w-9 h-9 object-contain"
-            />
+      {/* ── Navbar ── */}
+      <header className="relative z-20 w-full border-b border-white/5 bg-[#0a0a0c]/80 backdrop-blur-md">
+        <div className="max-w-6xl mx-auto flex items-center justify-between px-5 h-16">
+          {/* Brand */}
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-[#f5a623]/15 border border-[#f5a623]/30 flex items-center justify-center shadow-[0_0_16px_hsla(38,90%,55%,0.2)]">
+              <img
+                src={`${import.meta.env.BASE_URL}exe-logo.png`}
+                alt="Exe Joiner"
+                className="w-5 h-5 object-contain"
+              />
+            </div>
+            <span className="font-bold text-[15px] tracking-tight">Exe Joiner</span>
           </div>
 
-          <h1 className="text-xl font-bold text-white mb-1 tracking-tight">Exe Joiner</h1>
-          <p className="text-sm text-white/40 mb-6">Sign in to access your dashboard</p>
+          {/* Desktop nav links */}
+          <nav className="hidden md:flex items-center gap-7">
+            {['Home', 'Plans', 'Dashboard'].map((item) => (
+              <a
+                key={item}
+                href={item === 'Dashboard' ? `${import.meta.env.BASE_URL}dashboard` : '#'}
+                className="text-sm text-white/50 hover:text-white transition-colors font-medium"
+              >
+                {item}
+              </a>
+            ))}
+          </nav>
 
-          {errorCode && (
-            <div className="w-full mb-4 rounded-xl border border-red-500/25 bg-red-500/8 p-3 text-left">
-              <p className="text-xs text-red-400">
-                {ERROR_MESSAGES[errorCode] ?? `Error: ${errorCode}`}
-              </p>
-            </div>
-          )}
+          {/* Desktop CTA */}
+          <div className="hidden md:flex items-center gap-3">
+            <button
+              onClick={handleLogin}
+              className="flex items-center gap-2 px-4 h-9 rounded-lg border border-white/15 text-sm font-medium text-white/80 hover:border-white/30 hover:text-white transition-colors"
+            >
+              <DiscordIcon />
+              Login
+            </button>
+          </div>
 
+          {/* Mobile burger */}
           <button
-            onClick={handleLogin}
-            className="w-full flex items-center justify-center gap-2.5 h-11 rounded-xl bg-[#5865F2] text-white font-semibold text-sm hover:bg-[#4752c4] active:bg-[#3c45a5] transition-colors"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="md:hidden flex flex-col gap-1.5 p-1"
           >
-            <DiscordIcon />
-            Sign in with Discord
+            <span className={`block w-5 h-0.5 bg-white/60 transition-all ${mobileMenuOpen ? 'rotate-45 translate-y-2' : ''}`} />
+            <span className={`block w-5 h-0.5 bg-white/60 transition-all ${mobileMenuOpen ? 'opacity-0' : ''}`} />
+            <span className={`block w-5 h-0.5 bg-white/60 transition-all ${mobileMenuOpen ? '-rotate-45 -translate-y-2' : ''}`} />
           </button>
-
-          <p className="mt-4 text-[11px] text-white/25 leading-relaxed">
-            By signing in, you agree to our Terms of Service
-          </p>
         </div>
 
-        <p className="mt-5 text-center text-xs text-white/25">
-          Verified Discord accounts only
+        {/* Mobile dropdown */}
+        {mobileMenuOpen && (
+          <div className="md:hidden border-t border-white/5 bg-[#0d0d10] px-5 pb-4 pt-3 flex flex-col gap-3">
+            {['Home', 'Plans', 'Dashboard'].map((item) => (
+              <a key={item} href="#" className="text-sm text-white/60 hover:text-white transition-colors">
+                {item}
+              </a>
+            ))}
+            <button
+              onClick={handleLogin}
+              className="mt-1 flex items-center justify-center gap-2 h-10 rounded-lg border border-white/15 text-sm font-medium text-white/80 hover:border-white/30"
+            >
+              <DiscordIcon />
+              Login with Discord
+            </button>
+          </div>
+        )}
+      </header>
+
+      {/* ── Hero ── */}
+      <main className="relative z-10 flex-1 flex flex-col items-center justify-center px-5 pt-20 pb-24">
+        {/* Logo / Mascot */}
+        <div className="mb-8 relative">
+          <div className="w-28 h-28 rounded-3xl bg-[#f5a623]/10 border border-[#f5a623]/25 flex items-center justify-center shadow-[0_0_60px_hsla(38,90%,55%,0.18)]">
+            <img
+              src={`${import.meta.env.BASE_URL}exe-logo.png`}
+              alt="Exe Joiner"
+              className="w-18 h-18 object-contain"
+              style={{ width: '4.5rem', height: '4.5rem' }}
+            />
+          </div>
+          {/* Glow ring */}
+          <div className="absolute inset-0 rounded-3xl bg-[#f5a623]/5 blur-2xl scale-150 pointer-events-none" />
+        </div>
+
+        {/* Headline */}
+        <h1 className="text-center font-black leading-[1.1] tracking-tight mb-5" style={{ fontSize: 'clamp(2.6rem, 7vw, 5rem)' }}>
+          Rent a slot.<br />
+          <span className="text-[#f5a623]">Join instantly.</span>
+        </h1>
+
+        {/* Subtitle */}
+        <p className="text-center text-white/50 text-base md:text-lg max-w-md leading-relaxed mb-10">
+          Secure a limited Exe Joiner slot, get your Luarmor script key, and never miss a session. Powered by real-time delivery.
         </p>
-      </div>
+
+        {/* Error banner */}
+        {errorCode && (
+          <div className="w-full max-w-sm mb-6 rounded-xl border border-red-500/25 bg-red-500/8 p-3 text-center">
+            <p className="text-xs text-red-400">
+              {ERROR_MESSAGES[errorCode] ?? `Error: ${errorCode}`}
+            </p>
+          </div>
+        )}
+
+        {/* CTAs */}
+        <div className="flex flex-col sm:flex-row items-center gap-3 w-full max-w-xs sm:max-w-none sm:w-auto">
+          <button
+            onClick={handleLogin}
+            className="w-full sm:w-auto px-8 h-12 rounded-xl bg-[#f5a623] text-black font-bold text-sm hover:bg-[#e8961a] active:bg-[#d4880f] transition-colors shadow-[0_4px_24px_hsla(38,90%,55%,0.35)]"
+          >
+            Get a Slot
+          </button>
+          <button
+            onClick={handleLogin}
+            className="w-full sm:w-auto flex items-center justify-center gap-2.5 px-8 h-12 rounded-xl border border-white/15 text-sm font-semibold text-white/80 hover:border-white/30 hover:text-white transition-colors"
+          >
+            <DiscordIcon />
+            Login with Discord
+          </button>
+        </div>
+
+        {/* Trust note */}
+        <p className="mt-8 text-[12px] text-white/25 text-center">
+          Verified Discord accounts only &nbsp;·&nbsp; Slots are limited
+        </p>
+
+        {/* Feature pills */}
+        <div className="mt-16 flex flex-wrap justify-center gap-3 max-w-lg">
+          {[
+            { icon: '⚡', label: 'Instant delivery' },
+            { icon: '🔒', label: 'HWID locked keys' },
+            { icon: '💳', label: 'Crypto & card payments' },
+            { icon: '🔁', label: 'Auto-renew queue' },
+          ].map(({ icon, label }) => (
+            <div
+              key={label}
+              className="flex items-center gap-2 px-4 py-2 rounded-full border border-white/8 bg-white/3 text-sm text-white/55 font-medium"
+            >
+              <span>{icon}</span>
+              <span>{label}</span>
+            </div>
+          ))}
+        </div>
+      </main>
+
+      {/* ── Footer ── */}
+      <footer className="relative z-10 border-t border-white/5 py-5 text-center">
+        <p className="text-xs text-white/20">
+          © {new Date().getFullYear()} Exe Joiner &nbsp;·&nbsp; All rights reserved
+        </p>
+      </footer>
     </div>
   );
 }
