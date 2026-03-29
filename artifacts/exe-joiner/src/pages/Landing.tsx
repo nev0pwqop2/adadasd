@@ -69,9 +69,9 @@ export default function Landing() {
           {/* Nav links — center */}
           <nav className="hidden sm:flex items-center gap-6">
             {[
-              { label: 'Home',         href: '#',                                          active: true  },
-              { label: 'Plans',        href: '#',                                          active: false },
-              { label: 'Leaderboard', href: `${import.meta.env.BASE_URL}dashboard`,       active: false },
+              { label: 'Home',         href: '#',                                            active: true  },
+              { label: 'Plans',        href: `${import.meta.env.BASE_URL}plans`,           active: false },
+              { label: 'Leaderboard', href: `${import.meta.env.BASE_URL}leaderboard`,     active: false },
               { label: 'Dashboard',   href: `${import.meta.env.BASE_URL}dashboard`,       active: false },
             ].map(({ label, href, active }) => (
               <a

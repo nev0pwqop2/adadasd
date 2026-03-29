@@ -8,6 +8,8 @@ import NotFound from "@/pages/not-found";
 import Landing from "@/pages/Landing";
 import Dashboard from "@/pages/Dashboard";
 import Admin from "@/pages/Admin";
+import LeaderboardPage from "@/pages/Leaderboard";
+import PlansPage from "@/pages/Plans";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -36,6 +38,8 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={Landing} />
+      <Route path="/plans" component={PlansPage} />
+      <Route path="/leaderboard" component={LeaderboardPage} />
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/admin" component={AdminRoute} />
       <Route component={NotFound} />

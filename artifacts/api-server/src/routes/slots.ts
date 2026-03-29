@@ -465,7 +465,18 @@ router.get("/", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/leaderboard", requireAuth, async (req, res) => {
+router.get("/public-settings", async (req, res) => {
+  try {
+    const { slotCount, pricePerDay, slotDurationHours, hourlyPricingEnabled, pricePerHour, minHours } = await getSettings();
+    const activeSlots = await db.select().from(slotsTable).where(eq(slotsTable.isActive, true));
+    res.json({ slotCount, pricePerDay, slotDurationHours, hourlyPricingEnabled, pricePerHour, minHours, activeCount: activeSlots.length });
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch public settings");
+    res.status(500).json({ error: "server_error", message: "Failed to fetch settings" });
+  }
+});
+
+router.get("/leaderboard", async (req, res) => {
   try {
     const { slotDurationHours, pricePerDay } = await getSettings();
 
