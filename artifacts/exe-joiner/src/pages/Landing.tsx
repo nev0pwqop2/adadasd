@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { useGetMe } from '@workspace/api-client-react';
 
 const DiscordIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
     <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057c.002.022.015.04.033.05a19.89 19.89 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/>
   </svg>
 );
@@ -18,10 +18,16 @@ const ERROR_MESSAGES: Record<string, string> = {
   server_error: 'An unexpected server error occurred.',
 };
 
+const STATS = [
+  { value: '500+', label: 'Total users' },
+  { value: '5',    label: 'Active slots' },
+  { value: '24h',  label: 'Max duration' },
+  { value: '100%', label: 'Uptime' },
+];
+
 export default function Landing() {
   const [, setLocation] = useLocation();
   const { data: user, isLoading } = useGetMe({ query: { retry: false } as any });
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const params = new URLSearchParams(window.location.search);
   const errorCode = params.get('error');
@@ -36,172 +42,119 @@ export default function Landing() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#0a0a0c] flex items-center justify-center">
+      <div className="min-h-screen bg-[#0f0b07] flex items-center justify-center">
         <div className="w-5 h-5 border-2 border-[#f5a623] border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0c] text-white flex flex-col overflow-x-hidden">
-      {/* Ambient background glow */}
-      <div className="pointer-events-none fixed inset-0 z-0">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[900px] h-[500px] bg-[radial-gradient(ellipse_at_top,hsla(38,90%,55%,0.10),transparent_65%)]" />
-        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-[radial-gradient(ellipse_at_bottom,hsla(38,90%,55%,0.05),transparent_70%)]" />
-      </div>
+    <div className="min-h-screen bg-[#0f0b07] text-white flex flex-col items-center overflow-x-hidden">
+      {/* Warm radial glow */}
+      <div className="pointer-events-none fixed inset-0 z-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_80%,hsla(30,70%,25%,0.35),transparent)]" />
 
       {/* ── Navbar ── */}
-      <header className="relative z-20 w-full border-b border-white/5 bg-[#0a0a0c]/80 backdrop-blur-md">
-        <div className="max-w-6xl mx-auto flex items-center justify-between px-5 h-16">
-          {/* Brand */}
+      <header className="relative z-20 w-full bg-[#130e06] border-b border-white/5">
+        <div className="max-w-5xl mx-auto flex items-center justify-between px-6 h-14">
+          {/* Brand — left */}
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-[#f5a623]/15 border border-[#f5a623]/30 flex items-center justify-center shadow-[0_0_16px_hsla(38,90%,55%,0.2)]">
-              <img
-                src={`${import.meta.env.BASE_URL}exe-logo.png`}
-                alt="Exe Joiner"
-                className="w-5 h-5 object-contain"
-              />
-            </div>
-            <span className="font-bold text-[15px] tracking-tight">Exe Joiner</span>
+            <img
+              src={`${import.meta.env.BASE_URL}exe-logo.png`}
+              alt="Exe Joiner"
+              className="w-6 h-6 object-contain"
+            />
+            <span className="font-bold text-[15px] text-white/90">Exe Joiner</span>
           </div>
 
-          {/* Desktop nav links */}
-          <nav className="hidden md:flex items-center gap-7">
-            {['Home', 'Plans', 'Dashboard'].map((item) => (
+          {/* Nav links — center */}
+          <nav className="hidden sm:flex items-center gap-6">
+            {[
+              { label: 'Home', active: true },
+              { label: 'Plans', active: false },
+              { label: 'Dashboard', active: false },
+            ].map(({ label, active }) => (
               <a
-                key={item}
-                href={item === 'Dashboard' ? `${import.meta.env.BASE_URL}dashboard` : '#'}
-                className="text-sm text-white/50 hover:text-white transition-colors font-medium"
+                key={label}
+                href={label === 'Dashboard' ? `${import.meta.env.BASE_URL}dashboard` : '#'}
+                className={`text-sm transition-colors ${
+                  active ? 'text-[#f5a623] font-semibold' : 'text-white/45 hover:text-white/75'
+                }`}
               >
-                {item}
+                {label}
               </a>
             ))}
           </nav>
 
-          {/* Desktop CTA */}
-          <div className="hidden md:flex items-center gap-3">
-            <button
-              onClick={handleLogin}
-              className="flex items-center gap-2 px-4 h-9 rounded-lg border border-white/15 text-sm font-medium text-white/80 hover:border-white/30 hover:text-white transition-colors"
-            >
-              <DiscordIcon />
-              Login
-            </button>
-          </div>
-
-          {/* Mobile burger */}
+          {/* Login — right */}
           <button
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="md:hidden flex flex-col gap-1.5 p-1"
+            onClick={handleLogin}
+            className="flex items-center gap-2 px-4 h-8 rounded-lg border border-white/12 text-sm text-white/50 hover:text-white/80 hover:border-white/25 transition-colors"
           >
-            <span className={`block w-5 h-0.5 bg-white/60 transition-all ${mobileMenuOpen ? 'rotate-45 translate-y-2' : ''}`} />
-            <span className={`block w-5 h-0.5 bg-white/60 transition-all ${mobileMenuOpen ? 'opacity-0' : ''}`} />
-            <span className={`block w-5 h-0.5 bg-white/60 transition-all ${mobileMenuOpen ? '-rotate-45 -translate-y-2' : ''}`} />
+            <DiscordIcon />
+            Login
           </button>
         </div>
-
-        {/* Mobile dropdown */}
-        {mobileMenuOpen && (
-          <div className="md:hidden border-t border-white/5 bg-[#0d0d10] px-5 pb-4 pt-3 flex flex-col gap-3">
-            {['Home', 'Plans', 'Dashboard'].map((item) => (
-              <a key={item} href="#" className="text-sm text-white/60 hover:text-white transition-colors">
-                {item}
-              </a>
-            ))}
-            <button
-              onClick={handleLogin}
-              className="mt-1 flex items-center justify-center gap-2 h-10 rounded-lg border border-white/15 text-sm font-medium text-white/80 hover:border-white/30"
-            >
-              <DiscordIcon />
-              Login with Discord
-            </button>
-          </div>
-        )}
       </header>
 
       {/* ── Hero ── */}
-      <main className="relative z-10 flex-1 flex flex-col items-center justify-center px-5 pt-20 pb-24">
-        {/* Logo / Mascot */}
-        <div className="mb-8 relative">
-          <div className="w-28 h-28 rounded-3xl bg-[#f5a623]/10 border border-[#f5a623]/25 flex items-center justify-center shadow-[0_0_60px_hsla(38,90%,55%,0.18)]">
-            <img
-              src={`${import.meta.env.BASE_URL}exe-logo.png`}
-              alt="Exe Joiner"
-              className="w-18 h-18 object-contain"
-              style={{ width: '4.5rem', height: '4.5rem' }}
-            />
-          </div>
-          {/* Glow ring */}
-          <div className="absolute inset-0 rounded-3xl bg-[#f5a623]/5 blur-2xl scale-150 pointer-events-none" />
-        </div>
+      <main className="relative z-10 flex flex-col items-center justify-center flex-1 px-5 pt-16 pb-10 text-center">
+        {/* Floating logo — no box, just the image */}
+        <img
+          src={`${import.meta.env.BASE_URL}exe-logo.png`}
+          alt="Exe Joiner"
+          className="w-24 h-24 object-contain mb-8 drop-shadow-[0_0_32px_rgba(245,166,35,0.4)]"
+        />
 
         {/* Headline */}
-        <h1 className="text-center font-black leading-[1.1] tracking-tight mb-5" style={{ fontSize: 'clamp(2.6rem, 7vw, 5rem)' }}>
-          Rent a slot.<br />
-          <span className="text-[#f5a623]">Join instantly.</span>
+        <h1 className="text-4xl sm:text-5xl font-extrabold leading-tight mb-1">
+          Rent a slot.
+        </h1>
+        <h1 className="text-4xl sm:text-5xl font-extrabold leading-tight text-[#f5a623] mb-5">
+          Join instantly.
         </h1>
 
         {/* Subtitle */}
-        <p className="text-center text-white/50 text-base md:text-lg max-w-md leading-relaxed mb-10">
-          Secure a limited Exe Joiner slot, get your Luarmor script key, and never miss a session. Powered by real-time delivery.
+        <p className="text-sm sm:text-base text-white/45 max-w-sm mb-8 leading-relaxed">
+          Secure a limited Exe Joiner slot and get your script key delivered the moment you pay.
         </p>
 
-        {/* Error banner */}
+        {/* Error */}
         {errorCode && (
-          <div className="w-full max-w-sm mb-6 rounded-xl border border-red-500/25 bg-red-500/8 p-3 text-center">
-            <p className="text-xs text-red-400">
-              {ERROR_MESSAGES[errorCode] ?? `Error: ${errorCode}`}
-            </p>
+          <div className="mb-5 px-4 py-2.5 rounded-xl border border-red-500/25 bg-red-500/8 text-xs text-red-400 max-w-xs">
+            {ERROR_MESSAGES[errorCode] ?? `Error: ${errorCode}`}
           </div>
         )}
 
         {/* CTAs */}
-        <div className="flex flex-col sm:flex-row items-center gap-3 w-full max-w-xs sm:max-w-none sm:w-auto">
+        <div className="flex items-center gap-3">
           <button
             onClick={handleLogin}
-            className="w-full sm:w-auto px-8 h-12 rounded-xl bg-[#f5a623] text-black font-bold text-sm hover:bg-[#e8961a] active:bg-[#d4880f] transition-colors shadow-[0_4px_24px_hsla(38,90%,55%,0.35)]"
+            className="px-6 h-10 rounded-lg bg-[#f5a623] text-black font-bold text-sm hover:bg-[#e8961a] transition-colors shadow-[0_2px_20px_rgba(245,166,35,0.4)]"
           >
-            Get a Slot
+            Get a slot
           </button>
           <button
             onClick={handleLogin}
-            className="w-full sm:w-auto flex items-center justify-center gap-2.5 px-8 h-12 rounded-xl border border-white/15 text-sm font-semibold text-white/80 hover:border-white/30 hover:text-white transition-colors"
+            className="flex items-center gap-2 px-6 h-10 rounded-lg border border-white/15 bg-white/5 text-sm font-medium text-white/70 hover:text-white hover:border-white/25 transition-colors"
           >
             <DiscordIcon />
             Login with Discord
           </button>
         </div>
 
-        {/* Trust note */}
-        <p className="mt-8 text-[12px] text-white/25 text-center">
-          Verified Discord accounts only &nbsp;·&nbsp; Slots are limited
-        </p>
-
-        {/* Feature pills */}
-        <div className="mt-16 flex flex-wrap justify-center gap-3 max-w-lg">
-          {[
-            { icon: '⚡', label: 'Instant delivery' },
-            { icon: '🔒', label: 'HWID locked keys' },
-            { icon: '💳', label: 'Crypto & card payments' },
-            { icon: '🔁', label: 'Auto-renew queue' },
-          ].map(({ icon, label }) => (
+        {/* ── Stats row ── */}
+        <div className="mt-16 grid grid-cols-2 sm:grid-cols-4 gap-3 w-full max-w-lg">
+          {STATS.map(({ value, label }) => (
             <div
               key={label}
-              className="flex items-center gap-2 px-4 py-2 rounded-full border border-white/8 bg-white/3 text-sm text-white/55 font-medium"
+              className="flex flex-col items-center justify-center py-4 px-3 rounded-xl border border-white/8 bg-white/3"
             >
-              <span>{icon}</span>
-              <span>{label}</span>
+              <span className="text-lg font-bold text-white">{value}</span>
+              <span className="text-xs text-white/35 mt-0.5">{label}</span>
             </div>
           ))}
         </div>
       </main>
-
-      {/* ── Footer ── */}
-      <footer className="relative z-10 border-t border-white/5 py-5 text-center">
-        <p className="text-xs text-white/20">
-          © {new Date().getFullYear()} Exe Joiner &nbsp;·&nbsp; All rights reserved
-        </p>
-      </footer>
     </div>
   );
 }
