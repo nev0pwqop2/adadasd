@@ -1,7 +1,6 @@
 import express, { type Express } from "express";
 import cors from "cors";
 import helmet from "helmet";
-import rateLimit from "express-rate-limit";
 import pinoHttp from "pino-http";
 import cookieParser from "cookie-parser";
 import path from "path";
@@ -77,47 +76,6 @@ function getRealIp(req: express.Request): string {
   return req.socket.remoteAddress ?? "unknown";
 }
 
-// Rate limiters
-const authLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 20,
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: getRealIp,
-  validate: { xForwardedForHeader: false },
-  message: { error: "too_many_requests", message: "Too many requests. Please slow down." },
-});
-
-const paymentLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 10,
-  standardHeaders: true,
-  legacyHeaders: false,
-  // Key by user ID so limits are per-account; unauthenticated requests share one bucket
-  keyGenerator: (req) => (req.session as any)?.userId ?? getRealIp(req),
-  validate: { xForwardedForHeader: false },
-  message: { error: "too_many_requests", message: "Too many payment requests. Please slow down." },
-});
-
-const balanceLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 15,
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: (req) => (req.session as any)?.userId ?? getRealIp(req),
-  validate: { xForwardedForHeader: false },
-  message: { error: "too_many_requests", message: "Too many requests. Please slow down." },
-});
-
-const strictLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 120,
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: (req) => (req.session as any)?.userId ?? getRealIp(req),
-  validate: { xForwardedForHeader: false },
-  message: { error: "too_many_requests", message: "Too many requests. Please slow down." },
-});
 
 app.use(cookieParser());
 app.use(sessionMiddleware);
@@ -169,14 +127,6 @@ app.use("/api", (_req, res, next) => {
   res.setHeader("Pragma", "no-cache");
   next();
 });
-
-// Apply rate limiters to specific route groups
-app.use("/api/auth", authLimiter);
-app.use("/api/payments/nowpayments", paymentLimiter);
-app.use("/api/payments/stripe", paymentLimiter);
-app.use("/api/balance", balanceLimiter);
-app.use("/api/bids", balanceLimiter);
-app.use("/api", strictLimiter);
 
 app.use("/api", router);
 

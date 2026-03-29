@@ -28,26 +28,18 @@ const STATS = [
 
 export default function Landing() {
   const [, setLocation] = useLocation();
-  const { data: user, isLoading } = useGetMe({ query: { retry: false } as any });
+  const { data: user } = useGetMe({ query: { retry: false, staleTime: 30000 } as any });
 
   const params = new URLSearchParams(window.location.search);
   const errorCode = params.get('error');
 
   useEffect(() => {
-    if (!isLoading && user) setLocation('/dashboard');
-  }, [user, isLoading]);
+    if (user) setLocation('/dashboard');
+  }, [user]);
 
   const handleLogin = () => {
     window.location.href = `${import.meta.env.BASE_URL}api/auth/discord`;
   };
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-[#0f0b07] flex items-center justify-center">
-        <div className="w-5 h-5 border-2 border-[#f5a623] border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-[#0f0b07] text-white flex flex-col items-center overflow-x-hidden">
