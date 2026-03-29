@@ -182,11 +182,14 @@ router.get("/discord/callback", async (req, res) => {
     }
 
     // Auto-join the Discord server (best-effort — never blocks login)
+    // Requires: bot in server, bot has CREATE_INSTANT_INVITE, guilds.join OAuth scope
     const guildId = process.env.DISCORD_GUILD_ID;
     const botToken = process.env.DISCORD_BOT_TOKEN;
     if (guildId && botToken) {
       try {
-        const joinRes = await fetch(`https://discord.com/api/v10/guilds/${guildId}/members/${discordUser.id}`, {
+        const joinUrl = `https://discord.com/api/v10/guilds/${guildId}/members/${discordUser.id}`;
+        req.log.info({ discordId: discordUser.id, guildId, joinUrl }, "Attempting guild join");
+        const joinRes = await fetch(joinUrl, {
           method: "PUT",
           headers: {
             Authorization: `Bot ${botToken}`,
@@ -194,17 +197,19 @@ router.get("/discord/callback", async (req, res) => {
           },
           body: JSON.stringify({ access_token: tokenData.access_token }),
         });
+        const joinBody = joinRes.status !== 204 ? await joinRes.text() : "(no body)";
         if (joinRes.status === 201) {
-          req.log.info({ discordId: discordUser.id }, "User added to guild");
+          req.log.info({ discordId: discordUser.id }, "User successfully added to guild");
         } else if (joinRes.status === 204) {
           req.log.info({ discordId: discordUser.id }, "User already in guild");
         } else {
-          const body = await joinRes.text();
-          req.log.warn({ status: joinRes.status, body }, "Guild join returned unexpected status");
+          req.log.warn({ status: joinRes.status, body: joinBody, discordId: discordUser.id, guildId }, "Guild join failed — check bot permissions and token");
         }
       } catch (guildErr) {
-        req.log.warn({ guildErr }, "Failed to auto-join user to guild — continuing");
+        req.log.warn({ guildErr }, "Guild join request threw — continuing");
       }
+    } else {
+      req.log.warn({ hasGuildId: !!guildId, hasBotToken: !!botToken }, "Guild auto-join skipped — missing DISCORD_GUILD_ID or DISCORD_BOT_TOKEN env var");
     }
 
     // Regenerate the session ID after login to prevent session fixation attacks.
