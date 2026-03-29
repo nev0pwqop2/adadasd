@@ -206,7 +206,7 @@ export default function Dashboard() {
               <>
                 <div className="flex items-center gap-2 mb-1">
                   <div className="w-2 h-2 rounded-full bg-[#f5a623] animate-pulse" />
-                  <span className="text-sm font-semibold text-[#f5a623]">Slot #{mySlot.slotNumber}</span>
+                  <span className="text-sm font-semibold text-[#f5a623]">Slot</span>
                 </div>
                 <p className="text-xs text-white/40">
                   {hourlyPricingEnabled
@@ -377,15 +377,18 @@ export default function Dashboard() {
       </main>
 
       {/* Modals */}
-      {purchasingSlot !== null && (
-        <PaymentModal
-          slotNumber={purchasingSlot}
-          slotsData={slotsRes!}
-          balance={userBalance}
-          onClose={() => setPurchasingSlot(null)}
-          onSuccess={() => { setPurchasingSlot(null); refetchSlots(); }}
-        />
-      )}
+      <PaymentModal
+        isOpen={purchasingSlot !== null}
+        slotNumber={purchasingSlot ?? 1}
+        pricePerDay={pricePerDay}
+        slotDurationHours={slotDurationHours}
+        hourlyPricingEnabled={hourlyPricingEnabled}
+        pricePerHour={pricePerHour}
+        minHours={minHours}
+        userBalance={userBalance}
+        onClose={() => setPurchasingSlot(null)}
+        onSuccess={() => { setPurchasingSlot(null); refetchSlots(); }}
+      />
       {managingSlot && (
         <ManageSlotModal
           slot={managingSlot}
@@ -393,21 +396,20 @@ export default function Dashboard() {
           onSuccess={() => { setManagingSlot(null); refetchSlots(); }}
         />
       )}
-      {showPreorderModal && (
+      {showPreorderModal && slotsRes && (
         <PreorderModal
           myPreorder={myPreorder}
-          slotsData={slotsRes!}
+          slotsData={slotsRes}
           balance={userBalance}
           onClose={() => setShowPreorderModal(false)}
           onSuccess={() => { setShowPreorderModal(false); refetchPreorders(); refetchBalance(); }}
         />
       )}
-      {showDepositModal && (
-        <DepositModal
-          onClose={() => setShowDepositModal(false)}
-          onSuccess={() => { setShowDepositModal(false); refetchBalance(); }}
-        />
-      )}
+      <DepositModal
+        isOpen={showDepositModal}
+        onClose={() => setShowDepositModal(false)}
+        onSuccess={() => { setShowDepositModal(false); refetchBalance(); }}
+      />
     </div>
   );
 }
