@@ -236,9 +236,21 @@ function startDiscordBot() {
 
   const botPath = path.resolve(__dirname, "../../discord-bot/dist/index.js");
 
+  // Check file exists before spawning — avoids crashing the server if bot isn't built
+  const fs = require("fs");
+  if (!fs.existsSync(botPath)) {
+    logger.warn({ botPath }, "Discord bot dist not found — skipping bot startup");
+    return;
+  }
+
   const bot = spawn("node", [botPath], {
     stdio: "inherit",
     env: process.env,
+  });
+
+  bot.on("error", (err) => {
+    logger.warn({ err }, "Discord bot spawn error — retrying in 10s");
+    setTimeout(startDiscordBot, 10000);
   });
 
   bot.on("exit", (code) => {
