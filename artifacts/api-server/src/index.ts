@@ -234,7 +234,7 @@ if (Number.isNaN(port) || port <= 0) {
 function startDiscordBot() {
   if (process.env.REPLIT_DEV_DOMAIN) return;
 
-  const botPath = path.resolve(__dirname, "bot.mjs");
+  const botPath = path.resolve(__dirname, "../../discord-bot/dist/index.js");
 
   const bot = spawn("node", [botPath], {
     stdio: "inherit",

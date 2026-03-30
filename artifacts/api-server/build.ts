@@ -68,18 +68,6 @@ async function buildAll() {
     logLevel: "info",
   });
 
-  // ── Discord bot (bundled standalone — no external deps needed) ──
-  console.log("building discord bot...");
-  await esbuild({
-    entryPoints: [path.resolve(__dirname, "../discord-bot/src/index.ts")],
-    platform: "node",
-    bundle: true,
-    format: "esm",
-    outfile: path.resolve(distDir, "bot.mjs"),
-    minify: false,
-    logLevel: "info",
-  });
-
   console.log("build complete ✓");
 }
 
