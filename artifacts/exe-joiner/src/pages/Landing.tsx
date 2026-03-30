@@ -1,5 +1,4 @@
-import React, { useEffect } from 'react';
-import { useLocation } from 'wouter';
+import React from 'react';
 import { useGetMe } from '@workspace/api-client-react';
 import Navbar from '@/components/Navbar';
 
@@ -27,15 +26,10 @@ const STATS = [
 ];
 
 export default function Landing() {
-  const [, setLocation] = useLocation();
   const { data: user } = useGetMe({ query: { retry: false, staleTime: 30000 } as any });
 
   const params = new URLSearchParams(window.location.search);
   const errorCode = params.get('error');
-
-  useEffect(() => {
-    if (user) setLocation('/dashboard');
-  }, [user]);
 
   const handleLogin = () => {
     window.location.href = `${import.meta.env.BASE_URL}api/auth/discord`;
@@ -78,21 +72,38 @@ export default function Landing() {
         )}
 
         {/* CTAs */}
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleLogin}
-            className="px-6 h-10 rounded-lg bg-[#f5a623] text-black font-bold text-sm hover:bg-[#e8961a] transition-colors shadow-[0_2px_20px_rgba(245,166,35,0.4)]"
-          >
-            Get a slot
-          </button>
-          <button
-            onClick={handleLogin}
-            className="flex items-center gap-2 px-6 h-10 rounded-lg border border-white/15 bg-white/5 text-sm font-medium text-white/70 hover:text-white hover:border-white/25 transition-colors"
-          >
-            <DiscordIcon />
-            Login with Discord
-          </button>
-        </div>
+        {user ? (
+          <div className="flex items-center gap-3">
+            <a
+              href={`${import.meta.env.BASE_URL}dashboard`}
+              className="px-6 h-10 rounded-lg bg-[#f5a623] text-black font-bold text-sm hover:bg-[#e8961a] transition-colors shadow-[0_2px_20px_rgba(245,166,35,0.4)] flex items-center"
+            >
+              Go to Dashboard
+            </a>
+            <a
+              href={`${import.meta.env.BASE_URL}plans`}
+              className="flex items-center gap-2 px-6 h-10 rounded-lg border border-white/15 bg-white/5 text-sm font-medium text-white/70 hover:text-white hover:border-white/25 transition-colors"
+            >
+              View Plans
+            </a>
+          </div>
+        ) : (
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleLogin}
+              className="px-6 h-10 rounded-lg bg-[#f5a623] text-black font-bold text-sm hover:bg-[#e8961a] transition-colors shadow-[0_2px_20px_rgba(245,166,35,0.4)]"
+            >
+              Get a slot
+            </button>
+            <button
+              onClick={handleLogin}
+              className="flex items-center gap-2 px-6 h-10 rounded-lg border border-white/15 bg-white/5 text-sm font-medium text-white/70 hover:text-white hover:border-white/25 transition-colors"
+            >
+              <DiscordIcon />
+              Login with Discord
+            </button>
+          </div>
+        )}
 
         {/* ── Stats row ── */}
         <div className="mt-16 grid grid-cols-2 sm:grid-cols-4 gap-3 w-full max-w-lg">

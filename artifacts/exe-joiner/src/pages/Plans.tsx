@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import Navbar from '@/components/Navbar';
 import { Zap, Shield, Clock, RefreshCw } from 'lucide-react';
+import { useGetMe } from '@workspace/api-client-react';
 
 async function apiFetch<T>(path: string): Promise<T> {
   const res = await fetch(`${import.meta.env.BASE_URL}${path}`);
@@ -46,6 +47,10 @@ function NextSlotTimer({ nextExpiresAt }: { nextExpiresAt: string | null }) {
 }
 
 export default function PlansPage() {
+  const { data: user } = useGetMe({ query: { retry: false } as any });
+  const isLoggedIn = !!user;
+  const loginUrl = `${import.meta.env.BASE_URL}api/auth/discord`;
+
   const { data, isLoading } = useQuery({
     queryKey: ['public-settings'],
     queryFn: () => apiFetch<PublicSettings>('api/slots/public-settings'),
@@ -164,16 +169,25 @@ export default function PlansPage() {
                 )}
               </div>
 
-              <a
-                href={`${base}dashboard`}
-                className={`block w-full text-center font-bold text-sm py-3 rounded-xl transition-all ${
-                  allFull
-                    ? 'bg-white/8 text-white/30 cursor-not-allowed pointer-events-none'
-                    : 'bg-[#f5a623] text-black hover:bg-[#e8961a]'
-                }`}
-              >
-                {allFull ? 'All slots full' : 'Get a slot'}
-              </a>
+              {!isLoggedIn ? (
+                <a
+                  href={loginUrl}
+                  className="block w-full text-center font-bold text-sm py-3 rounded-xl transition-all bg-[#f5a623] text-black hover:bg-[#e8961a]"
+                >
+                  Login to buy
+                </a>
+              ) : (
+                <a
+                  href={`${base}dashboard`}
+                  className={`block w-full text-center font-bold text-sm py-3 rounded-xl transition-all ${
+                    allFull
+                      ? 'bg-white/8 text-white/30 cursor-not-allowed pointer-events-none'
+                      : 'bg-[#f5a623] text-black hover:bg-[#e8961a]'
+                  }`}
+                >
+                  {allFull ? 'All slots full' : 'Get a slot'}
+                </a>
+              )}
             </div>
 
             {/* ── Bid Slot Card ── */}
@@ -239,12 +253,21 @@ export default function PlansPage() {
                 {allFull ? 'All slots are full — bidding opens when a slot expires.' : 'Slots available — bid to join the queue.'}
               </p>
 
-              <a
-                href={`${base}dashboard`}
-                className="block w-full text-center font-bold text-sm py-3 rounded-xl border border-[#f5a623]/30 text-[#f5a623] bg-[#f5a623]/8 hover:bg-[#f5a623]/15 transition-all"
-              >
-                Place a bid
-              </a>
+              {!isLoggedIn ? (
+                <a
+                  href={loginUrl}
+                  className="block w-full text-center font-bold text-sm py-3 rounded-xl border border-[#f5a623]/30 text-[#f5a623] bg-[#f5a623]/8 hover:bg-[#f5a623]/15 transition-all"
+                >
+                  Login to buy
+                </a>
+              ) : (
+                <a
+                  href={`${base}dashboard`}
+                  className="block w-full text-center font-bold text-sm py-3 rounded-xl border border-[#f5a623]/30 text-[#f5a623] bg-[#f5a623]/8 hover:bg-[#f5a623]/15 transition-all"
+                >
+                  Place a bid
+                </a>
+              )}
             </div>
 
           </motion.div>
