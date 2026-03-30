@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Zap, Clock, Shield, DiscIcon as Discord } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Navbar from '@/components/Navbar';
+import { Zap, Shield, Clock, RefreshCw } from 'lucide-react';
 
 async function apiFetch<T>(path: string): Promise<T> {
   const res = await fetch(`${import.meta.env.BASE_URL}${path}`);
@@ -20,121 +20,240 @@ type PublicSettings = {
   activeCount: number;
 };
 
+type BidsRes = {
+  bids: { id: number; amount: number; username: string; discordId: string; avatar: string | null }[];
+  myBid: null;
+  topPreorderAmount: number | null;
+};
+
+function NextSlotTimer({ nextExpiresAt }: { nextExpiresAt: string | null }) {
+  const getMs = () => nextExpiresAt ? Math.max(0, new Date(nextExpiresAt).getTime() - Date.now()) : 0;
+  const [ms, setMs] = useState(getMs);
+  useEffect(() => {
+    if (!nextExpiresAt) return;
+    const id = setInterval(() => setMs(getMs()), 1000);
+    return () => clearInterval(id);
+  }, [nextExpiresAt]);
+  if (!nextExpiresAt) return <span className="text-white/30 text-xs">—</span>;
+  const totalSec = Math.floor(ms / 1000);
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return (
+    <span className="font-mono font-bold text-[#f5a623]">
+      {String(m).padStart(2, '0')}:{String(s).padStart(2, '0')}
+    </span>
+  );
+}
+
 export default function PlansPage() {
   const { data, isLoading } = useQuery({
     queryKey: ['public-settings'],
     queryFn: () => apiFetch<PublicSettings>('api/slots/public-settings'),
+    refetchInterval: 10000,
   });
 
-  const available = data ? data.slotCount - data.activeCount : null;
+  const { data: slotsData } = useQuery({
+    queryKey: ['slots-public'],
+    queryFn: () => apiFetch<{ slots: any[]; totalSlots: number; nextExpiresAt: string | null; hourlyPricingEnabled: boolean; pricePerHour: number; minHours: number; pricePerDay: number; slotDurationHours: number }>('api/slots'),
+    refetchInterval: 5000,
+    retry: false,
+  });
+
+  const { data: bidsPublic } = useQuery({
+    queryKey: ['bids-public'],
+    queryFn: () => apiFetch<BidsRes>('api/bids'),
+    refetchInterval: 5000,
+    retry: false,
+  });
+
+  const filled = data?.activeCount ?? 0;
+  const total = data?.slotCount ?? 0;
+  const available = total - filled;
+  const allFull = filled >= total && total > 0;
+  const fillPct = total > 0 ? (filled / total) * 100 : 0;
+  const nextExpiresAt = slotsData?.nextExpiresAt ?? null;
+  const topBid = bidsPublic?.bids?.[0]?.amount ?? null;
+  const base = import.meta.env.BASE_URL;
 
   const features = [
-    { icon: <Zap className="w-4 h-4 text-[#f5a623]" />, text: 'Instant script key delivery via DM' },
-    { icon: <Shield className="w-4 h-4 text-[#f5a623]" />, text: 'Luarmor-protected key with HWID lock' },
-    { icon: <Discord className="w-4 h-4 text-[#f5a623]" />, text: 'HWID reset available in dashboard' },
-    { icon: <Clock className="w-4 h-4 text-[#f5a623]" />, text: 'Auto-renewed or expires cleanly' },
+    { icon: <Zap className="w-3.5 h-3.5" />, text: 'Instant script key via Discord DM' },
+    { icon: <Shield className="w-3.5 h-3.5" />, text: 'Luarmor HWID-locked key' },
+    { icon: <RefreshCw className="w-3.5 h-3.5" />, text: 'HWID reset in dashboard' },
+    { icon: <Clock className="w-3.5 h-3.5" />, text: 'Auto-expired cleanly' },
   ];
 
   return (
-    <div className="min-h-screen bg-[#0e0e10] text-white flex flex-col">
+    <div className="min-h-screen bg-[#0a0a08] text-white flex flex-col">
+      <div className="pointer-events-none fixed inset-0 z-0 bg-[radial-gradient(ellipse_70%_50%_at_50%_80%,hsla(30,65%,20%,0.3),transparent)]" />
       <Navbar current="plans" />
-      <div className="max-w-2xl mx-auto w-full px-4 py-14 text-center">
-        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
-          <p className="text-xs font-semibold uppercase tracking-widest text-[#f5a623]/70 mb-3">Pricing</p>
-          <h1 className="text-3xl md:text-4xl font-extrabold text-white leading-tight mb-3">
-            One plan. <span className="text-[#f5a623]">No tricks.</span>
-          </h1>
-          <p className="text-sm text-white/40 mb-10">
-            Rent a limited slot and get your script key the moment you pay.
+
+      <div className="relative z-10 max-w-3xl mx-auto w-full px-4 py-12">
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-10">
+          <h1 className="text-4xl md:text-5xl font-extrabold text-white mb-3">Choose Your Plan</h1>
+          <p className="text-white/40 text-sm max-w-md mx-auto">
+            Rent a slot and get your script key the moment you pay. All plans include instant delivery.
           </p>
         </motion.div>
 
         {isLoading ? (
-          <div className="flex justify-center py-16">
+          <div className="flex justify-center py-20">
             <div className="w-6 h-6 border-2 border-[#f5a623] border-t-transparent rounded-full animate-spin" />
           </div>
         ) : (
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.1 }}
-            className="rounded-2xl border border-[#f5a623]/20 bg-[#f5a623]/[0.04] p-8 text-left"
+            transition={{ delay: 0.1 }}
+            className="grid grid-cols-1 md:grid-cols-2 gap-4"
           >
-            {/* Availability badge */}
-            <div className="flex items-center justify-between mb-6">
-              <span className="text-xs font-semibold uppercase tracking-wider text-white/30">Slot rental</span>
-              {available !== null && (
-                <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
-                  available > 0 ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'
-                }`}>
-                  {available > 0 ? `${available} slot${available !== 1 ? 's' : ''} available` : 'Sold out'}
-                </span>
-              )}
-            </div>
 
-            {/* Price */}
-            <div className="mb-6">
-              {data?.hourlyPricingEnabled ? (
-                <>
-                  <div className="flex items-end gap-2 mb-1">
-                    <span className="text-5xl font-extrabold text-white">${data.pricePerHour.toFixed(2)}</span>
-                    <span className="text-lg text-white/40 mb-1.5">/hr</span>
+            {/* ── Premium Card ── */}
+            <div className="rounded-2xl border border-[#f5a623]/25 bg-[#13110a] p-6 flex flex-col">
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-[#f5a623]/70 mb-1 block">Most Popular</span>
+                  <h2 className="text-2xl font-extrabold text-white">Premium</h2>
+                </div>
+                {available > 0 ? (
+                  <span className="text-[10px] font-semibold px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex-shrink-0 mt-1">
+                    {available} open
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-semibold px-2.5 py-1 rounded-full bg-red-500/10 text-red-400 border border-red-500/20 flex-shrink-0 mt-1">
+                    Full
+                  </span>
+                )}
+              </div>
+
+              {/* Slots bar */}
+              <div className="mb-5">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs text-white/40">Slots {filled}/{total}</span>
+                </div>
+                <div className="h-1.5 rounded-full bg-white/8 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-[#f5a623] transition-all duration-500"
+                    style={{ width: `${fillPct}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Features */}
+              <ul className="space-y-2.5 mb-6 flex-1">
+                {features.map(({ icon, text }) => (
+                  <li key={text} className="flex items-center gap-2.5 text-sm text-white/60">
+                    <span className="text-[#f5a623]">{icon}</span>
+                    {text}
+                  </li>
+                ))}
+              </ul>
+
+              {/* Price */}
+              <div className="mb-5">
+                <p className="text-[11px] uppercase tracking-widest text-white/30 mb-1">Price</p>
+                {data?.hourlyPricingEnabled ? (
+                  <div className="flex items-end gap-1">
+                    <span className="text-4xl font-extrabold text-white">${data.pricePerHour.toFixed(2)}</span>
+                    <span className="text-white/40 mb-1">/hr</span>
                   </div>
-                  <p className="text-xs text-white/35">
-                    Minimum {data.minHours}h &mdash; up to {data.slotDurationHours}h max per rental
-                  </p>
-                </>
-              ) : (
-                <>
-                  <div className="flex items-end gap-2 mb-1">
-                    <span className="text-5xl font-extrabold text-white">${data?.pricePerDay.toFixed(2)}</span>
-                    <span className="text-lg text-white/40 mb-1.5">/{data?.slotDurationHours}h</span>
+                ) : (
+                  <div className="flex items-end gap-1">
+                    <span className="text-4xl font-extrabold text-white">${data?.pricePerDay.toFixed(2)}</span>
+                    <span className="text-white/40 mb-1">/{data?.slotDurationHours}h</span>
                   </div>
-                  <p className="text-xs text-white/35">
-                    Flat rate &mdash; {data?.slotDurationHours} hours of access per rental
-                  </p>
-                </>
-              )}
+                )}
+              </div>
+
+              <a
+                href={`${base}dashboard`}
+                className={`block w-full text-center font-bold text-sm py-3 rounded-xl transition-all ${
+                  allFull
+                    ? 'bg-white/8 text-white/30 cursor-not-allowed pointer-events-none'
+                    : 'bg-[#f5a623] text-black hover:bg-[#e8961a]'
+                }`}
+              >
+                {allFull ? 'All slots full' : 'Get a slot'}
+              </a>
             </div>
 
-            {/* Features */}
-            <ul className="space-y-3 mb-8">
-              {features.map(({ icon, text }) => (
-                <li key={text} className="flex items-center gap-3 text-sm text-white/70">
-                  {icon}
-                  {text}
-                </li>
-              ))}
-            </ul>
+            {/* ── Bid Slot Card ── */}
+            <div className="rounded-2xl border border-white/10 bg-[#13110a] p-6 flex flex-col">
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-white/40 mb-1 block">Bid Slot</span>
+                  <h2 className="text-2xl font-extrabold text-white">Bid</h2>
+                </div>
+                {nextExpiresAt && (
+                  <div className="text-right flex-shrink-0 mt-1">
+                    <div className="text-xl leading-none">
+                      <NextSlotTimer nextExpiresAt={nextExpiresAt} />
+                    </div>
+                    <span className="text-[10px] text-white/30 uppercase tracking-wider">Next slot</span>
+                  </div>
+                )}
+              </div>
 
-            {/* Slot stats */}
-            <div className="flex gap-4 mb-8">
-              <div className="flex-1 rounded-xl bg-white/[0.03] border border-white/[0.06] p-3 text-center">
-                <p className="text-xl font-bold text-white">{data?.slotCount}</p>
-                <p className="text-xs text-white/30 mt-0.5">Total slots</p>
+              {/* Slots bar */}
+              <div className="mb-5">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs text-white/40">Slots {filled}/{total} · {data?.hourlyPricingEnabled ? `min ${data.minHours}h` : `${data?.slotDurationHours}h`} access when you win</span>
+                </div>
+                <div className="h-1.5 rounded-full bg-white/8 overflow-hidden">
+                  <div className="h-full rounded-full bg-[#f5a623] w-full" />
+                </div>
               </div>
-              <div className="flex-1 rounded-xl bg-white/[0.03] border border-white/[0.06] p-3 text-center">
-                <p className="text-xl font-bold text-white">{data?.activeCount}</p>
-                <p className="text-xs text-white/30 mt-0.5">Active now</p>
+
+              {/* Bid info box */}
+              <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3.5 mb-5 flex-1">
+                <p className="text-xs text-white/50 mb-1">
+                  {filled}/{total} slot(s) taken &middot; bid for the next
+                </p>
+                <p className="text-xs text-white/30">Place a bid to start 1-minute countdown</p>
               </div>
-              <div className="flex-1 rounded-xl bg-white/[0.03] border border-white/[0.06] p-3 text-center">
-                <p className="text-xl font-bold text-[#f5a623]">{data?.slotDurationHours}h</p>
-                <p className="text-xs text-white/30 mt-0.5">Duration</p>
+
+              {/* Minimum bid */}
+              <div className="mb-5">
+                <p className="text-[11px] uppercase tracking-widest text-white/30 mb-1">Minimum bid (per hour)</p>
+                {data?.hourlyPricingEnabled ? (
+                  <div>
+                    <div className="flex items-end gap-1">
+                      <span className="text-4xl font-extrabold text-white">${data.pricePerHour.toFixed(2)}</span>
+                      <span className="text-white/40 mb-1">/hr</span>
+                    </div>
+                    <p className="text-xs text-white/30 mt-1">
+                      Win the slot: pay ${(data.pricePerHour * data.minHours).toFixed(2)} total ({data.minHours}h × rate)
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex items-end gap-1">
+                    <span className="text-4xl font-extrabold text-white">${data?.pricePerDay.toFixed(2)}</span>
+                    <span className="text-white/40 mb-1">/{data?.slotDurationHours}h</span>
+                  </div>
+                )}
+                {topBid !== null && (
+                  <p className="text-xs text-[#f5a623]/70 mt-1.5">Top bid: ${topBid.toFixed(2)}</p>
+                )}
               </div>
+
+              <p className="text-xs text-white/35 mb-4">
+                {allFull ? 'All slots are full — bidding opens when a slot expires.' : 'Slots available — bid to join the queue.'}
+              </p>
+
+              <a
+                href={`${base}dashboard`}
+                className="block w-full text-center font-bold text-sm py-3 rounded-xl border border-[#f5a623]/30 text-[#f5a623] bg-[#f5a623]/8 hover:bg-[#f5a623]/15 transition-all"
+              >
+                Place a bid
+              </a>
             </div>
 
-            {/* CTA */}
-            <a
-              href={`${import.meta.env.BASE_URL}dashboard`}
-              className="block w-full text-center bg-[#f5a623] hover:bg-[#f5a623]/90 text-black font-bold text-sm py-3 rounded-xl transition-colors"
-            >
-              Get a slot
-            </a>
-            <p className="text-center text-xs text-white/25 mt-3">
-              Pay with Stripe, crypto (BTC, ETH, LTC, USDT, SOL), or wallet balance
-            </p>
           </motion.div>
         )}
+
+        {/* Pay methods */}
+        <p className="text-center text-xs text-white/25 mt-6">
+          Pay with Stripe · Crypto (BTC, ETH, LTC, USDT, SOL) · Wallet balance
+        </p>
       </div>
     </div>
   );

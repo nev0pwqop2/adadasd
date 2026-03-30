@@ -10,6 +10,7 @@ import Dashboard from "@/pages/Dashboard";
 import Admin from "@/pages/Admin";
 import LeaderboardPage from "@/pages/Leaderboard";
 import PlansPage from "@/pages/Plans";
+import RentersPage from "@/pages/Renters";
 import CustomCursor from "@/components/CustomCursor";
 import PageTransition from "@/components/PageTransition";
 
@@ -42,6 +43,7 @@ function Router() {
       <Switch>
         <Route path="/" component={Landing} />
         <Route path="/plans" component={PlansPage} />
+        <Route path="/renters" component={RentersPage} />
         <Route path="/leaderboard" component={LeaderboardPage} />
         <Route path="/dashboard" component={Dashboard} />
         <Route path="/admin" component={AdminRoute} />

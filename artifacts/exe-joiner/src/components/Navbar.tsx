@@ -9,7 +9,7 @@ const DiscordIcon = () => (
   </svg>
 );
 
-export type NavPage = 'home' | 'plans' | 'leaderboard' | 'dashboard' | 'admin';
+export type NavPage = 'home' | 'plans' | 'renters' | 'leaderboard' | 'dashboard' | 'admin';
 
 interface NavbarProps {
   current?: NavPage;
@@ -34,6 +34,7 @@ export default function Navbar({ current }: NavbarProps) {
   const links: { id: NavPage; label: string; href: string }[] = [
     { id: 'home',        label: 'Home',        href: `${base}` },
     { id: 'plans',       label: 'Plans',       href: `${base}plans` },
+    { id: 'renters',     label: 'Renters',     href: `${base}renters` },
     { id: 'leaderboard', label: 'Leaderboard', href: `${base}leaderboard` },
     { id: 'dashboard',   label: 'Dashboard',   href: `${base}dashboard` },
     ...(user?.isAdmin ? [{ id: 'admin' as NavPage, label: 'Admin', href: `${base}admin` }] : []),

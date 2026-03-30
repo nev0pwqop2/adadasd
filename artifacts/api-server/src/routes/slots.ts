@@ -465,6 +465,30 @@ router.get("/", requireAuth, async (req, res) => {
   }
 });
 
+router.get("/renters", async (req, res) => {
+  try {
+    const activeSlots = await db.select().from(slotsTable).where(eq(slotsTable.isActive, true));
+    const userIds = activeSlots.map(s => s.userId).filter(Boolean) as string[];
+    const users = userIds.length > 0 ? await db.select().from(usersTable).where(inArray(usersTable.id, userIds)) : [];
+    const userMap = Object.fromEntries(users.map(u => [u.id, u]));
+    const renters = activeSlots.map(slot => {
+      const u = userMap[slot.userId ?? ''];
+      return {
+        slotNumber: slot.slotNumber,
+        username: u?.username ?? 'Unknown',
+        discordId: u?.discordId ?? '',
+        avatar: u?.avatar ?? null,
+        purchasedAt: slot.purchasedAt,
+        expiresAt: slot.expiresAt,
+      };
+    });
+    res.json({ renters, count: renters.length });
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch renters");
+    res.status(500).json({ error: "server_error" });
+  }
+});
+
 router.get("/public-settings", async (req, res) => {
   try {
     const { slotCount, pricePerDay, slotDurationHours, hourlyPricingEnabled, pricePerHour, minHours } = await getSettings();
