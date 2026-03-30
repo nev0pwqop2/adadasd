@@ -458,7 +458,14 @@ async function cleanupExpiredSlots() {
 // Bot setup
 // ---------------------------------------------------------------------------
 
-const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+const DISCORD_REST_PROXY = process.env.DISCORD_REST_PROXY;
+
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds],
+  ...(DISCORD_REST_PROXY
+    ? { rest: { api: `${DISCORD_REST_PROXY.replace(/\/$/, "")}/api` } }
+    : {}),
+});
 
 client.once(Events.ClientReady, async (c) => {
   console.log(`Bot online as ${c.user.tag}`);
