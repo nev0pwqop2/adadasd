@@ -48,7 +48,7 @@ export default function Navbar({ current }: NavbarProps) {
 
           {/* Brand */}
           <a href={`${base}`} className="flex items-center gap-2 flex-shrink-0">
-            <img src={`${base}exe-logo.png`} alt="EXE" className="w-6 h-6 rounded-lg" />
+            <img src={`${base}exe-logo.gif`} alt="EXE" className="w-6 h-6 rounded-lg" />
             <span className="font-bold text-sm text-white/90 tracking-tight">Exe Joiner</span>
           </a>
 

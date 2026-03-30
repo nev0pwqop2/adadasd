@@ -52,7 +52,7 @@ export default function Landing() {
       <main className="relative z-10 flex flex-col items-center justify-center flex-1 px-5 pt-16 pb-10 text-center">
         {/* Floating logo — no box, just the image */}
         <img
-          src={`${import.meta.env.BASE_URL}exe-logo.png`}
+          src={`${import.meta.env.BASE_URL}exe-logo.gif`}
           alt="Exe Joiner"
           className="w-24 h-24 object-contain mb-8 drop-shadow-[0_0_32px_rgba(245,166,35,0.4)]"
         />
