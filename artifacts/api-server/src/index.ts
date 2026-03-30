@@ -7,6 +7,9 @@ import { runSlotCleanup, runAutoFulfillment } from "./lib/fulfillment.js";
 import { runPaymentPoller } from "./lib/paymentPoller.js";
 import { spawn } from "child_process";
 import path from "path";
+import { fileURLToPath } from "url";
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 async function runMigrations() {
   const step = async (label: string, query: Parameters<typeof db.execute>[0]) => {
@@ -231,9 +234,9 @@ if (Number.isNaN(port) || port <= 0) {
 function startDiscordBot() {
   if (process.env.REPLIT_DEV_DOMAIN) return;
 
-  const botPath = path.resolve(process.cwd(), "artifacts/discord-bot/src/index.ts");
+  const botPath = path.resolve(__dirname, "bot.mjs");
 
-  const bot = spawn("npx", ["tsx", botPath], {
+  const bot = spawn("node", [botPath], {
     stdio: "inherit",
     env: process.env,
   });

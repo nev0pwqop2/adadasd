@@ -24,12 +24,12 @@ const variants = {
 };
 
 const transition = {
-  duration: 0.38,
+  duration: 0.22,
   ease: [0.22, 1, 0.36, 1],
 };
 
 const exitTransition = {
-  duration: 0.22,
+  duration: 0.15,
   ease: [0.55, 0, 1, 0.45],
 };
 

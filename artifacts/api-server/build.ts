@@ -6,9 +6,6 @@ import { rm, readFile } from "fs/promises";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// server deps to bundle to reduce openat(2) syscalls
-// which helps cold start times without risking some
-// packages that are not bundle compatible
 const allowlist = [
   "@google/generative-ai",
   "axios",
@@ -43,6 +40,7 @@ async function buildAll() {
   const distDir = path.resolve(__dirname, "dist");
   await rm(distDir, { recursive: true, force: true });
 
+  // ── API server ──
   console.log("building server...");
   const pkgPath = path.resolve(__dirname, "package.json");
   const pkg = JSON.parse(await readFile(pkgPath, "utf-8"));
@@ -69,6 +67,20 @@ async function buildAll() {
     external: externals,
     logLevel: "info",
   });
+
+  // ── Discord bot (bundled standalone — no external deps needed) ──
+  console.log("building discord bot...");
+  await esbuild({
+    entryPoints: [path.resolve(__dirname, "../discord-bot/src/index.ts")],
+    platform: "node",
+    bundle: true,
+    format: "esm",
+    outfile: path.resolve(distDir, "bot.mjs"),
+    minify: false,
+    logLevel: "info",
+  });
+
+  console.log("build complete ✓");
 }
 
 buildAll().catch((err) => {
