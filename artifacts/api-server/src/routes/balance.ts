@@ -170,7 +170,7 @@ router.post("/deposit/crypto", requireAuth, async (req: Request, res: Response) 
     const nowPayment = await nowpaymentsRequest("/payment", {
       method: "POST",
       body: JSON.stringify(nowBody),
-    }) as { pay_address: string; pay_amount: number; pay_currency: string };
+    }) as { payment_id: string; pay_address: string; pay_amount: number; pay_currency: string };
 
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
 
@@ -184,6 +184,7 @@ router.post("/deposit/crypto", requireAuth, async (req: Request, res: Response) 
       amount: amount.toFixed(2),
       usdAmount: amount.toFixed(2),
       address: nowPayment.pay_address,
+      txHash: nowPayment.payment_id,
       expiresAt,
     });
 
