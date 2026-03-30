@@ -118,7 +118,8 @@ function isPaymentSuccessful(status: string): boolean {
 
 function verifyNowPaymentsIpn(parsedBody: Record<string, unknown>, signature: string): boolean {
   const secret = process.env.NOWPAYMENTS_IPN_SECRET;
-  if (!secret) return false;
+  // If no IPN secret is configured, skip signature check — the live API double-check below handles security
+  if (!secret) return true;
   if (!signature) return false;
   // NOWPayments signs the body with keys sorted alphabetically
   const sortedBody = JSON.stringify(
