@@ -251,8 +251,8 @@ function startDiscordBot() {
   });
 
   bot.on("exit", (code) => {
-    logger.warn({ code }, "Discord bot exited — restarting in 5s");
-    setTimeout(startDiscordBot, 5000);
+    logger.warn({ code }, "Discord bot exited — restarting in 60s");
+    setTimeout(startDiscordBot, 60000);
   });
 
   logger.info("Discord bot process started");

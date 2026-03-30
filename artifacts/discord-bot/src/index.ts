@@ -495,26 +495,10 @@ client.on("error", (err) => {
   console.error("Discord client error:", err);
 });
 
-// Validate token via REST before attempting gateway connection
-try {
-  const validateRes = await fetch("https://discord.com/api/v10/users/@me", {
-    headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}` },
-  });
-  if (!validateRes.ok) {
-    const body = await validateRes.text();
-    console.error(`Discord token validation failed (${validateRes.status}): ${body}`);
-    process.exit(1);
-  }
-  console.log("Discord token validated OK — connecting to gateway...");
-} catch (err) {
-  console.error("Discord REST validation error (network issue?):", err);
-  process.exit(1);
-}
-
 const loginTimeout = setTimeout(() => {
-  console.error("Discord gateway connection timed out after 60s — network issue on this host");
+  console.error("Discord gateway connection timed out after 120s");
   process.exit(1);
-}, 60_000);
+}, 120_000);
 
 try {
   await client.login(DISCORD_BOT_TOKEN);
