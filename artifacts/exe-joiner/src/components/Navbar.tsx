@@ -24,7 +24,6 @@ export default function Navbar({ current }: NavbarProps) {
   const base = import.meta.env.BASE_URL;
 
   const handleLogin = () => { window.location.href = `${base}api/auth/discord`; };
-
   const handleLogout = () => {
     logoutMutate(undefined, {
       onSuccess: () => { queryClient.clear(); setLocation('/'); },
@@ -41,76 +40,75 @@ export default function Navbar({ current }: NavbarProps) {
   ];
 
   return (
-    <div className="flex-shrink-0 w-full px-4 pt-3 pb-1 sticky top-0 z-50 flex justify-center">
-      <header className="w-full max-w-3xl bg-[#18120a]/90 backdrop-blur-md border border-[#f5a623]/10 rounded-2xl px-5 h-12 flex items-center justify-between shadow-[0_4px_32px_rgba(0,0,0,0.5)]">
+    <div className="flex-shrink-0 w-full sticky top-0 z-50">
+      {/* Main bar */}
+      <div className="w-full px-3 pt-3 pb-0 flex justify-center">
+        <header className="w-full max-w-3xl bg-[#18120a] border border-[#f5a623]/10 rounded-2xl px-4 h-12 flex items-center justify-between shadow-[0_4px_24px_rgba(0,0,0,0.6)]">
 
-        {/* Brand */}
-        <a href={`${base}`} className="flex items-center gap-2.5 flex-shrink-0">
-          <img src={`${base}exe-logo.png`} alt="EXE" className="w-7 h-7 rounded-lg" />
-          <span className="font-bold text-[15px] text-white/90 tracking-tight">Exe Joiner</span>
-        </a>
+          {/* Brand */}
+          <a href={`${base}`} className="flex items-center gap-2 flex-shrink-0">
+            <img src={`${base}exe-logo.png`} alt="EXE" className="w-6 h-6 rounded-lg" />
+            <span className="font-bold text-sm text-white/90 tracking-tight">Exe Joiner</span>
+          </a>
 
-        {/* Nav links — centered absolutely */}
-        <nav className="hidden sm:flex items-center gap-6 absolute left-1/2 -translate-x-1/2">
-          {links.map(({ id, label, href }) => (
-            <a
-              key={id}
-              href={href}
-              className={`text-sm transition-colors ${
-                current === id
-                  ? 'text-[#f5a623] font-semibold'
-                  : id === 'admin'
-                    ? 'text-red-400/60 hover:text-red-400'
-                    : 'text-white/40 hover:text-white/75'
-              }`}
-            >
-              {label}
-            </a>
-          ))}
-        </nav>
+          {/* Nav links — desktop only, centered */}
+          <nav className="hidden sm:flex items-center gap-5 absolute left-1/2 -translate-x-1/2">
+            {links.map(({ id, label, href }) => (
+              <a key={id} href={href} className={`text-sm transition-colors ${
+                current === id ? 'text-[#f5a623] font-semibold'
+                  : id === 'admin' ? 'text-red-400/60 hover:text-red-400'
+                  : 'text-white/40 hover:text-white/75'
+              }`}>
+                {label}
+              </a>
+            ))}
+          </nav>
 
-        {/* Right side */}
-        <div className="flex items-center gap-3 flex-shrink-0">
-          {user ? (
-            <>
-              {/* Avatar with glowing ring */}
-              <div className="relative">
-                <div className="w-9 h-9 rounded-full ring-2 ring-[#f5a623]/60 ring-offset-2 ring-offset-[#18120a] p-[2px] bg-[#f5a623]/10">
+          {/* Right side */}
+          <div className="flex items-center gap-2.5 flex-shrink-0">
+            {user ? (
+              <>
+                <div className="w-8 h-8 rounded-full ring-2 ring-[#f5a623]/60 ring-offset-1 ring-offset-[#18120a] overflow-hidden bg-[#f5a623]/10 flex-shrink-0">
                   {user.avatar ? (
-                    <img
-                      src={`https://cdn.discordapp.com/avatars/${user.discordId}/${user.avatar}.png`}
-                      alt="Avatar"
-                      className="w-full h-full rounded-full object-cover"
-                    />
+                    <img src={`https://cdn.discordapp.com/avatars/${user.discordId}/${user.avatar}.png`} alt="Avatar" className="w-full h-full object-cover" />
                   ) : (
-                    <div className="w-full h-full rounded-full bg-[#f5a623]/20 flex items-center justify-center">
+                    <div className="w-full h-full flex items-center justify-center">
                       <span className="text-[#f5a623] text-xs font-bold">{user.username?.[0]?.toUpperCase()}</span>
                     </div>
                   )}
                 </div>
-              </div>
-
-              <span className="hidden md:block text-xs font-medium text-white/50 max-w-[100px] truncate">{user.username}</span>
-
-              <button
-                onClick={handleLogout}
-                className="text-sm text-white/40 hover:text-white/80 transition-colors"
-              >
-                Logout
+                <span className="hidden md:block text-xs font-medium text-white/50 max-w-[90px] truncate">{user.username}</span>
+                <button onClick={handleLogout} className="text-xs text-white/35 hover:text-white/75 transition-colors">
+                  Logout
+                </button>
+              </>
+            ) : (
+              <button onClick={handleLogin} className="flex items-center gap-1.5 px-3 h-7 rounded-xl border border-[#f5a623]/20 bg-[#f5a623]/5 text-xs text-white/60 hover:text-white/90 hover:border-[#f5a623]/40 transition-all">
+                <DiscordIcon />
+                Login
               </button>
-            </>
-          ) : (
-            <button
-              onClick={handleLogin}
-              className="flex items-center gap-2 px-4 h-8 rounded-xl border border-[#f5a623]/20 bg-[#f5a623]/5 text-sm text-white/60 hover:text-white/90 hover:border-[#f5a623]/40 hover:bg-[#f5a623]/10 transition-all"
-            >
-              <DiscordIcon />
-              Login
-            </button>
-          )}
-        </div>
+            )}
+          </div>
 
-      </header>
+        </header>
+      </div>
+
+      {/* Mobile nav links row */}
+      <div className="sm:hidden w-full px-3 pt-1.5 pb-2">
+        <div className="flex items-center gap-1 overflow-x-auto scrollbar-none max-w-3xl mx-auto">
+          {links.map(({ id, label, href }) => (
+            <a key={id} href={href} className={`flex-shrink-0 text-xs px-3 py-1.5 rounded-full transition-colors ${
+              current === id
+                ? 'bg-[#f5a623]/15 text-[#f5a623] font-semibold border border-[#f5a623]/25'
+                : id === 'admin'
+                  ? 'text-red-400/60 border border-transparent'
+                  : 'text-white/40 border border-transparent'
+            }`}>
+              {label}
+            </a>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
