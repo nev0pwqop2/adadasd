@@ -6,6 +6,7 @@ import { sendDiscordDM } from "./lib/discord.js";
 import { runSlotCleanup, runAutoFulfillment } from "./lib/fulfillment.js";
 import { runPaymentPoller } from "./lib/paymentPoller.js";
 import { spawn } from "child_process";
+import { existsSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
@@ -237,8 +238,7 @@ function startDiscordBot() {
   const botPath = path.resolve(__dirname, "../../discord-bot/dist/index.js");
 
   // Check file exists before spawning — avoids crashing the server if bot isn't built
-  const fs = require("fs");
-  if (!fs.existsSync(botPath)) {
+  if (!existsSync(botPath)) {
     logger.warn({ botPath }, "Discord bot dist not found — skipping bot startup");
     return;
   }
