@@ -277,9 +277,19 @@ app.post("/api/internal/trigger-fulfillment", (req, res) => {
   res.json({ ok: true });
 });
 
-runMigrations().then(() => {
-  const server = app.listen(port, () => {
-    logger.info({ port }, "Server listening");
+// Bind the port IMMEDIATELY so Render's health check passes,
+// then run migrations and start background jobs asynchronously.
+const server = app.listen(port, () => {
+  logger.info({ port }, "Server listening");
+});
+
+server.requestTimeout = 30_000;
+server.headersTimeout = 35_000;
+server.keepAliveTimeout = 5_000;
+
+runMigrations()
+  .then(() => {
+    logger.info("DB migrations complete — starting background jobs");
 
     // Expiry notifications every 5 minutes
     setInterval(runExpiryNotifications, 5 * 60 * 1000);
@@ -294,13 +304,7 @@ runMigrations().then(() => {
     setTimeout(() => runPaymentPoller().catch(err => logger.warn({ err }, "Payment poller error")), 30_000);
 
     startDiscordBot();
+  })
+  .catch((err) => {
+    logger.error({ err }, "DB migrations failed — server running but DB may be unavailable");
   });
-
-  // Slowloris / slow-client protection:
-  // requestTimeout  — max ms to receive a complete request (headers + body)
-  // headersTimeout  — max ms to receive request headers (must be > requestTimeout)
-  // keepAliveTimeout — close idle keep-alive connections after 5 s
-  server.requestTimeout = 30_000;
-  server.headersTimeout = 35_000;
-  server.keepAliveTimeout = 5_000;
-});
