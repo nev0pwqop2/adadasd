@@ -100,17 +100,7 @@ export default function PlansPage() {
           </p>
         </motion.div>
 
-        {isLoading ? (
-          <div className="flex justify-center py-20">
-            <div className="w-6 h-6 border-2 border-[#f5a623] border-t-transparent rounded-full animate-spin" />
-          </div>
-        ) : (
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="grid grid-cols-1 md:grid-cols-2 gap-4"
-          >
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
             {/* ── Premium Card ── */}
             <div className="rounded-2xl border border-[#f5a623]/25 bg-[#13110a] p-6 flex flex-col">
@@ -270,8 +260,7 @@ export default function PlansPage() {
               )}
             </div>
 
-          </motion.div>
-        )}
+        </div>
 
         {/* Pay methods */}
         <p className="text-center text-xs text-white/25 mt-6">

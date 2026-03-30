@@ -122,11 +122,7 @@ export default function RentersPage() {
           </div>
         </motion.div>
 
-        {isLoading ? (
-          <div className="flex justify-center py-20">
-            <div className="w-6 h-6 border-2 border-[#f5a623] border-t-transparent rounded-full animate-spin" />
-          </div>
-        ) : renters.length === 0 ? (
+        {renters.length === 0 ? (
           <div className="text-center py-16 text-white/30 text-sm">No active renters right now.</div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

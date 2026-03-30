@@ -92,12 +92,7 @@ export default function LeaderboardPage() {
           </p>
         </motion.div>
 
-        {isLoading ? (
-          <div className="flex justify-center py-24">
-            <div className="w-6 h-6 border-2 border-[#f5a623] border-t-transparent rounded-full animate-spin" />
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
 
             {/* Most Hours */}
             <div>
@@ -141,8 +136,7 @@ export default function LeaderboardPage() {
               </div>
             </div>
 
-          </div>
-        )}
+        </div>
       </div>
     </div>
   );
