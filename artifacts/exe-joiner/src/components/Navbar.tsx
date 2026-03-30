@@ -44,21 +44,19 @@ export default function Navbar({ current }: NavbarProps) {
     <div className="flex-shrink-0 w-full sticky top-0 z-50">
       {/* Main bar */}
       <div className="w-full px-3 pt-3 pb-0 flex justify-center">
-        <header className="w-full max-w-3xl bg-[#18120a] border border-[#f5a623]/10 rounded-2xl px-4 h-12 flex items-center justify-between shadow-[0_4px_24px_rgba(0,0,0,0.6)]">
+        <header className="w-full max-w-3xl bg-[#18120a] border border-[#f5a623]/10 rounded-2xl px-4 h-12 flex items-center shadow-[0_4px_24px_rgba(0,0,0,0.6)]">
 
-          {/* Brand */}
+          {/* Brand — left */}
           <a href={`${base}`} className="flex items-center gap-2 flex-shrink-0">
             <img src={`${base}exe-logo.gif`} alt="EXE" className="w-6 h-6 rounded-lg" />
             <span className="font-bold text-sm text-white/90 tracking-tight">Exe Joiner</span>
           </a>
 
-          {/* Nav links — desktop only, centered */}
-          <nav className="hidden sm:flex items-center gap-5 absolute left-1/2 -translate-x-1/2">
-            {links.map(({ id, label, href }) => (
-              <a key={id} href={href} className={`text-sm transition-colors ${
-                current === id ? 'text-[#f5a623] font-semibold'
-                  : id === 'admin' ? 'text-red-400/60 hover:text-red-400'
-                  : 'text-white/40 hover:text-white/75'
+          {/* Nav links — desktop only, takes up remaining space, centered */}
+          <nav className="hidden sm:flex flex-1 items-center justify-center gap-4 min-w-0 px-2">
+            {links.filter(l => l.id !== 'admin').map(({ id, label, href }) => (
+              <a key={id} href={href} className={`text-sm transition-colors flex-shrink-0 ${
+                current === id ? 'text-[#f5a623] font-semibold' : 'text-white/40 hover:text-white/75'
               }`}>
                 {label}
               </a>
@@ -66,7 +64,7 @@ export default function Navbar({ current }: NavbarProps) {
           </nav>
 
           {/* Right side */}
-          <div className="flex items-center gap-2.5 flex-shrink-0">
+          <div className="flex items-center gap-2.5 flex-shrink-0 ml-auto sm:ml-0">
             {user ? (
               <>
                 <div className="w-8 h-8 rounded-full ring-2 ring-[#f5a623]/60 ring-offset-1 ring-offset-[#18120a] overflow-hidden bg-[#f5a623]/10 flex-shrink-0">
@@ -78,7 +76,12 @@ export default function Navbar({ current }: NavbarProps) {
                     </div>
                   )}
                 </div>
-                <span className="hidden md:block text-xs font-medium text-white/50 max-w-[90px] truncate">{user.username}</span>
+                <span className="hidden md:block text-xs font-medium text-white/50 max-w-[80px] truncate">{user.username}</span>
+                {user.isAdmin && (
+                  <a href={`${base}admin`} className="hidden sm:block text-xs text-red-400/60 hover:text-red-400 transition-colors font-medium">
+                    Admin
+                  </a>
+                )}
                 <button onClick={handleLogout} className="text-xs text-white/35 hover:text-white/75 transition-colors">
                   Logout
                 </button>
