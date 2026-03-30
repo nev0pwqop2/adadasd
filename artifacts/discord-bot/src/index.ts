@@ -463,7 +463,7 @@ const DISCORD_REST_PROXY = process.env.DISCORD_REST_PROXY;
 const client = new Client({
   intents: [GatewayIntentBits.Guilds],
   ...(DISCORD_REST_PROXY
-    ? { rest: { api: `${DISCORD_REST_PROXY.replace(/\/$/, "")}/api` } }
+    ? { rest: { api: DISCORD_REST_PROXY.replace(/\/$/, "") } }
     : {}),
 });
 
