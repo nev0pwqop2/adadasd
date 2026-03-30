@@ -491,4 +491,20 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 });
 
-await client.login(DISCORD_BOT_TOKEN);
+client.on("error", (err) => {
+  console.error("Discord client error:", err);
+});
+
+const loginTimeout = setTimeout(() => {
+  console.error("Discord login timed out after 30s — check DISCORD_BOT_TOKEN is valid");
+  process.exit(1);
+}, 30_000);
+
+try {
+  await client.login(DISCORD_BOT_TOKEN);
+  clearTimeout(loginTimeout);
+} catch (err) {
+  clearTimeout(loginTimeout);
+  console.error("Discord login failed:", err);
+  process.exit(1);
+}
