@@ -12,7 +12,7 @@ import pg from "pg";
 const { Client: PgClient } = pg;
 
 const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
-const DISCORD_APPLICATION_ID = process.env.DISCORD_APPLICATION_ID;
+const DISCORD_APPLICATION_ID = process.env.DISCORD_APPLICATION_ID || process.env.DISCORD_CLIENT_ID;
 const DISCORD_GUILD_ID = process.env.DISCORD_GUILD_ID;
 const SUPABASE_DATABASE_URL = process.env.SUPABASE_DATABASE_URL || process.env.DATABASE_URL;
 const LUARMOR_API_KEY = process.env.LUARMOR_API_KEY;
