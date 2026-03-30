@@ -159,7 +159,12 @@ const commands = [
     .toJSON(),
 ];
 
-const rest = new REST({ version: "10" }).setToken(DISCORD_BOT_TOKEN);
+const rest = new REST({
+  version: "10",
+  ...(process.env.DISCORD_REST_PROXY
+    ? { api: process.env.DISCORD_REST_PROXY.replace(/\/$/, "") }
+    : {}),
+}).setToken(DISCORD_BOT_TOKEN!);
 
 async function registerCommands() {
   try {
