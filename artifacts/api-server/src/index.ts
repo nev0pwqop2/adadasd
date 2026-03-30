@@ -8,9 +8,6 @@ import { runPaymentPoller } from "./lib/paymentPoller.js";
 import { spawn } from "child_process";
 import { existsSync } from "fs";
 import path from "path";
-import { fileURLToPath } from "url";
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 async function runMigrations() {
   const step = async (label: string, query: Parameters<typeof db.execute>[0]) => {
@@ -235,7 +232,7 @@ if (Number.isNaN(port) || port <= 0) {
 function startDiscordBot() {
   if (process.env.REPLIT_DEV_DOMAIN) return;
 
-  const botPath = path.resolve(__dirname, "../../discord-bot/dist/index.js");
+  const botPath = path.resolve(process.cwd(), "artifacts/discord-bot/dist/index.js");
 
   // Check file exists before spawning — avoids crashing the server if bot isn't built
   if (!existsSync(botPath)) {
