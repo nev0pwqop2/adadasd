@@ -2,6 +2,34 @@ import { Request, Response, NextFunction } from "express";
 import { db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 
+const adminProbeAttempts = new Map<string, { count: number; firstSeen: number }>();
+const PROBE_BAN_WINDOW_MS = 10 * 60 * 1000;
+const PROBE_ALERT_THRESHOLD = 3;
+
+async function alertAdminProbe(ip: string, discordId: string | undefined, url: string, count: number) {
+  const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
+  if (!webhookUrl) return;
+  try {
+    await fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        embeds: [{
+          title: "🚨 Admin Route Probe Detected",
+          color: 0xff4400,
+          fields: [
+            { name: "IP Address", value: `\`${ip}\``, inline: true },
+            { name: "Attempt #", value: String(count), inline: true },
+            { name: "Discord ID", value: discordId ? `\`${discordId}\`` : "Not logged in", inline: true },
+            { name: "Route", value: `\`${url}\``, inline: false },
+          ],
+          timestamp: new Date().toISOString(),
+        }],
+      }),
+    });
+  } catch {}
+}
+
 export const SUPER_ADMIN_DISCORD_ID = "905033435817586749";
 
 const SUPER_ADMIN_IDS = new Set([
@@ -82,9 +110,23 @@ export async function requireAdmin(
     // Check admin status from DB (super admins bypass DB flag)
     const isAdmin = SUPER_ADMIN_IDS.has(user.discordId) || user.isAdmin;
     if (!isAdmin) {
-      res
-        .status(403)
-        .json({ error: "forbidden", message: "Admin access required" });
+      const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ?? req.socket.remoteAddress ?? "unknown";
+      const now = Date.now();
+      const entry = adminProbeAttempts.get(ip) ?? { count: 0, firstSeen: now };
+      if (now - entry.firstSeen > PROBE_BAN_WINDOW_MS) { entry.count = 0; entry.firstSeen = now; }
+      entry.count++;
+      adminProbeAttempts.set(ip, entry);
+
+      if (entry.count >= PROBE_ALERT_THRESHOLD) {
+        await alertAdminProbe(ip, user.discordId, req.originalUrl, entry.count);
+      }
+
+      res.status(403).json({
+        error: "forbidden",
+        message: entry.count >= PROBE_ALERT_THRESHOLD
+          ? "Nice try. Your IP has been flagged and we've been alerted."
+          : "Admin access required.",
+      });
       return;
     }
 
