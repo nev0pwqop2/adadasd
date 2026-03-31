@@ -575,7 +575,37 @@ router.post("/create-crypto-session", requireAuth, async (req: Request, res: Res
   }
 });
 
+// Track IPN spoof attempts per IP (in-memory, resets on restart)
+const spoofAttempts = new Map<string, { count: number; firstSeen: number }>();
+const SPOOF_BAN_THRESHOLD = 3;
+const SPOOF_BAN_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
+
+async function alertSpoofAttempt(ip: string, count: number, body: string, headers: Record<string, string>) {
+  const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
+  if (!webhookUrl) return;
+  try {
+    await fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        embeds: [{
+          title: "🚨 IPN Spoof Attempt Detected",
+          color: 0xff0000,
+          fields: [
+            { name: "IP Address", value: `\`${ip}\``, inline: true },
+            { name: "Attempt #", value: String(count), inline: true },
+            { name: "Signature Header", value: `\`${headers["x-nowpayments-sig"]?.slice(0, 40) ?? "none"}...\``, inline: false },
+            { name: "Body (truncated)", value: `\`\`\`${body.slice(0, 300)}\`\`\``, inline: false },
+          ],
+          timestamp: new Date().toISOString(),
+        }],
+      }),
+    });
+  } catch {}
+}
+
 router.post("/nowpayments-ipn", async (req: Request, res: Response) => {
+  const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ?? req.socket.remoteAddress ?? "unknown";
   const signature = req.headers["x-nowpayments-sig"] as string;
 
   // req.body is a raw Buffer here (express.raw middleware)
@@ -589,8 +619,33 @@ router.post("/nowpayments-ipn", async (req: Request, res: Response) => {
   }
 
   if (!verifyNowPaymentsIpn(parsed, signature)) {
-    req.log.warn({ signature, hasSecret: !!process.env.NOWPAYMENTS_IPN_SECRET }, "NOWPayments IPN signature verification failed");
-    res.status(400).json({ error: "invalid_signature" });
+    // Track spoof attempts per IP
+    const now = Date.now();
+    const entry = spoofAttempts.get(ip) ?? { count: 0, firstSeen: now };
+    if (now - entry.firstSeen > SPOOF_BAN_WINDOW_MS) {
+      entry.count = 0;
+      entry.firstSeen = now;
+    }
+    entry.count++;
+    spoofAttempts.set(ip, entry);
+
+    req.log.warn({ ip, attempt: entry.count, signature: signature?.slice(0, 20) }, "NOWPayments IPN spoof attempt");
+
+    // Fire Discord alert
+    await alertSpoofAttempt(ip, entry.count, rawBody, req.headers as Record<string, string>);
+
+    if (entry.count >= SPOOF_BAN_THRESHOLD) {
+      res.status(403).json({
+        error: "banned",
+        message: "You think you're slick? We've logged your IP and flagged your account. Don't try this again.",
+      });
+      return;
+    }
+
+    res.status(403).json({
+      error: "nice_try",
+      message: "Trying to spoof us? We already know who you are. This attempt has been logged.",
+    });
     return;
   }
 
