@@ -187,7 +187,8 @@ router.get("/discord/callback", async (req, res) => {
     const botToken = process.env.DISCORD_BOT_TOKEN;
     if (guildId && botToken) {
       try {
-        const joinUrl = `https://discord.com/api/v10/guilds/${guildId}/members/${discordUser.id}`;
+        const discordBase = process.env.DISCORD_REST_PROXY ?? "https://discord.com";
+        const joinUrl = `${discordBase}/api/v10/guilds/${guildId}/members/${discordUser.id}`;
         req.log.info({ discordId: discordUser.id, guildId, joinUrl }, "Attempting guild join");
         const joinRes = await fetch(joinUrl, {
           method: "PUT",
