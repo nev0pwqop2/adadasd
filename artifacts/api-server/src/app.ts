@@ -86,6 +86,40 @@ app.use("/api/payments/nowpayments-ipn", express.raw({ type: "application/json" 
 app.use(express.json({ limit: "100kb" }));
 app.use(express.urlencoded({ extended: true, limit: "100kb" }));
 
+// Detect isAdmin injection attempts in request body or query string
+app.use((req, _res, next) => {
+  const ADMIN_INJECT_KEYS = ["isAdmin", "is_admin", "isadmin", "admin"];
+  const body = req.body && typeof req.body === "object" && !Buffer.isBuffer(req.body) ? req.body as Record<string, unknown> : {};
+  const query = req.query as Record<string, unknown>;
+  const found = ADMIN_INJECT_KEYS.find(k => k in body || k in query);
+  if (found) {
+    const ip = getRealIp(req);
+    const discordId = req.session?.discordId ?? "not logged in";
+    logger.warn({ ip, discordId, key: found, url: req.originalUrl }, "isAdmin injection attempt detected");
+    const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
+    if (webhookUrl) {
+      fetch(webhookUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          embeds: [{
+            title: "🚨 isAdmin Spoof Attempt",
+            color: 0xff0000,
+            fields: [
+              { name: "IP", value: `\`${ip}\``, inline: true },
+              { name: "Discord ID", value: `\`${discordId}\``, inline: true },
+              { name: "Injected Key", value: `\`${found}\``, inline: true },
+              { name: "Route", value: `\`${req.method} ${req.originalUrl}\``, inline: false },
+            ],
+            timestamp: new Date().toISOString(),
+          }],
+        }),
+      }).catch(() => {});
+    }
+  }
+  next();
+});
+
 // Block prototype pollution attempts — reject any request body containing
 // __proto__, constructor, or prototype keys which can poison all JS objects.
 app.use((req, _res, next) => {
