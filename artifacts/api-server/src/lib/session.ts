@@ -13,7 +13,6 @@ if (dbUrl && process.env.NODE_ENV === "production") {
   store = new PgSession({
     conString: dbUrl,
     tableName: "user_sessions",
-    createTableIfMissing: true,
     pruneSessionInterval: 60 * 15,
   });
 }

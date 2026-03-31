@@ -158,6 +158,18 @@ async function runMigrations() {
     END$$
   `);
 
+  await step("create user_sessions", sql`
+    CREATE TABLE IF NOT EXISTS user_sessions (
+      sid VARCHAR NOT NULL COLLATE "default",
+      sess JSON NOT NULL,
+      expire TIMESTAMP(6) NOT NULL,
+      CONSTRAINT session_pkey PRIMARY KEY (sid)
+    )
+  `);
+  await step("create user_sessions expire index", sql`
+    CREATE INDEX IF NOT EXISTS idx_session_expire ON user_sessions (expire)
+  `);
+
   logger.info("DB migrations complete");
 }
 
