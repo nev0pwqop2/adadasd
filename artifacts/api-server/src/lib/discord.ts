@@ -29,9 +29,13 @@ export async function addGuildRole(discordId: string, roleId: string): Promise<v
 export async function removeGuildRole(discordId: string, roleId: string): Promise<void> {
   const botToken = process.env.DISCORD_BOT_TOKEN;
   const guildId = process.env.DISCORD_GUILD_ID;
-  if (!botToken || !guildId || !roleId) return;
+  if (!botToken || !guildId || !roleId) {
+    logger.warn({ discordId, roleId, hasToken: !!botToken, hasGuild: !!guildId }, "[discord] removeGuildRole skipped — missing env vars");
+    return;
+  }
   try {
-    const res = await fetch(`${discordApiBase()}/api/v10/guilds/${guildId}/members/${discordId}/roles/${roleId}`, {
+    // Go direct to discord.com for DELETE — some proxies strip the DELETE method
+    const res = await fetch(`https://discord.com/api/v10/guilds/${guildId}/members/${discordId}/roles/${roleId}`, {
       method: "DELETE",
       headers: { Authorization: `Bot ${botToken}` },
     });
