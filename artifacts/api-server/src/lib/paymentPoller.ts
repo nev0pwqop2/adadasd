@@ -141,7 +141,7 @@ async function pollStripePending(stripeKey: string) {
 }
 
 async function pollCryptoPending(apiKey: string) {
-  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000);
   const pending = await db.select()
     .from(paymentsTable)
     .where(
@@ -151,7 +151,7 @@ async function pollCryptoPending(apiKey: string) {
         gte(paymentsTable.createdAt, cutoff),
       )
     )
-    .limit(30);
+    .limit(50);
 
   for (const payment of pending) {
     if (!payment.txHash) continue;
@@ -160,18 +160,33 @@ async function pollCryptoPending(apiKey: string) {
         headers: { "x-api-key": apiKey },
       });
       if (!res.ok) continue;
-      const data = await res.json() as { payment_status: string };
-      const confirmed = data.payment_status === "finished" || data.payment_status === "confirmed";
-      if (!confirmed) continue;
+      const data = await res.json() as {
+        payment_status: string;
+        actually_paid?: number;
+        actually_paid_usd_amount?: number;
+        pay_amount?: number;
+        pay_currency?: string;
+      };
+
+      const { payment_status, actually_paid, actually_paid_usd_amount } = data;
+      const confirmed = payment_status === "finished" || payment_status === "confirmed";
+      const partiallyPaid = payment_status === "partially_paid" && (actually_paid ?? 0) > 0;
+
+      if (!confirmed && !partiallyPaid) continue;
 
       const isBalanceDeposit = payment.method === "balance-deposit-crypto";
 
       if (isBalanceDeposit) {
+        // Use actually paid USD amount for accuracy — credit what they actually sent
+        const creditAmount = actually_paid_usd_amount
+          ? String(actually_paid_usd_amount)
+          : (payment.usdAmount ?? payment.amount);
         await completeBalanceDeposit(
           payment.id, payment.userId, payment.method,
-          payment.currency, payment.usdAmount ?? payment.amount,
+          payment.currency, creditAmount,
         );
       } else if (payment.slotNumber > 0) {
+        if (!confirmed) continue; // Don't give slot for partial payment
         await completeSlotPayment(
           payment.id, payment.userId, payment.slotNumber, payment.method,
           payment.currency, payment.amount, payment.derivationIndex,
@@ -189,14 +204,7 @@ async function pollCryptoPending(apiKey: string) {
 }
 
 export async function runPaymentPoller() {
-  const stripeKey = process.env.STRIPE_SECRET_KEY;
   const nowKey = process.env.NOWPAYMENTS_API_KEY;
-
-  try {
-    if (stripeKey) await pollStripePending(stripeKey);
-  } catch (err) {
-    logger.warn({ err }, "Payment poller: stripe polling error");
-  }
 
   try {
     if (nowKey) await pollCryptoPending(nowKey);

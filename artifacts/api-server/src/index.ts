@@ -349,9 +349,9 @@ runMigrations()
     setInterval(cleanupThenFulfill, 60 * 1000);
     setTimeout(cleanupThenFulfill, 15_000);
 
-    // Payment poller — auto-complete pending Stripe/crypto payments every 2 minutes
-    setInterval(() => runPaymentPoller().catch(err => logger.warn({ err }, "Payment poller error")), 2 * 60 * 1000);
-    setTimeout(() => runPaymentPoller().catch(err => logger.warn({ err }, "Payment poller error")), 30_000);
+    // Payment poller — auto-complete pending crypto payments every 30 seconds
+    setInterval(() => runPaymentPoller().catch(err => logger.warn({ err }, "Payment poller error")), 30 * 1000);
+    setTimeout(() => runPaymentPoller().catch(err => logger.warn({ err }, "Payment poller error")), 15_000);
 
     // Audit buyer roles on startup — remove role from anyone whose slot has expired
     setTimeout(() => auditBuyerRoles().catch(err => logger.warn({ err }, "Startup role audit error")), 20_000);

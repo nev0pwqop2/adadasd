@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { QRCodeSVG } from 'qrcode.react';
-import { X, CreditCard, Bitcoin, Loader2, CheckCircle, Copy, Plus, Minus, Wallet, Tag, Check, MessageSquare } from 'lucide-react';
+import { X, Bitcoin, Loader2, CheckCircle, Copy, Plus, Minus, Wallet, Tag, Check, MessageSquare } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { 
-  useCreateStripeSession, 
   useCreateCryptoSession, 
   useVerifyCryptoPayment,
   CreateCryptoSessionRequestCurrency
@@ -26,7 +25,7 @@ interface PaymentModalProps {
   onSuccess: () => void;
 }
 
-type Tab = 'crypto' | 'stripe' | 'balance' | 'paypal';
+type Tab = 'crypto' | 'balance' | 'paypal';
 
 export function PaymentModal({
   isOpen,
@@ -56,7 +55,6 @@ export function PaymentModal({
     setAppliedCoupon(null);
   }, [minHours, isOpen]);
 
-  const { mutate: createStripe, isPending: isStripeLoading } = useCreateStripeSession();
   const { mutate: createCrypto, data: cryptoSession, isPending: isCryptoLoading, reset: resetCrypto } = useCreateCryptoSession();
   const { mutate: verifyCrypto, isPending: isVerifyLoading } = useVerifyCryptoPayment();
 
@@ -127,18 +125,6 @@ export function PaymentModal({
   };
 
   const canPayWithBalance = userBalance >= totalPrice;
-
-  const handleStripePay = () => {
-    const data: any = { slotNumber };
-    if (hourlyPricingEnabled) data.hours = selectedHours;
-    if (appliedCoupon) data.couponId = appliedCoupon.couponId;
-    createStripe({ data }, {
-      onSuccess: (res) => { window.location.href = res.url; },
-      onError: (err) => {
-        toast({ title: "Error", description: err.message || "Failed to initialize Stripe", variant: "destructive" });
-      }
-    });
-  };
 
   const handleCryptoGenerate = () => {
     const data: any = { slotNumber, currency };
@@ -339,15 +325,6 @@ export function PaymentModal({
                   <Bitcoin className="w-4 h-4" /> Crypto
                 </button>
                 <button
-                  onClick={() => setTab('stripe')}
-                  className={cn(
-                    "flex-1 py-2 text-sm font-mono uppercase tracking-wider transition-colors chamfered flex items-center justify-center gap-2",
-                    tab === 'stripe' ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  <CreditCard className="w-4 h-4" /> Card
-                </button>
-                <button
                   onClick={() => setTab('paypal')}
                   className={cn(
                     "flex-1 py-2 text-sm font-mono uppercase tracking-wider transition-colors chamfered flex items-center justify-center gap-2",
@@ -357,20 +334,6 @@ export function PaymentModal({
                   <MessageSquare className="w-4 h-4" /> PayPal
                 </button>
               </div>
-
-              {tab === 'stripe' && (
-                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
-                  {hourlyPricingEnabled && <HourSelector />}
-                  <PriceSummary />
-                  <Button 
-                    className="w-full h-14 text-lg" 
-                    onClick={handleStripePay} 
-                    disabled={isStripeLoading}
-                  >
-                    {isStripeLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : "Proceed to Checkout"}
-                  </Button>
-                </div>
-              )}
 
               {tab === 'crypto' && !cryptoSession && (
                 <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">

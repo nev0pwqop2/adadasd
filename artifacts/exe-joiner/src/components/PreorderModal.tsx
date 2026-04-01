@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from './ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { X, CreditCard, Bitcoin, Copy, Check, Clock, Loader2, Wallet, CheckCircle, Plus, Minus } from 'lucide-react';
+import { X, Bitcoin, Copy, Check, Clock, Loader2, Wallet, CheckCircle, Plus, Minus } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { cn } from '@/lib/utils';
 
@@ -50,7 +50,6 @@ export function PreorderModal({
   } | null>(null);
   const [copiedAmount, setCopiedAmount] = useState(false);
   const [copiedAddress, setCopiedAddress] = useState(false);
-  const [isLoadingStripe, setIsLoadingStripe] = useState(false);
   const [isLoadingBalance, setIsLoadingBalance] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const [selectedHours, setSelectedHours] = useState(minHours);
@@ -69,26 +68,6 @@ export function PreorderModal({
     setSelectedCrypto('');
     setCryptoSession(null);
     onClose();
-  };
-
-  const handleStripe = async () => {
-    setIsLoadingStripe(true);
-    try {
-      const body: Record<string, unknown> = {};
-      if (hourlyPricingEnabled) body.hours = selectedHours;
-      const res = await fetch(`${BASE}api/preorders/create-stripe`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Failed to create session');
-      window.location.href = data.url;
-    } catch (e: any) {
-      toast({ title: 'Error', description: e.message, variant: 'destructive' });
-      setIsLoadingStripe(false);
-    }
   };
 
   const handleBalance = async () => {
@@ -304,21 +283,6 @@ export function PreorderModal({
                   {hasEnoughBalance && (
                     <span className="font-mono text-xs text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded-full shrink-0">Instant</span>
                   )}
-                </button>
-
-                {/* Stripe */}
-                <button
-                  onClick={handleStripe}
-                  disabled={isLoadingStripe}
-                  className="w-full flex items-center gap-4 p-4 border border-border rounded-xl hover:border-primary/30 hover:bg-primary/5 transition-all text-left"
-                >
-                  <div className="w-10 h-10 bg-secondary rounded-lg flex items-center justify-center shrink-0">
-                    {isLoadingStripe ? <Loader2 className="w-5 h-5 text-primary animate-spin" /> : <CreditCard className="w-5 h-5 text-primary" />}
-                  </div>
-                  <div>
-                    <p className="font-semibold text-sm text-foreground">Pay by Card</p>
-                    <p className="text-xs text-muted-foreground font-mono">Visa, Mastercard, etc. via Stripe</p>
-                  </div>
                 </button>
 
                 {/* Crypto */}

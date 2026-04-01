@@ -264,7 +264,7 @@ export default function PlansPage() {
 
         {/* Pay methods */}
         <p className="text-center text-xs text-white/25 mt-6">
-          Pay with Stripe · Crypto (BTC, ETH, LTC, USDT, SOL) · Wallet balance
+          Pay with Crypto (BTC, ETH, LTC, USDT, SOL) · Wallet balance
         </p>
       </div>
     </div>
