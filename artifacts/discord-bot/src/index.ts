@@ -507,6 +507,14 @@ client.on("error", (err) => {
   console.error("Discord client error:", err);
 });
 
+// Only connect to Discord on Render (production). Running locally with the same
+// token as Render causes split event processing and breaks slash commands.
+if (!process.env.RENDER) {
+  console.log("[BOT] Not running on Render — skipping Discord gateway connection to avoid token conflicts with production bot.");
+  console.log("[BOT] Set RENDER=true to force-connect locally.");
+  process.exit(0);
+}
+
 const loginTimeout = setTimeout(() => {
   console.error("Discord gateway connection timed out after 120s");
   process.exit(1);
