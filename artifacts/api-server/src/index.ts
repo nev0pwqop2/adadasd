@@ -162,6 +162,17 @@ async function runMigrations() {
     ALTER TABLE slots ADD COLUMN IF NOT EXISTS notified_10m BOOLEAN NOT NULL DEFAULT FALSE
   `);
 
+  // Reset notified_10m for active slots that expire more than 20 minutes from now —
+  // these clearly haven't been legitimately notified (the old scheduler may have set the
+  // flag even when the DM failed), so resetting lets the new polling code send the DM.
+  await step("reset stale notified_10m flags", sql`
+    UPDATE slots
+    SET notified_10m = FALSE
+    WHERE is_active = TRUE
+      AND notified_10m = TRUE
+      AND expires_at > NOW() + INTERVAL '20 minutes'
+  `);
+
   await step("create user_sessions", sql`
     CREATE TABLE IF NOT EXISTS user_sessions (
       sid VARCHAR NOT NULL COLLATE "default",
@@ -190,8 +201,8 @@ async function runExpiryNotifications() {
     const in25h = new Date(now.getTime() + 25 * 60 * 60 * 1000);
     const in1h = new Date(now.getTime() + 60 * 60 * 1000);
     const in2h = new Date(now.getTime() + 2 * 60 * 60 * 1000);
-    const in8m = new Date(now.getTime() + 8 * 60 * 1000);
-    const in16m = new Date(now.getTime() + 16 * 60 * 1000);
+    const in1m = new Date(now.getTime() + 1 * 60 * 1000);
+    const in15m = new Date(now.getTime() + 15 * 60 * 1000);
     const slots24h = await db
       .select({ id: slotsTable.id, userId: slotsTable.userId, expiresAt: slotsTable.expiresAt })
       .from(slotsTable)
@@ -227,7 +238,7 @@ async function runExpiryNotifications() {
     const slots10m = await db
       .select({ id: slotsTable.id, userId: slotsTable.userId, expiresAt: slotsTable.expiresAt })
       .from(slotsTable)
-      .where(and(eq(slotsTable.isActive, true), eq(slotsTable.notified10m, false), gt(slotsTable.expiresAt, in8m), lte(slotsTable.expiresAt, in16m)));
+      .where(and(eq(slotsTable.isActive, true), eq(slotsTable.notified10m, false), gt(slotsTable.expiresAt, in1m), lte(slotsTable.expiresAt, in15m)));
 
     for (const slot of slots10m) {
       const userRows = await db.select({ discordId: usersTable.discordId, username: usersTable.username })
