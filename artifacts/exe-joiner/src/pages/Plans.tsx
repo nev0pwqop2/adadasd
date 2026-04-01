@@ -200,7 +200,7 @@ export default function PlansPage() {
               {/* Slots bar */}
               <div className="mb-5">
                 <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-xs text-white/40">Slots {filled}/{total} · {data?.hourlyPricingEnabled ? `min ${data.minHours}h` : `${data?.slotDurationHours}h`} access when you win</span>
+                  <span className="text-xs text-white/40">Slots {filled}/{total} · {data?.hourlyPricingEnabled ? '1h' : `${data?.slotDurationHours}h`} access when you win</span>
                 </div>
                 <div className="h-1.5 rounded-full bg-white/8 overflow-hidden">
                   <div className="h-full rounded-full bg-[#f5a623] w-full" />
@@ -210,7 +210,7 @@ export default function PlansPage() {
               {/* Bid info box */}
               <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3.5 mb-5 flex-1">
                 <p className="text-xs text-white/50 mb-1">
-                  {filled}/{total} slot(s) taken &middot; bidding for <span className="text-[#f5a623]/70 font-semibold">{data?.hourlyPricingEnabled ? `min ${data.minHours}h` : `${data?.slotDurationHours}h`}</span> of access
+                  {filled}/{total} slot(s) taken &middot; bidding for <span className="text-[#f5a623]/70 font-semibold">{data?.hourlyPricingEnabled ? '1h' : `${data?.slotDurationHours}h`}</span> of access
                 </p>
                 <p className="text-xs text-white/30">Highest bid wins — access duration set by admin</p>
               </div>

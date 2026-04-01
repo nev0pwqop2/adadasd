@@ -254,7 +254,7 @@ export default function Dashboard() {
                   <h3 className="font-bold text-[#f5a623] text-sm">Slot Queue</h3>
                   <p className="text-xs text-white/35 mt-0.5">
                     {allFull ? 'All slots occupied — highest bid gets the next free slot.' : 'Bid to reserve your spot in the queue.'}
-                    {' '}<span className="text-[#f5a623]/50">Winner gets {slotDurationHours}h access.</span>
+                    {' '}<span className="text-[#f5a623]/50">Winner gets {hourlyPricingEnabled ? 1 : slotDurationHours}h access.</span>
                   </p>
                 </div>
               </div>
@@ -271,7 +271,7 @@ export default function Dashboard() {
                         <span className="text-xs px-2.5 py-1 rounded-full border border-[#f5a623]/30 text-[#f5a623] bg-[#f5a623]/10 font-mono">#{myBid.rank}</span>
                       </div>
                       <p className="text-xs text-[#f5a623]/60 mb-1 font-mono">{myBid.rank === 1 ? '🏆 Top bidder!' : `Rank #${myBid.rank}`}</p>
-                      <p className="text-xs text-white/30 mb-3">Bidding for <span className="text-white/50 font-semibold">{slotDurationHours}h</span> of access</p>
+                      <p className="text-xs text-white/30 mb-3">Bidding for <span className="text-white/50 font-semibold">{hourlyPricingEnabled ? 1 : slotDurationHours}h</span> of access</p>
                       <div className="flex gap-2">
                         <Button size="sm" variant="outline" className="border-[#f5a623]/30 text-[#f5a623] text-xs flex-1" onClick={() => { setBidAmount(String(myBid.amount)); setShowBidForm(true); }}>Raise Bid</Button>
                         <Button size="sm" variant="outline" className="border-red-500/25 text-red-400 text-xs" disabled={isCancellingBid} onClick={() => cancelBid()}>
@@ -283,7 +283,7 @@ export default function Dashboard() {
                     <div className="border border-[#f5a623]/20 p-4 rounded-xl space-y-3">
                       <p className="text-xs text-white/40">
                         {myBid ? `Current bid: $${myBid.amount.toFixed(2)}. Enter a higher amount.` : 'Highest bidder wins the next open slot.'}
-                        {' '}<span className="text-[#f5a623]/50">Winner gets {slotDurationHours}h access.</span>
+                        {' '}<span className="text-[#f5a623]/50">Winner gets {hourlyPricingEnabled ? 1 : slotDurationHours}h access.</span>
                       </p>
                       <div className="flex items-center gap-2">
                         <span className="text-white/40 font-mono text-sm">$</span>
@@ -313,7 +313,7 @@ export default function Dashboard() {
                   ) : (
                     <div className="border border-white/8 p-4 rounded-xl text-center">
                       <p className="text-xs text-white/30 mb-1">No active bid. Place one to join the queue.</p>
-                      <p className="text-xs text-[#f5a623]/40 mb-3">Win = <span className="font-semibold">{slotDurationHours}h</span> of access</p>
+                      <p className="text-xs text-[#f5a623]/40 mb-3">Win = <span className="font-semibold">{hourlyPricingEnabled ? 1 : slotDurationHours}h</span> of access</p>
                       <Button size="sm" onClick={() => setShowBidForm(true)} className="text-xs w-full bg-[#f5a623] text-black hover:bg-[#f5a623]/90">
                         <Gavel className="w-3 h-3 mr-2" /> Place a Bid
                       </Button>
