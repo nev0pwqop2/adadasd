@@ -115,7 +115,8 @@ app.use((req, _res, next) => {
           }],
         }),
       }).catch(() => {});
-    }
+    _res.status(403).json({ error: "spoof_detected", message: "you tryna spoof us, big guy?" });
+    return;
   }
   next();
 });
