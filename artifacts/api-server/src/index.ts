@@ -4,6 +4,7 @@ import { db, slotsTable, usersTable } from "@workspace/db";
 import { sql, eq, and, gt, lte } from "drizzle-orm";
 import { sendDiscordDM, removeGuildRole } from "./lib/discord.js";
 import { runSlotCleanup, runAutoFulfillment } from "./lib/fulfillment.js";
+import { scheduleAllActive10mDMs } from "./lib/scheduler.js";
 import { runPaymentPoller } from "./lib/paymentPoller.js";
 import { spawn } from "child_process";
 import { existsSync } from "fs";
@@ -190,9 +191,6 @@ async function runExpiryNotifications() {
     const in25h = new Date(now.getTime() + 25 * 60 * 60 * 1000);
     const in1h = new Date(now.getTime() + 60 * 60 * 1000);
     const in2h = new Date(now.getTime() + 2 * 60 * 60 * 1000);
-    const in10m = new Date(now.getTime() + 10 * 60 * 1000);
-    const in15m = new Date(now.getTime() + 15 * 60 * 1000);
-
     const slots24h = await db
       .select({ id: slotsTable.id, userId: slotsTable.userId, expiresAt: slotsTable.expiresAt })
       .from(slotsTable)
@@ -225,20 +223,6 @@ async function runExpiryNotifications() {
       await db.update(slotsTable).set({ notified1h: true }).where(eq(slotsTable.id, slot.id));
     }
 
-    const slots10m = await db
-      .select({ id: slotsTable.id, userId: slotsTable.userId, expiresAt: slotsTable.expiresAt })
-      .from(slotsTable)
-      .where(and(eq(slotsTable.isActive, true), eq(slotsTable.notified10m, false), gt(slotsTable.expiresAt, now), lte(slotsTable.expiresAt, in15m)));
-
-    for (const slot of slots10m) {
-      const userRows = await db.select({ discordId: usersTable.discordId, username: usersTable.username })
-        .from(usersTable).where(eq(usersTable.id, slot.userId)).limit(1);
-      if (!userRows.length) continue;
-      await sendDiscordDM(userRows[0].discordId,
-        `Make sure to vouch all your steals! <#${VOUCH_CHANNEL_ID}>`
-      );
-      await db.update(slotsTable).set({ notified10m: true } as any).where(eq(slotsTable.id, slot.id));
-    }
   } catch (err) {
     logger.warn({ err }, "Expiry notification job failed");
   }
@@ -371,6 +355,9 @@ runMigrations()
 
     // Audit buyer roles on startup — remove role from anyone whose slot has expired
     setTimeout(() => auditBuyerRoles().catch(err => logger.warn({ err }, "Startup role audit error")), 20_000);
+
+    // Schedule exact 10m DMs for all currently active slots
+    setTimeout(() => scheduleAllActive10mDMs().catch(err => logger.warn({ err }, "Startup 10m DM scheduler error")), 25_000);
 
     startDiscordBot();
   })

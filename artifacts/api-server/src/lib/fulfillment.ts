@@ -4,6 +4,7 @@ import { sendDiscordDM, sendPaymentWebhook, addGuildRole, removeGuildRole } from
 import { isLuarmorConfigured, createLuarmorUser, deleteLuarmorUser } from "./luarmor.js";
 import { getSettings } from "./settings.js";
 import { logger } from "./logger.js";
+import { schedule10mDM, cancel10mDM } from "./scheduler.js";
 import crypto from "crypto";
 
 /** Deactivate all expired slots, remove Luarmor keys, and strip Discord role */
@@ -31,6 +32,7 @@ export async function runSlotCleanup(): Promise<number> {
       .set({ isActive: false, expiresAt: null, purchasedAt: null, luarmorUserId: null, updatedAt: new Date() } as any)
       .where(eq(slotsTable.id, slot.id));
 
+    cancel10mDM(slot.id);
     removeGuildRole(discordId, roleId).catch(() => {});
 
     logger.info({ slotId: slot.id, slotNumber: slot.slotNumber, userId: slot.userId }, "Slot expired and deactivated");
@@ -77,6 +79,12 @@ async function activateSlot(userId: string, discordId: string, username: string,
   await db.update(slotsTable)
     .set({ isActive: true, expiresAt, purchasedAt: new Date(), luarmorUserId, notified24h: false, notified1h: false, notified10m: false, updatedAt: new Date() } as any)
     .where(and(eq(slotsTable.userId, userId), eq(slotsTable.slotNumber, slotNum)));
+
+  const updatedSlot = await db.select({ id: slotsTable.id }).from(slotsTable)
+    .where(and(eq(slotsTable.userId, userId), eq(slotsTable.slotNumber, slotNum))).limit(1);
+  if (updatedSlot.length) {
+    schedule10mDM(updatedSlot[0].id, userId, expiresAt).catch(() => {});
+  }
 
   const roleId = process.env.DISCORD_SLOT_HOLDER_ROLE_ID ?? "1475135841994014761";
   addGuildRole(discordId, roleId).catch(() => {});
