@@ -2,7 +2,7 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { db, slotsTable, usersTable } from "@workspace/db";
 import { sql, eq, and, gt, lte } from "drizzle-orm";
-import { sendDiscordDM } from "./lib/discord.js";
+import { sendDiscordDM, removeGuildRole } from "./lib/discord.js";
 import { runSlotCleanup, runAutoFulfillment } from "./lib/fulfillment.js";
 import { runPaymentPoller } from "./lib/paymentPoller.js";
 import { spawn } from "child_process";
@@ -158,6 +158,10 @@ async function runMigrations() {
     END$$
   `);
 
+  await step("add notified_10m to slots", sql`
+    ALTER TABLE slots ADD COLUMN IF NOT EXISTS notified_10m BOOLEAN NOT NULL DEFAULT FALSE
+  `);
+
   await step("create user_sessions", sql`
     CREATE TABLE IF NOT EXISTS user_sessions (
       sid VARCHAR NOT NULL COLLATE "default",
@@ -173,6 +177,9 @@ async function runMigrations() {
   logger.info("DB migrations complete");
 }
 
+const BUYER_ROLE_ID = process.env.DISCORD_SLOT_HOLDER_ROLE_ID ?? "1475135841994014761";
+const VOUCH_CHANNEL_ID = "1461450196377403472";
+
 async function runExpiryNotifications() {
   const botToken = process.env.DISCORD_BOT_TOKEN;
   if (!botToken) return;
@@ -183,6 +190,8 @@ async function runExpiryNotifications() {
     const in25h = new Date(now.getTime() + 25 * 60 * 60 * 1000);
     const in1h = new Date(now.getTime() + 60 * 60 * 1000);
     const in2h = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+    const in10m = new Date(now.getTime() + 10 * 60 * 1000);
+    const in15m = new Date(now.getTime() + 15 * 60 * 1000);
 
     const slots24h = await db
       .select({ id: slotsTable.id, userId: slotsTable.userId, expiresAt: slotsTable.expiresAt })
@@ -215,8 +224,56 @@ async function runExpiryNotifications() {
       );
       await db.update(slotsTable).set({ notified1h: true }).where(eq(slotsTable.id, slot.id));
     }
+
+    const slots10m = await db
+      .select({ id: slotsTable.id, userId: slotsTable.userId, expiresAt: slotsTable.expiresAt })
+      .from(slotsTable)
+      .where(and(eq(slotsTable.isActive, true), eq(slotsTable.notified10m, false), gt(slotsTable.expiresAt, now), lte(slotsTable.expiresAt, in15m)));
+
+    for (const slot of slots10m) {
+      const userRows = await db.select({ discordId: usersTable.discordId, username: usersTable.username })
+        .from(usersTable).where(eq(usersTable.id, slot.userId)).limit(1);
+      if (!userRows.length) continue;
+      await sendDiscordDM(userRows[0].discordId,
+        `Make sure to vouch all your steals! <#${VOUCH_CHANNEL_ID}>`
+      );
+      await db.update(slotsTable).set({ notified10m: true } as any).where(eq(slotsTable.id, slot.id));
+    }
   } catch (err) {
     logger.warn({ err }, "Expiry notification job failed");
+  }
+}
+
+/** On startup: remove buyer role from anyone whose slot is no longer active */
+async function auditBuyerRoles() {
+  const botToken = process.env.DISCORD_BOT_TOKEN;
+  if (!botToken) return;
+  try {
+    // Find all users who have a slot row but no currently active slot
+    const usersWithSlots = await db
+      .selectDistinct({ discordId: usersTable.discordId })
+      .from(slotsTable)
+      .innerJoin(usersTable, eq(slotsTable.userId, usersTable.id));
+
+    const activeUsers = new Set(
+      (await db
+        .selectDistinct({ discordId: usersTable.discordId })
+        .from(slotsTable)
+        .innerJoin(usersTable, eq(slotsTable.userId, usersTable.id))
+        .where(eq(slotsTable.isActive, true))
+      ).map((r) => r.discordId)
+    );
+
+    let removed = 0;
+    for (const { discordId } of usersWithSlots) {
+      if (!activeUsers.has(discordId)) {
+        await removeGuildRole(discordId, BUYER_ROLE_ID);
+        removed++;
+      }
+    }
+    if (removed > 0) logger.info({ removed }, "Startup role audit: removed buyer role from expired users");
+  } catch (err) {
+    logger.warn({ err }, "Startup buyer role audit failed");
   }
 }
 
@@ -311,6 +368,9 @@ runMigrations()
     // Payment poller — auto-complete pending Stripe/crypto payments every 2 minutes
     setInterval(() => runPaymentPoller().catch(err => logger.warn({ err }, "Payment poller error")), 2 * 60 * 1000);
     setTimeout(() => runPaymentPoller().catch(err => logger.warn({ err }, "Payment poller error")), 30_000);
+
+    // Audit buyer roles on startup — remove role from anyone whose slot has expired
+    setTimeout(() => auditBuyerRoles().catch(err => logger.warn({ err }, "Startup role audit error")), 20_000);
 
     startDiscordBot();
   })

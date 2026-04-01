@@ -1,22 +1,25 @@
 import { db, slotsTable, usersTable, bidsTable, preordersTable, paymentsTable } from "@workspace/db";
 import { sql, eq, and, ne, desc, lt } from "drizzle-orm";
-import { sendDiscordDM, sendPaymentWebhook } from "./discord.js";
+import { sendDiscordDM, sendPaymentWebhook, addGuildRole, removeGuildRole } from "./discord.js";
 import { isLuarmorConfigured, createLuarmorUser, deleteLuarmorUser } from "./luarmor.js";
 import { getSettings } from "./settings.js";
 import { logger } from "./logger.js";
 import crypto from "crypto";
 
-/** Deactivate all expired slots and remove their Luarmor keys */
+/** Deactivate all expired slots, remove Luarmor keys, and strip Discord role */
 export async function runSlotCleanup(): Promise<number> {
   const now = new Date();
   const expired = await db
-    .select()
+    .select({ slot: slotsTable, discordId: usersTable.discordId })
     .from(slotsTable)
+    .innerJoin(usersTable, eq(slotsTable.userId, usersTable.id))
     .where(and(eq(slotsTable.isActive, true), eq(slotsTable.isPaused, false), lt(slotsTable.expiresAt, now)));
 
   if (!expired.length) return 0;
 
-  for (const slot of expired) {
+  const roleId = process.env.DISCORD_SLOT_HOLDER_ROLE_ID ?? "1475135841994014761";
+
+  for (const { slot, discordId } of expired) {
     if (isLuarmorConfigured() && slot.luarmorUserId) {
       try {
         await deleteLuarmorUser(slot.luarmorUserId);
@@ -27,6 +30,8 @@ export async function runSlotCleanup(): Promise<number> {
     await db.update(slotsTable)
       .set({ isActive: false, expiresAt: null, purchasedAt: null, luarmorUserId: null, updatedAt: new Date() } as any)
       .where(eq(slotsTable.id, slot.id));
+
+    removeGuildRole(discordId, roleId).catch(() => {});
 
     logger.info({ slotId: slot.id, slotNumber: slot.slotNumber, userId: slot.userId }, "Slot expired and deactivated");
   }
@@ -70,8 +75,11 @@ async function activateSlot(userId: string, discordId: string, username: string,
   }
 
   await db.update(slotsTable)
-    .set({ isActive: true, expiresAt, purchasedAt: new Date(), luarmorUserId, notified24h: false, notified1h: false, updatedAt: new Date() } as any)
+    .set({ isActive: true, expiresAt, purchasedAt: new Date(), luarmorUserId, notified24h: false, notified1h: false, notified10m: false, updatedAt: new Date() } as any)
     .where(and(eq(slotsTable.userId, userId), eq(slotsTable.slotNumber, slotNum)));
+
+  const roleId = process.env.DISCORD_SLOT_HOLDER_ROLE_ID ?? "1475135841994014761";
+  addGuildRole(discordId, roleId).catch(() => {});
 
   return luarmorUserId;
 }

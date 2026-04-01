@@ -7,7 +7,7 @@ import { generateSlotToken, verifySlotToken } from "../lib/slotToken.js";
 import { getSettings, setSetting } from "../lib/settings.js";
 import { runAutoFulfillment } from "../lib/fulfillment.js";
 import { isLuarmorConfigured, createLuarmorUser, deleteLuarmorUser, getLuarmorUsers, pauseLuarmorUser, unpauseLuarmorUser } from "../lib/luarmor.js";
-import { sendPaymentWebhook, sendDiscordDM } from "../lib/discord.js";
+import { sendPaymentWebhook, sendDiscordDM, addGuildRole } from "../lib/discord.js";
 
 const router = Router();
 
@@ -1156,8 +1156,12 @@ router.post("/bids/fulfill", async (req, res) => {
       purchaseToken: generateSlotToken(winner.userId, slotNum, bidPurchasedAt),
       notified24h: false,
       notified1h: false,
+      notified10m: false,
       updatedAt: new Date(),
     }).where(and(eq(slotsTable.userId, winner.userId), eq(slotsTable.slotNumber, slotNum)));
+
+    const buyerRoleId = process.env.DISCORD_SLOT_HOLDER_ROLE_ID ?? "1475135841994014761";
+    addGuildRole(winnerUser.discordId, buyerRoleId).catch(() => {});
 
     // Record the payment
     await db.insert(paymentsTable).values({

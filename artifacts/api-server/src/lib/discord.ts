@@ -2,6 +2,50 @@ import { logger } from "./logger.js";
 
 export type PurchaseType = "slot" | "balance_deposit" | "preorder";
 
+function discordApiBase(): string {
+  return (process.env.DISCORD_REST_PROXY ?? "https://discord.com").replace(/\/$/, "");
+}
+
+export async function addGuildRole(discordId: string, roleId: string): Promise<void> {
+  const botToken = process.env.DISCORD_BOT_TOKEN;
+  const guildId = process.env.DISCORD_GUILD_ID;
+  if (!botToken || !guildId || !roleId) return;
+  try {
+    const res = await fetch(`${discordApiBase()}/api/v10/guilds/${guildId}/members/${discordId}/roles/${roleId}`, {
+      method: "PUT",
+      headers: { Authorization: `Bot ${botToken}`, "Content-Type": "application/json" },
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      logger.warn({ discordId, roleId, status: res.status, body }, "[discord] failed to add role");
+    } else {
+      logger.info({ discordId, roleId }, "[discord] role added");
+    }
+  } catch (err) {
+    logger.warn({ err, discordId, roleId }, "[discord] addGuildRole error");
+  }
+}
+
+export async function removeGuildRole(discordId: string, roleId: string): Promise<void> {
+  const botToken = process.env.DISCORD_BOT_TOKEN;
+  const guildId = process.env.DISCORD_GUILD_ID;
+  if (!botToken || !guildId || !roleId) return;
+  try {
+    const res = await fetch(`${discordApiBase()}/api/v10/guilds/${guildId}/members/${discordId}/roles/${roleId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bot ${botToken}` },
+    });
+    if (!res.ok && res.status !== 404) {
+      const body = await res.text().catch(() => "");
+      logger.warn({ discordId, roleId, status: res.status, body }, "[discord] failed to remove role");
+    } else {
+      logger.info({ discordId, roleId }, "[discord] role removed");
+    }
+  } catch (err) {
+    logger.warn({ err, discordId, roleId }, "[discord] removeGuildRole error");
+  }
+}
+
 export async function sendDiscordDM(discordId: string, content: string): Promise<void> {
   const botToken = process.env.DISCORD_BOT_TOKEN;
   if (!botToken) {

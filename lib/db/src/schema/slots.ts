@@ -16,6 +16,7 @@ export const slotsTable = pgTable("slots", {
   purchaseToken: text("purchase_token"),
   notified24h: boolean("notified_24h").notNull().default(false),
   notified1h: boolean("notified_1h").notNull().default(false),
+  notified10m: boolean("notified_10m").notNull().default(false),
   isPaused: boolean("is_paused").notNull().default(false),
   pausedAt: timestamp("paused_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
