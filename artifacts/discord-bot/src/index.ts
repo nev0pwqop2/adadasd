@@ -265,12 +265,14 @@ async function handleWhitelist(interaction: ChatInputCommandInteraction) {
 
   // Create or update Luarmor user if configured
   let luarmorUserId: string | null = null;
+  let luarmorError: string | null = null;
   if (luarmorConfigured()) {
     try {
       luarmorUserId = await luarmorCreateOrUpdateUser(user.discord_id, username, expiresAt);
       console.log(`[WHITELIST] Luarmor user created/updated: ${luarmorUserId}`);
     } catch (err) {
-      console.error("[WHITELIST] Luarmor error (continuing anyway):", err);
+      luarmorError = err instanceof Error ? err.message : String(err);
+      console.error("[WHITELIST] Luarmor error (continuing anyway):", luarmorError);
     }
   }
 
@@ -294,7 +296,11 @@ async function handleWhitelist(interaction: ChatInputCommandInteraction) {
   }
 
   const unixExpiry = Math.floor(expiresAt.getTime() / 1000);
-  const luarmorNote = luarmorUserId ? ` · Luarmor key issued` : luarmorConfigured() ? ` · ⚠️ Luarmor key failed` : "";
+  const luarmorNote = luarmorUserId
+    ? ` · Luarmor key issued`
+    : luarmorError
+      ? ` · ⚠️ Luarmor key failed: ${luarmorError}`
+      : "";
 
   const durationLabel = hours > 0 && minutes > 0
     ? `${hours}h ${minutes}m`
