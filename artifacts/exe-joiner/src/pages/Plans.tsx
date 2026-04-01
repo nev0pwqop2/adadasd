@@ -210,9 +210,9 @@ export default function PlansPage() {
               {/* Bid info box */}
               <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3.5 mb-5 flex-1">
                 <p className="text-xs text-white/50 mb-1">
-                  {filled}/{total} slot(s) taken &middot; bid for the next
+                  {filled}/{total} slot(s) taken &middot; bidding for <span className="text-[#f5a623]/70 font-semibold">{data?.hourlyPricingEnabled ? `min ${data.minHours}h` : `${data?.slotDurationHours}h`}</span> of access
                 </p>
-                <p className="text-xs text-white/30">Place a bid to start 1-minute countdown</p>
+                <p className="text-xs text-white/30">Highest bid wins — access duration set by admin</p>
               </div>
 
               {/* Minimum bid */}
