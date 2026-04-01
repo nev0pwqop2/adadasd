@@ -357,8 +357,8 @@ runMigrations()
   .then(() => {
     logger.info("DB migrations complete — starting background jobs");
 
-    // Expiry notifications every 5 minutes
-    setInterval(runExpiryNotifications, 5 * 60 * 1000);
+    // Expiry notifications every minute
+    setInterval(runExpiryNotifications, 60 * 1000);
     setTimeout(runExpiryNotifications, 10_000);
 
     // Cleanup + fulfillment every 60 seconds as a safety net
