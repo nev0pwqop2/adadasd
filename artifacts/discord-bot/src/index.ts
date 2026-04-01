@@ -241,7 +241,15 @@ async function handleWhitelist(interaction: ChatInputCommandInteraction) {
   }
 
   const user = userRes.rows[0];
-  const slotNumber = await getAvailableSlot(preferredSlot);
+
+  // If user already has an active slot, extend that one — don't create a second
+  const existingActiveRes = await db.query(
+    `SELECT slot_number FROM slots WHERE user_id = $1 AND is_active = true LIMIT 1`,
+    [user.id]
+  );
+  const existingActiveSlot: number | undefined = existingActiveRes.rows[0]?.slot_number;
+
+  const slotNumber = existingActiveSlot ?? await getAvailableSlot(preferredSlot);
 
   if (slotNumber === null) {
     await interaction.editReply(

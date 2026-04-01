@@ -33,7 +33,15 @@ export async function runSlotCleanup(): Promise<number> {
       .where(eq(slotsTable.id, slot.id));
 
     cancel10mDM(slot.id);
-    removeGuildRole(discordId, roleId).catch(() => {});
+
+    // Only remove role if user has no other active slots
+    const otherActive = await db.select({ id: slotsTable.id })
+      .from(slotsTable)
+      .where(and(eq(slotsTable.isActive, true), eq(slotsTable.userId, slot.userId)))
+      .limit(1);
+    if (!otherActive.length) {
+      removeGuildRole(discordId, roleId).catch(() => {});
+    }
 
     logger.info({ slotId: slot.id, slotNumber: slot.slotNumber, userId: slot.userId }, "Slot expired and deactivated");
   }
