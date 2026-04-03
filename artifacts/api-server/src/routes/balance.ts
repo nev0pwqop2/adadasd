@@ -57,7 +57,7 @@ router.get("/", requireAuth, async (req: Request, res: Response) => {
 });
 
 // POST /api/balance/deposit/stripe — create Stripe checkout to add funds
-router.post("/deposit/stripe", requireAuth, async (_req: Request, res: Response) => {
+router.post("/deposit/stripe", requireAuth, async (req: Request, res: Response) => {
   const stripeKey = process.env.STRIPE_SECRET_KEY;
   if (!stripeKey) {
     res.status(503).json({ error: "payment_unavailable", message: "Stripe not configured" });
