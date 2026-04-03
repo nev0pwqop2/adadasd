@@ -4,7 +4,7 @@ import { eq, and, ne, sql } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { getSettings } from "../lib/settings.js";
 import { isLuarmorConfigured, createLuarmorUser } from "../lib/luarmor.js";
-import { sendPaymentWebhook, type PurchaseType } from "../lib/discord.js";
+import { sendPaymentWebhook, sendDiscordDM, type PurchaseType } from "../lib/discord.js";
 import { generateSlotToken } from "../lib/slotToken.js";
 import crypto from "crypto";
 
@@ -191,6 +191,15 @@ async function activateSlot(userId: string, slotNumber: number, paymentId: strin
       durationHours: hours,
       expiresAt,
     });
+
+    // DM the user to let them know their slot is active
+    const ts = Math.floor(expiresAt.getTime() / 1000);
+    const keyLine = luarmorUserId
+      ? `\n🔑 **Your script key:** \`${luarmorUserId}\``
+      : `\n🔑 Get your script key from the dashboard.`;
+    sendDiscordDM(user.discordId,
+      `✅ **Slot #${slotNumber} is now active!**${keyLine}\n⏰ Expires <t:${ts}:F>.`
+    ).catch(() => {});
   }
 }
 

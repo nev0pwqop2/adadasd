@@ -283,14 +283,15 @@ async function handleWhitelist(interaction: ChatInputCommandInteraction) {
 
   if (existingSlot.rows.length > 0) {
     await db.query(
-      `UPDATE slots SET is_active = true, purchased_at = $1, expires_at = $2, luarmor_user_id = $3
+      `UPDATE slots SET is_active = true, purchased_at = $1, expires_at = $2, luarmor_user_id = $3,
+       notified_24h = false, notified_1h = false, notified_10m = false
        WHERE user_id = $4 AND slot_number = $5`,
       [purchasedAt, expiresAt, luarmorUserId, user.id, slotNumber]
     );
   } else {
     await db.query(
-      `INSERT INTO slots (user_id, slot_number, is_active, purchased_at, expires_at, luarmor_user_id)
-       VALUES ($1, $2, true, $3, $4, $5)`,
+      `INSERT INTO slots (user_id, slot_number, is_active, purchased_at, expires_at, luarmor_user_id, notified_24h, notified_1h, notified_10m)
+       VALUES ($1, $2, true, $3, $4, $5, false, false, false)`,
       [user.id, slotNumber, purchasedAt, expiresAt, luarmorUserId]
     );
   }
@@ -307,6 +308,28 @@ async function handleWhitelist(interaction: ChatInputCommandInteraction) {
     : hours > 0 ? `${hours}h` : `${minutes}m`;
 
   console.log(`[WHITELIST] ${interaction.user.username} whitelisted "${username}" on slot #${slotNumber} for ${durationLabel}`);
+
+  // DM the whitelisted user
+  try {
+    const keyLine = luarmorUserId
+      ? `\n🔑 **Your script key:** \`${luarmorUserId}\``
+      : `\n🔑 Get your script key from the dashboard.`;
+    const dmChannel = await fetch("https://discord.com/api/v10/users/@me/channels", {
+      method: "POST",
+      headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ recipient_id: user.discord_id }),
+    });
+    if (dmChannel.ok) {
+      const ch = await dmChannel.json() as { id: string };
+      await fetch(`https://discord.com/api/v10/channels/${ch.id}/messages`, {
+        method: "POST",
+        headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ content: `✅ **Slot #${slotNumber} is now active!**${keyLine}\n⏰ Expires <t:${unixExpiry}:F>.` }),
+      });
+    }
+  } catch (e) {
+    console.warn("[WHITELIST] Failed to DM user:", e);
+  }
 
   await interaction.editReply(
     `✅ **${username}** has been whitelisted on **Slot #${slotNumber}** for **${durationLabel}**.\nExpires: <t:${unixExpiry}:F> (<t:${unixExpiry}:R>)${luarmorNote}`

@@ -814,12 +814,15 @@ router.post("/reset-all-deposits", async (req, res) => {
 // GET /admin/transactions — revenue summary and per-transaction detail
 router.get("/transactions", async (req, res) => {
   try {
-    const payments = await db
-      .select()
-      .from(paymentsTable)
-      .where(eq(paymentsTable.status, "completed"))
-      .orderBy(desc(paymentsTable.updatedAt))
-      .limit(1000);
+    const [payments, pendingStripeRows] = await Promise.all([
+      db.select().from(paymentsTable).where(eq(paymentsTable.status, "completed")).orderBy(desc(paymentsTable.updatedAt)).limit(1000),
+      db.select({ usdAmount: paymentsTable.usdAmount, amount: paymentsTable.amount })
+        .from(paymentsTable)
+        .where(and(eq(paymentsTable.status, "pending"), ne(paymentsTable.method, "crypto"))),
+    ]);
+    const pendingStripeTotal = parseFloat(
+      pendingStripeRows.reduce((sum, p) => sum + parseFloat(p.usdAmount ?? p.amount ?? "0"), 0).toFixed(2)
+    );
 
     // Revenue = real sales only (exclude balance-funded purchases and deposits)
     const revenue = payments.filter(p =>
@@ -891,6 +894,7 @@ router.get("/transactions", async (req, res) => {
         week: getPeriodStats(startOfWeek),
         month: getPeriodStats(startOfMonth),
         allTime: getPeriodStats(new Date(0)),
+        pendingStripeTotal,
       },
       transactions,
     });

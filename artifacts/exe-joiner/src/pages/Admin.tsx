@@ -533,6 +533,7 @@ export default function Admin() {
       week: PeriodStats;
       month: PeriodStats;
       allTime: PeriodStats;
+      pendingStripeTotal: number;
     };
     transactions: TransactionEntry[];
   };
@@ -2393,6 +2394,13 @@ export default function Admin() {
                 </div>
               ) : (
                 <>
+                  {/* Pending Stripe banner */}
+                  {(txData?.summary.pendingStripeTotal ?? 0) > 0 && (
+                    <div className="mx-6 mt-4 px-4 py-2 rounded-lg bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 font-mono text-xs flex items-center gap-2">
+                      <span>⚠️</span>
+                      <span><strong>${txData!.summary.pendingStripeTotal.toFixed(2)}</strong> pending (Stripe webhook not confirmed) — set up <code>STRIPE_WEBHOOK_SECRET</code> on Render to auto-complete these.</span>
+                    </div>
+                  )}
                   {/* Summary cards */}
                   <div className="p-6 grid grid-cols-2 sm:grid-cols-4 gap-4 border-b border-green-500/10">
                     <StatCard label="Today" stats={txData?.summary.today} />

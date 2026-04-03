@@ -4,7 +4,7 @@ import { eq, and, sql } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { getSettings } from "../lib/settings.js";
 import { isLuarmorConfigured, createLuarmorUser } from "../lib/luarmor.js";
-import { sendPaymentWebhook } from "../lib/discord.js";
+import { sendPaymentWebhook, sendDiscordDM } from "../lib/discord.js";
 import { generateSlotToken } from "../lib/slotToken.js";
 import crypto from "crypto";
 
@@ -491,7 +491,7 @@ router.post("/use", requireAuth, async (req: Request, res: Response) => {
       await releaseSlotLock();
     }
 
-    // Discord webhook
+    // Discord webhook + DM to user
     try {
       const webhookUserRows = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
       if (webhookUserRows.length) {
@@ -506,6 +506,14 @@ router.post("/use", requireAuth, async (req: Request, res: Response) => {
           durationHours: purchasedHours,
           expiresAt,
         });
+        // DM the user their slot activation + key
+        const ts = Math.floor(expiresAt.getTime() / 1000);
+        const keyLine = luarmorUserId
+          ? `\n🔑 **Your script key:** \`${luarmorUserId}\``
+          : `\n🔑 Get your script key from the dashboard.`;
+        sendDiscordDM(webhookUserRows[0].discordId,
+          `✅ **Slot #${slotNumber} is now active!**${keyLine}\n⏰ Expires <t:${ts}:F>.`
+        ).catch(() => {});
       }
     } catch (webhookErr) {
       req.log.warn({ webhookErr }, "Balance purchase webhook failed");
