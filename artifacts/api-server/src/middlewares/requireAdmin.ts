@@ -55,6 +55,9 @@ export async function isAdminDiscordId(discordId: string): Promise<boolean> {
   return rows.length > 0 && rows[0].isAdmin;
 }
 
+// Cache admin verification for 5 minutes per session to avoid a DB hit on every request
+const ADMIN_CACHE_TTL_MS = 5 * 60 * 1000;
+
 export async function requireAdmin(
   req: Request,
   res: Response,
@@ -65,6 +68,21 @@ export async function requireAdmin(
       .status(401)
       .json({ error: "unauthorized", message: "Authentication required" });
     return;
+  }
+
+  // Super admins are always allowed without a DB query
+  if (SUPER_ADMIN_IDS.has(req.session.discordId)) {
+    return next();
+  }
+
+  // Use cached admin status from session if it's still fresh
+  const now = Date.now();
+  if (
+    req.session.isAdminVerified === true &&
+    req.session.adminVerifiedAt &&
+    now - req.session.adminVerifiedAt < ADMIN_CACHE_TTL_MS
+  ) {
+    return next();
   }
 
   try {
@@ -107,11 +125,10 @@ export async function requireAdmin(
       return;
     }
 
-    // Check admin status from DB (super admins bypass DB flag)
-    const isAdmin = SUPER_ADMIN_IDS.has(user.discordId) || user.isAdmin;
+    // Check admin status from DB (super admins already handled above)
+    const isAdmin = user.isAdmin;
     if (!isAdmin) {
       const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ?? req.socket.remoteAddress ?? "unknown";
-      const now = Date.now();
       const entry = adminProbeAttempts.get(ip) ?? { count: 0, firstSeen: now };
       if (now - entry.firstSeen > PROBE_BAN_WINDOW_MS) { entry.count = 0; entry.firstSeen = now; }
       entry.count++;
@@ -130,8 +147,14 @@ export async function requireAdmin(
       return;
     }
 
+    // Cache the result in the session
+    req.session.isAdminVerified = true;
+    req.session.adminVerifiedAt = now;
+
     next();
   } catch (err) {
+    // Log the actual error so it's visible in Render logs
+    console.error("[requireAdmin] DB error:", err);
     res.status(500).json({
       error: "server_error",
       message: "Failed to verify admin access",

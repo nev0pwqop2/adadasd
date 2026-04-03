@@ -35,5 +35,7 @@ declare module "express-session" {
     userId: string;
     discordId: string;
     username: string;
+    isAdminVerified?: boolean;
+    adminVerifiedAt?: number;
   }
 }
