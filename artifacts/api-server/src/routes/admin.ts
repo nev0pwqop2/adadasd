@@ -530,15 +530,19 @@ router.post("/payments/:id/verify", async (req, res) => {
       const expiryMs = hours * 60 * 60 * 1000;
       const expiresAt = new Date(Date.now() + expiryMs);
       await db.update(paymentsTable).set({ status: "completed", updatedAt: new Date() }).where(eq(paymentsTable.id, id));
+      const userRows2 = await db.select().from(usersTable).where(eq(usersTable.id, payment.userId)).limit(1);
+      let luarmorKey2: string | null = null;
+      if (isLuarmorConfigured() && userRows2.length) {
+        try { const lu = await createLuarmorUser(userRows2[0].discordId, userRows2[0].username, expiresAt); luarmorKey2 = lu.user_key; } catch {}
+      }
       const existing = await db.select().from(slotsTable).where(and(eq(slotsTable.userId, payment.userId), eq(slotsTable.slotNumber, payment.slotNumber))).limit(1);
       const purchasedAt = new Date();
-      const slotData = { isActive: true, purchasedAt, expiresAt, purchaseToken: generateSlotToken(payment.userId, payment.slotNumber, purchasedAt) };
+      const slotData = { isActive: true, purchasedAt, expiresAt, purchaseToken: generateSlotToken(payment.userId, payment.slotNumber, purchasedAt), ...(luarmorKey2 ? { luarmorUserId: luarmorKey2 } : {}) };
       if (existing.length) {
         await db.update(slotsTable).set(slotData).where(and(eq(slotsTable.userId, payment.userId), eq(slotsTable.slotNumber, payment.slotNumber)));
       } else {
         await db.insert(slotsTable).values({ userId: payment.userId, slotNumber: payment.slotNumber, ...slotData });
       }
-      const userRows2 = await db.select().from(usersTable).where(eq(usersTable.id, payment.userId)).limit(1);
       if (userRows2.length) {
         await sendPaymentWebhook({
           username: userRows2[0].username,
@@ -551,6 +555,9 @@ router.post("/payments/:id/verify", async (req, res) => {
           durationHours: hours,
           expiresAt,
         });
+        const ts2 = Math.floor(expiresAt.getTime() / 1000);
+        const keyLine2 = luarmorKey2 ? `\n🔑 **Your script key:** \`${luarmorKey2}\`` : `\n🔑 Get your script key from the dashboard.`;
+        sendDiscordDM(userRows2[0].discordId, `✅ **Slot #${payment.slotNumber} is now active!**${keyLine2}\n⏰ Expires <t:${ts2}:F>.`).catch(() => {});
       }
       req.log.info({ id }, "Admin manually completed stripe slot payment");
       res.json({ success: true, message: `Slot #${payment.slotNumber} activated` });
@@ -610,15 +617,19 @@ router.post("/payments/:id/verify", async (req, res) => {
       const expiryMs = hours * 60 * 60 * 1000;
       const expiresAt = new Date(Date.now() + expiryMs);
       await db.update(paymentsTable).set({ status: "completed", updatedAt: new Date() }).where(eq(paymentsTable.id, id));
-      const existing = await db.select().from(slotsTable).where(and(eq(slotsTable.userId, payment.userId), eq(slotsTable.slotNumber, payment.slotNumber))).limit(1);
-      const purchasedAt = new Date();
-      const slotData2 = { isActive: true, purchasedAt, expiresAt, purchaseToken: generateSlotToken(payment.userId, payment.slotNumber, purchasedAt) };
-      if (existing.length) {
+      const userRows3 = await db.select().from(usersTable).where(eq(usersTable.id, payment.userId)).limit(1);
+      let luarmorKey3: string | null = null;
+      if (isLuarmorConfigured() && userRows3.length) {
+        try { const lu = await createLuarmorUser(userRows3[0].discordId, userRows3[0].username, expiresAt); luarmorKey3 = lu.user_key; } catch {}
+      }
+      const existing2 = await db.select().from(slotsTable).where(and(eq(slotsTable.userId, payment.userId), eq(slotsTable.slotNumber, payment.slotNumber))).limit(1);
+      const purchasedAt2 = new Date();
+      const slotData2 = { isActive: true, purchasedAt: purchasedAt2, expiresAt, purchaseToken: generateSlotToken(payment.userId, payment.slotNumber, purchasedAt2), ...(luarmorKey3 ? { luarmorUserId: luarmorKey3 } : {}) };
+      if (existing2.length) {
         await db.update(slotsTable).set(slotData2).where(and(eq(slotsTable.userId, payment.userId), eq(slotsTable.slotNumber, payment.slotNumber)));
       } else {
         await db.insert(slotsTable).values({ userId: payment.userId, slotNumber: payment.slotNumber, ...slotData2 });
       }
-      const userRows3 = await db.select().from(usersTable).where(eq(usersTable.id, payment.userId)).limit(1);
       if (userRows3.length) {
         await sendPaymentWebhook({
           username: userRows3[0].username,
@@ -631,6 +642,9 @@ router.post("/payments/:id/verify", async (req, res) => {
           durationHours: hours,
           expiresAt,
         });
+        const ts3 = Math.floor(expiresAt.getTime() / 1000);
+        const keyLine3 = luarmorKey3 ? `\n🔑 **Your script key:** \`${luarmorKey3}\`` : `\n🔑 Get your script key from the dashboard.`;
+        sendDiscordDM(userRows3[0].discordId, `✅ **Slot #${payment.slotNumber} is now active!**${keyLine3}\n⏰ Expires <t:${ts3}:F>.`).catch(() => {});
       }
       req.log.info({ id }, "Admin manually completed crypto slot payment");
       res.json({ success: true, message: `Slot #${payment.slotNumber} activated` });
