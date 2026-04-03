@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { QRCodeSVG } from 'qrcode.react';
-import { X, Bitcoin, Loader2, CheckCircle, Copy, Plus, Minus, Wallet, Tag, Check, MessageSquare } from 'lucide-react';
+import { X, Bitcoin, Loader2, CheckCircle, Copy, Plus, Minus, Wallet, Tag, Check, MessageSquare, CreditCard } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
 import { cn } from '@/lib/utils';
@@ -25,7 +25,7 @@ interface PaymentModalProps {
   onSuccess: () => void;
 }
 
-type Tab = 'crypto' | 'balance' | 'paypal';
+type Tab = 'crypto' | 'balance' | 'paypal' | 'card';
 
 export function PaymentModal({
   isOpen,
@@ -43,6 +43,7 @@ export function PaymentModal({
   const [currency, setCurrency] = useState<CreateCryptoSessionRequestCurrency>('BTC');
   const [selectedHours, setSelectedHours] = useState<number>(minHours);
   const [isBalanceLoading, setIsBalanceLoading] = useState(false);
+  const [isCardLoading, setIsCardLoading] = useState(false);
   const { toast } = useToast();
 
   const [couponInput, setCouponInput] = useState('');
@@ -125,6 +126,27 @@ export function PaymentModal({
   };
 
   const canPayWithBalance = userBalance >= totalPrice;
+
+  const handleCardPay = async () => {
+    setIsCardLoading(true);
+    try {
+      const body: any = { slotNumber };
+      if (hourlyPricingEnabled) body.hours = selectedHours;
+      if (appliedCoupon) body.couponId = appliedCoupon.couponId;
+      const res = await fetch(`${import.meta.env.BASE_URL}api/payments/create-stripe-session`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Failed to create payment session');
+      window.location.href = data.url;
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+      setIsCardLoading(false);
+    }
+  };
 
   const handleCryptoGenerate = () => {
     const data: any = { slotNumber, currency };
@@ -325,6 +347,15 @@ export function PaymentModal({
                   <Bitcoin className="w-4 h-4" /> Crypto
                 </button>
                 <button
+                  onClick={() => setTab('card')}
+                  className={cn(
+                    "flex-1 py-2 text-sm font-mono uppercase tracking-wider transition-colors chamfered flex items-center justify-center gap-2",
+                    tab === 'card' ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <CreditCard className="w-4 h-4" /> Card
+                </button>
+                <button
                   onClick={() => setTab('paypal')}
                   className={cn(
                     "flex-1 py-2 text-sm font-mono uppercase tracking-wider transition-colors chamfered flex items-center justify-center gap-2",
@@ -456,6 +487,23 @@ export function PaymentModal({
                   >
                     {isBalanceLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Wallet className="w-4 h-4 mr-2" /> Pay with Balance</>}
                   </Button>
+                </div>
+              )}
+
+              {tab === 'card' && (
+                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
+                  {hourlyPricingEnabled && <HourSelector />}
+                  <PriceSummary />
+                  <Button
+                    className="w-full h-14 text-base"
+                    onClick={handleCardPay}
+                    disabled={isCardLoading}
+                  >
+                    {isCardLoading
+                      ? <Loader2 className="w-5 h-5 animate-spin" />
+                      : <><CreditCard className="w-4 h-4 mr-2" /> Pay ${totalPrice.toFixed(2)} with Card</>}
+                  </Button>
+                  <p className="text-center text-xs text-muted-foreground font-mono">Secured by Stripe. You'll be redirected to complete payment.</p>
                 </div>
               )}
 

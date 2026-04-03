@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Bitcoin, Loader2, Wallet, Copy, Check, CheckCircle, MessageSquare } from 'lucide-react';
+import { X, Bitcoin, Loader2, Wallet, Copy, Check, CheckCircle, MessageSquare, CreditCard } from 'lucide-react';
 import { Button } from './ui/button';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -11,7 +11,7 @@ interface DepositModalProps {
   onSuccess: () => void;
 }
 
-type Method = 'crypto' | 'paypal';
+type Method = 'crypto' | 'card' | 'paypal';
 type Currency = 'BTC' | 'LTC' | 'USDT' | 'ETH' | 'SOL';
 
 const PRESET_AMOUNTS = [10, 25, 50, 100];
@@ -93,6 +93,28 @@ export function DepositModal({ isOpen, onClose, onSuccess }: DepositModalProps) 
       toast({ title: 'Not Confirmed Yet', description: e.message, variant: 'destructive' });
     } finally {
       setIsVerifying(false);
+    }
+  };
+
+  const handleCardDeposit = async () => {
+    if (effectiveAmount < 1) {
+      toast({ title: 'Invalid amount', description: 'Minimum deposit is $1.00', variant: 'destructive' });
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const res = await fetch(`${BASE}api/balance/deposit/stripe`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: effectiveAmount }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Failed');
+      window.location.href = data.url;
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+      setIsLoading(false);
     }
   };
 
@@ -197,36 +219,42 @@ export function DepositModal({ isOpen, onClose, onSuccess }: DepositModalProps) 
                   {/* Method */}
                   <div>
                     <p className="text-xs font-mono text-muted-foreground mb-2.5 uppercase tracking-wider">Payment Method</p>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-3 gap-2">
                       <button
                         onClick={() => setMethod('crypto')}
                         className={cn(
-                          'flex items-center gap-2.5 p-3.5 rounded-xl border transition-all',
+                          'flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-all',
                           method === 'crypto'
                             ? 'border-primary bg-primary/10 text-primary'
                             : 'border-border bg-card/50 text-muted-foreground hover:border-primary/40 hover:text-foreground'
                         )}
                       >
-                        <Bitcoin className="w-4 h-4 shrink-0" />
-                        <div className="text-left">
-                          <p className="font-mono text-xs font-semibold">Crypto</p>
-                          <p className="font-mono text-[10px] text-muted-foreground">BTC · LTC · USDT · ETH · SOL</p>
-                        </div>
+                        <Bitcoin className="w-4 h-4" />
+                        <p className="font-mono text-xs font-semibold">Crypto</p>
+                      </button>
+                      <button
+                        onClick={() => setMethod('card')}
+                        className={cn(
+                          'flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-all',
+                          method === 'card'
+                            ? 'border-primary bg-primary/10 text-primary'
+                            : 'border-border bg-card/50 text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                        )}
+                      >
+                        <CreditCard className="w-4 h-4" />
+                        <p className="font-mono text-xs font-semibold">Card</p>
                       </button>
                       <button
                         onClick={() => setMethod('paypal')}
                         className={cn(
-                          'flex items-center gap-2.5 p-3.5 rounded-xl border transition-all',
+                          'flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-all',
                           method === 'paypal'
                             ? 'border-primary bg-primary/10 text-primary'
                             : 'border-border bg-card/50 text-muted-foreground hover:border-primary/40 hover:text-foreground'
                         )}
                       >
-                        <MessageSquare className="w-4 h-4 shrink-0" />
-                        <div className="text-left">
-                          <p className="font-mono text-xs font-semibold">PayPal</p>
-                          <p className="font-mono text-[10px] text-muted-foreground">Discord ticket</p>
-                        </div>
+                        <MessageSquare className="w-4 h-4" />
+                        <p className="font-mono text-xs font-semibold">PayPal</p>
                       </button>
                     </div>
                   </div>
@@ -274,7 +302,7 @@ export function DepositModal({ isOpen, onClose, onSuccess }: DepositModalProps) 
                   )}
 
                   {/* Summary + CTA */}
-                  {method !== 'paypal' && (
+                  {method === 'crypto' && (
                   <div className="bg-secondary/20 rounded-xl p-4 flex items-center justify-between">
                     <div>
                       <p className="font-mono text-xs text-muted-foreground">Depositing</p>
@@ -286,6 +314,22 @@ export function DepositModal({ isOpen, onClose, onSuccess }: DepositModalProps) 
                       className="font-mono text-xs uppercase tracking-wider"
                     >
                       {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Get Address'}
+                    </Button>
+                  </div>
+                  )}
+
+                  {method === 'card' && (
+                  <div className="bg-secondary/20 rounded-xl p-4 flex items-center justify-between">
+                    <div>
+                      <p className="font-mono text-xs text-muted-foreground">Depositing</p>
+                      <p className="font-display font-bold text-xl text-primary">${effectiveAmount > 0 ? effectiveAmount.toFixed(2) : '0.00'}</p>
+                    </div>
+                    <Button
+                      onClick={handleCardDeposit}
+                      disabled={isLoading || effectiveAmount < 1}
+                      className="font-mono text-xs uppercase tracking-wider"
+                    >
+                      {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><CreditCard className="w-3.5 h-3.5 mr-1" />Pay</>}
                     </Button>
                   </div>
                   )}

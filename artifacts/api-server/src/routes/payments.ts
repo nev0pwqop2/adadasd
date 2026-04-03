@@ -195,9 +195,6 @@ async function activateSlot(userId: string, slotNumber: number, paymentId: strin
 }
 
 router.post("/create-stripe-session", requireAuth, async (_req: Request, res: Response) => {
-  res.status(503).json({ error: "payment_unavailable", message: "Card payments are temporarily unavailable. Please use crypto." });
-  return;
-  // eslint-disable-next-line no-unreachable
   const stripeKey = process.env.STRIPE_SECRET_KEY;
   if (!stripeKey) {
     res.status(503).json({ error: "payment_unavailable", message: "Stripe is not configured" });
