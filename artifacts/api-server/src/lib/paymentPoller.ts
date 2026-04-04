@@ -4,6 +4,7 @@ import { logger } from "./logger.js";
 import { getSettings } from "./settings.js";
 import { generateSlotToken } from "./slotToken.js";
 import { sendPaymentWebhook } from "./discord.js";
+import { activateSlotShared } from "./slotActivation.js";
 
 async function completeBalanceDeposit(
   paymentId: string,
@@ -123,9 +124,8 @@ async function pollStripePending(stripeKey: string) {
           "USD", payment.amount,
         );
       } else if (payment.method === "stripe" && payment.slotNumber > 0) {
-        await completeSlotPayment(
-          payment.id, payment.userId, payment.slotNumber, payment.method,
-          "USD", payment.amount, payment.derivationIndex,
+        await activateSlotShared(
+          payment.userId, payment.slotNumber, payment.id, payment.derivationIndex ?? undefined,
         );
       } else {
         await db.update(paymentsTable)
@@ -205,10 +205,17 @@ async function pollCryptoPending(apiKey: string) {
 
 export async function runPaymentPoller() {
   const nowKey = process.env.NOWPAYMENTS_API_KEY;
+  const stripeKey = process.env.STRIPE_SECRET_KEY;
 
   try {
     if (nowKey) await pollCryptoPending(nowKey);
   } catch (err) {
     logger.warn({ err }, "Payment poller: crypto polling error");
+  }
+
+  try {
+    if (stripeKey) await pollStripePending(stripeKey);
+  } catch (err) {
+    logger.warn({ err }, "Payment poller: stripe polling error");
   }
 }
