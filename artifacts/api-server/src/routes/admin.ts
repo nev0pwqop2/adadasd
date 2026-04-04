@@ -279,20 +279,45 @@ router.post("/slots/:slotNumber/toggle-pause", async (req, res) => {
       const currentExpiry = slot.expiresAt ?? now;
       const newExpiresAt = new Date(currentExpiry.getTime() + pausedMs);
 
-      if (isLuarmorConfigured() && slot.luarmorUserId) {
-        try {
-          await unpauseLuarmorUser(slot.luarmorUserId, newExpiresAt);
-        } catch (e) {
-          req.log.warn({ e }, "Luarmor unpause failed");
+      let finalLuarmorKey = slot.luarmorUserId;
+
+      if (isLuarmorConfigured()) {
+        const userRows = await db.select().from(usersTable).where(eq(usersTable.id, slot.userId)).limit(1);
+        const user = userRows[0];
+
+        if (finalLuarmorKey) {
+          try {
+            await unpauseLuarmorUser(finalLuarmorKey, newExpiresAt);
+          } catch (e) {
+            // Luarmor may have auto-deleted the user because auth_expire was set to the past.
+            // Create a fresh Luarmor user and update the stored key.
+            req.log.warn({ e, userKey: finalLuarmorKey }, "Luarmor unpause failed — recreating user");
+            if (user) {
+              try {
+                const newLuarmor = await createLuarmorUser(user.discordId, user.username, newExpiresAt);
+                finalLuarmorKey = newLuarmor.user_key;
+              } catch (e2) {
+                req.log.warn({ e2 }, "Luarmor user recreation also failed");
+              }
+            }
+          }
+        } else if (user) {
+          // No key stored — create one from scratch
+          try {
+            const newLuarmor = await createLuarmorUser(user.discordId, user.username, newExpiresAt);
+            finalLuarmorKey = newLuarmor.user_key;
+          } catch (e) {
+            req.log.warn({ e }, "Luarmor user creation on unpause failed");
+          }
         }
       }
 
       await db
         .update(slotsTable)
-        .set({ isPaused: false, pausedAt: null, expiresAt: newExpiresAt })
+        .set({ isPaused: false, pausedAt: null, expiresAt: newExpiresAt, luarmorUserId: finalLuarmorKey } as any)
         .where(eq(slotsTable.id, slot.id));
 
-      req.log.info({ adminDiscordId: req.session.discordId, slotNumber, newExpiresAt }, "Slot unpaused");
+      req.log.info({ adminDiscordId: req.session.discordId, slotNumber, newExpiresAt, luarmorKeyRecreated: finalLuarmorKey !== slot.luarmorUserId }, "Slot unpaused");
       res.json({ success: true, isPaused: false, message: `Slot #${slotNumber} unpaused — expiry extended by ${Math.round(pausedMs / 60000)} min` });
     }
   } catch (err) {
