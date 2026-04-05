@@ -71,6 +71,11 @@ router.post("/", requireAuth, async (req, res) => {
     return;
   }
 
+  if (amount < 6.50) {
+    res.status(400).json({ error: "invalid_amount", message: "Minimum bid is $6.50." });
+    return;
+  }
+
   if (amount > 100000) {
     res.status(400).json({ error: "invalid_amount", message: "Bid amount too large" });
     return;
