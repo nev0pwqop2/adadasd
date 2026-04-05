@@ -107,7 +107,7 @@ async function activateSlot(userId: string, discordId: string, username: string,
  */
 export async function runAutoFulfillment(): Promise<void> {
   try {
-    const { slotCount, slotDurationHours } = await getSettings();
+    const { slotCount, slotDurationHours, hourlyPricingEnabled, pricePerHour, minHours } = await getSettings();
 
     // Count active slots within the configured limit
     const activeSlots = await db
@@ -152,7 +152,10 @@ export async function runAutoFulfillment(): Promise<void> {
       const slotNum = await findAvailableSlot(winner.userId, slotCount);
       if (slotNum === null) return;
 
-      const expiresAt = new Date(Date.now() + slotDurationHours * 60 * 60 * 1000);
+      const bidHours = hourlyPricingEnabled && pricePerHour > 0
+        ? Math.max(minHours, Math.floor(parseFloat(winner.amount) / pricePerHour))
+        : slotDurationHours;
+      const expiresAt = new Date(Date.now() + bidHours * 60 * 60 * 1000);
       await activateSlot(winner.userId, wu.discordId, wu.username, slotNum, expiresAt);
 
       await db.insert(paymentsTable).values({
