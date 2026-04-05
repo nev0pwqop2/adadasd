@@ -152,9 +152,7 @@ export async function runAutoFulfillment(): Promise<void> {
       const slotNum = await findAvailableSlot(winner.userId, slotCount);
       if (slotNum === null) return;
 
-      const bidHours = hourlyPricingEnabled && pricePerHour > 0
-        ? Math.max(minHours, Math.floor(parseFloat(winner.amount) / pricePerHour))
-        : slotDurationHours;
+      const bidHours = 1;
       const expiresAt = new Date(Date.now() + bidHours * 60 * 60 * 1000);
       await activateSlot(winner.userId, wu.discordId, wu.username, slotNum, expiresAt);
 

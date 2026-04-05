@@ -134,6 +134,23 @@ const commands = [
     )
     .toJSON(),
   new SlashCommandBuilder()
+    .setName("addbalance")
+    .setDescription("Add balance to a user's account")
+    .addUserOption((opt) =>
+      opt
+        .setName("mention")
+        .setDescription("The Discord user to add balance to")
+        .setRequired(true)
+    )
+    .addNumberOption((opt) =>
+      opt
+        .setName("amount")
+        .setDescription("Amount in USD to add (e.g. 10.00)")
+        .setRequired(true)
+        .setMinValue(0.01)
+    )
+    .toJSON(),
+  new SlashCommandBuilder()
     .setName("unwhitelist")
     .setDescription("Remove a user's active slot(s)")
     .addUserOption((opt) =>
@@ -440,6 +457,45 @@ async function handleUnwhitelist(interaction: ChatInputCommandInteraction) {
   }
 }
 
+async function handleAddBalance(interaction: ChatInputCommandInteraction) {
+  if (!ALLOWED_USER_IDS.has(interaction.user.id)) {
+    await interaction.reply({ content: "❌ You are not authorized to use this command.", ephemeral: true });
+    return;
+  }
+
+  await interaction.deferReply({ ephemeral: true });
+
+  const mentionedUser = interaction.options.getUser("mention", true);
+  const amount = interaction.options.getNumber("amount", true);
+
+  const userRes = await db.query(
+    `SELECT id, username, balance FROM users WHERE discord_id = $1 LIMIT 1`,
+    [mentionedUser.id]
+  );
+
+  if (userRes.rows.length === 0) {
+    await interaction.editReply(`❌ <@${mentionedUser.id}> has not registered on the site yet.`);
+    return;
+  }
+
+  const user = userRes.rows[0];
+  const amountFixed = amount.toFixed(2);
+
+  await db.query(
+    `UPDATE users SET balance = COALESCE(balance, 0) + $1 WHERE id = $2`,
+    [amountFixed, user.id]
+  );
+
+  const newBalanceRes = await db.query(`SELECT balance FROM users WHERE id = $1`, [user.id]);
+  const newBalance = parseFloat(newBalanceRes.rows[0]?.balance ?? "0").toFixed(2);
+
+  console.log(`[ADDBALANCE] ${interaction.user.username} added $${amountFixed} to ${user.username} (new balance: $${newBalance})`);
+
+  await interaction.editReply(
+    `✅ Added **$${amountFixed}** to <@${mentionedUser.id}> (**${user.username}**). New balance: **$${newBalance}**`
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Expiry cleanup job — runs every 5 minutes
 // ---------------------------------------------------------------------------
@@ -523,6 +579,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
   const handler =
     interaction.commandName === "whitelist" ? handleWhitelist :
     interaction.commandName === "unwhitelist" ? handleUnwhitelist :
+    interaction.commandName === "addbalance" ? handleAddBalance :
     null;
 
   if (handler) {
