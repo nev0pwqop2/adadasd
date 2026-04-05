@@ -172,11 +172,15 @@ router.post("/create-stripe-session", requireAuth, async (req: Request, res: Res
   }
 
   const slots = await db.select().from(slotsTable).where(
-    and(eq(slotsTable.userId, req.session.userId!), eq(slotsTable.slotNumber, slotNumber))
+    and(eq(slotsTable.isActive, true), eq(slotsTable.slotNumber, slotNumber))
   ).limit(1);
 
-  if (slots.length > 0 && slots[0].isActive) {
-    res.status(400).json({ error: "slot_active", message: "Slot is already active" });
+  if (slots.length > 0) {
+    if (slots[0].userId === req.session.userId!) {
+      res.status(400).json({ error: "slot_active", message: "You already have this slot active." });
+    } else {
+      res.status(409).json({ error: "slot_taken", message: "This slot was just taken by another user. Please choose a different slot." });
+    }
     return;
   }
 
@@ -450,11 +454,15 @@ router.post("/create-crypto-session", requireAuth, async (req: Request, res: Res
   const { finalAmount: chargeAmount, validCouponId } = await applyCouponDiscount(couponId, baseAmount);
 
   const slots = await db.select().from(slotsTable).where(
-    and(eq(slotsTable.userId, req.session.userId!), eq(slotsTable.slotNumber, slotNumber))
+    and(eq(slotsTable.isActive, true), eq(slotsTable.slotNumber, slotNumber))
   ).limit(1);
 
-  if (slots.length > 0 && slots[0].isActive) {
-    res.status(400).json({ error: "slot_active", message: "Slot is already active" });
+  if (slots.length > 0) {
+    if (slots[0].userId === req.session.userId!) {
+      res.status(400).json({ error: "slot_active", message: "You already have this slot active." });
+    } else {
+      res.status(409).json({ error: "slot_taken", message: "This slot was just taken by another user. Please choose a different slot." });
+    }
     return;
   }
 

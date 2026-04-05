@@ -8,7 +8,7 @@ const connectionString = process.env.NEON_DATABASE_URL || process.env.SUPABASE_D
 if (!connectionString) throw new Error("NEON_DATABASE_URL, SUPABASE_DATABASE_URL, or DATABASE_URL environment variable is not set");
 
 
-export const pool = new Pool({ connectionString });
+export const pool = new Pool({ connectionString, max: 5 });
 export const db = drizzle(pool, { schema });
 
 export * from "./schema";

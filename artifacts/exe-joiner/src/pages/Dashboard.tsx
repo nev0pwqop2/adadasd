@@ -28,6 +28,7 @@ export default function Dashboard() {
   const [showBidForm, setShowBidForm] = useState(false);
   const [showPreorderModal, setShowPreorderModal] = useState(false);
   const [showDepositModal, setShowDepositModal] = useState(false);
+  const [slotTakenBanner, setSlotTakenBanner] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
   const { data: user, isError: isUserError, isLoading: isUserLoading } = useGetMe({ query: { retry: false } as any });
@@ -154,6 +155,25 @@ export default function Dashboard() {
       <Navbar current="dashboard" />
 
       <main className="relative z-10 flex-1 max-w-4xl mx-auto w-full px-4 py-8">
+
+        {/* ── Slot Taken Banner ── */}
+        {slotTakenBanner && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="mb-6 flex items-start gap-3 bg-orange-500/10 border border-orange-500/30 rounded-xl px-4 py-3"
+          >
+            <span className="text-orange-400 text-lg mt-0.5">⚠️</span>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-orange-300">Slot Taken</p>
+              <p className="text-xs text-orange-200/70 mt-0.5">{slotTakenBanner}</p>
+            </div>
+            <button onClick={() => setSlotTakenBanner(null)} className="text-orange-400/60 hover:text-orange-300 transition-colors">
+              <X className="w-4 h-4" />
+            </button>
+          </motion.div>
+        )}
 
         {/* ── User Header ── */}
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="flex items-center gap-5 mb-8">
@@ -395,6 +415,12 @@ export default function Dashboard() {
         userBalance={userBalance}
         onClose={() => setPurchasingSlot(null)}
         onSuccess={() => { setPurchasingSlot(null); refetchSlots(); }}
+        onSlotTaken={() => {
+          setPurchasingSlot(null);
+          setSlotTakenBanner(`Slot #${purchasingSlot} was just taken by someone else. Your payment has been refunded to your balance.`);
+          refetchSlots();
+          setTimeout(() => setSlotTakenBanner(null), 10000);
+        }}
       />
       {managingSlot && (
         <ManageSlotModal

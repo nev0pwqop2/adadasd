@@ -1,5 +1,5 @@
 import { db, paymentsTable, usersTable, slotsTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, ne, sql } from "drizzle-orm";
 import { logger } from "./logger.js";
 import { getSettings } from "./settings.js";
 import { isLuarmorConfigured, createLuarmorUser } from "./luarmor.js";
@@ -11,9 +11,46 @@ export async function activateSlotShared(
   slotNumber: number,
   paymentId: string,
   durationHoursOverride?: number,
-) {
+): Promise<{ slotTaken: boolean }> {
   const { slotDurationHours } = await getSettings();
   const hours = durationHoursOverride ?? slotDurationHours;
+
+  // Check if another user already has this slot active (race condition guard)
+  const takenBy = await db.select({ userId: slotsTable.userId })
+    .from(slotsTable)
+    .where(and(
+      eq(slotsTable.slotNumber, slotNumber),
+      eq(slotsTable.isActive, true),
+      ne(slotsTable.userId, userId),
+    ))
+    .limit(1);
+
+  if (takenBy.length > 0) {
+    // Refund the payment amount back to the user's balance
+    const paymentRows = await db.select().from(paymentsTable).where(eq(paymentsTable.id, paymentId)).limit(1);
+    const refundAmount = parseFloat(paymentRows[0]?.usdAmount ?? paymentRows[0]?.amount ?? "0");
+
+    await db.update(paymentsTable)
+      .set({ status: "refunded", updatedAt: new Date() })
+      .where(eq(paymentsTable.id, paymentId));
+
+    if (refundAmount > 0) {
+      await db.update(usersTable)
+        .set({ balance: sql`${usersTable.balance} + ${refundAmount.toFixed(2)}::numeric`, updatedAt: new Date() })
+        .where(eq(usersTable.id, userId));
+    }
+
+    const userRows = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+    if (userRows.length) {
+      sendDiscordDM(userRows[0].discordId,
+        `⚠️ **Slot #${slotNumber} was just taken by someone else!**\n💸 Your payment of $${refundAmount.toFixed(2)} has been refunded to your balance.\nChoose a different slot or try again.`
+      ).catch(() => {});
+    }
+
+    logger.warn({ paymentId, userId, slotNumber }, "Slot activation aborted — slot taken by another user, payment refunded");
+    return { slotTaken: true };
+  }
+
   const expiresAt = new Date(Date.now() + hours * 60 * 60 * 1000);
 
   await db.update(paymentsTable)
@@ -79,4 +116,5 @@ export async function activateSlotShared(
   }
 
   logger.info({ paymentId, userId, slotNumber, hours, luarmorUserId }, "Slot activated");
+  return { slotTaken: false };
 }

@@ -23,6 +23,7 @@ interface PaymentModalProps {
   minHours?: number;
   userBalance?: number;
   onSuccess: () => void;
+  onSlotTaken?: () => void;
 }
 
 type Tab = 'crypto' | 'balance' | 'paypal' | 'card';
@@ -38,6 +39,7 @@ export function PaymentModal({
   minHours = 2,
   userBalance = 0,
   onSuccess,
+  onSlotTaken,
 }: PaymentModalProps) {
   const [tab, setTab] = useState<Tab>('crypto');
   const [currency, setCurrency] = useState<CreateCryptoSessionRequestCurrency>('BTC');
@@ -140,6 +142,11 @@ export function PaymentModal({
         body: JSON.stringify(body),
       });
       const data = await res.json();
+      if (res.status === 409) {
+        handleClose();
+        onSlotTaken?.();
+        return;
+      }
       if (!res.ok) throw new Error(data.message || 'Failed to create payment session');
       window.location.href = data.url;
     } catch (e: any) {
@@ -153,7 +160,12 @@ export function PaymentModal({
     if (hourlyPricingEnabled) data.hours = selectedHours;
     if (appliedCoupon) data.couponId = appliedCoupon.couponId;
     createCrypto({ data }, {
-      onError: (err) => {
+      onError: (err: any) => {
+        if (err?.status === 409 || err?.message?.toLowerCase().includes('slot_taken') || err?.message?.toLowerCase().includes('just taken')) {
+          handleClose();
+          onSlotTaken?.();
+          return;
+        }
         toast({ title: "Error", description: err.message || "Failed to generate crypto session", variant: "destructive" });
       }
     });
