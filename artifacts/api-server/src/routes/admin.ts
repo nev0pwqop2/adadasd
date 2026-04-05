@@ -1184,8 +1184,8 @@ router.post("/bids/fulfill", async (req, res) => {
     let luarmorKey: string | null = null;
     if (isLuarmorConfigured()) {
       try {
-        const keyData = await createLuarmorUser(winnerUser.discordId, slotNum, expiresAt);
-        luarmorKey = keyData?.license_key ?? null;
+        const keyData = await createLuarmorUser(winnerUser.discordId, winnerUser.username, expiresAt);
+        luarmorKey = keyData?.user_key ?? null;
       } catch (e) {
         req.log.warn({ e }, "Luarmor user creation failed (bid fulfill)");
       }
@@ -1195,12 +1195,11 @@ router.post("/bids/fulfill", async (req, res) => {
       isActive: true,
       purchasedAt: bidPurchasedAt,
       expiresAt,
-      luarmorKey: luarmorKey ?? slotRow[0]?.luarmorKey ?? null,
+      luarmorUserId: luarmorKey ?? slotRow[0]?.luarmorUserId ?? null,
       purchaseToken: generateSlotToken(winner.userId, slotNum, bidPurchasedAt),
       notified24h: false,
       notified1h: false,
       notified10m: false,
-      updatedAt: new Date(),
     }).where(and(eq(slotsTable.userId, winner.userId), eq(slotsTable.slotNumber, slotNum)));
 
     const buyerRoleId = process.env.DISCORD_SLOT_HOLDER_ROLE_ID ?? "1475135841994014761";
