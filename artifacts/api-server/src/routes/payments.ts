@@ -461,16 +461,14 @@ router.post("/create-crypto-session", requireAuth, async (req: Request, res: Res
   try {
     const paymentId = crypto.randomUUID();
 
-    // Build the IPN callback URL — only use it if we have a real public HTTPS base URL.
-    // On Render, set BASE_URL to your service URL (e.g. https://yourapp.onrender.com).
-    // If no valid URL can be determined we omit the callback so NOWPayments doesn't
-    // reject the request because of an unreachable localhost address.
-    const baseUrl = process.env.REPLIT_DEV_DOMAIN
-      ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-      : process.env.BASE_URL?.startsWith("https://")
-        ? process.env.BASE_URL
-        : null;
-    const ipnCallbackUrl = baseUrl ? `${baseUrl}/api/payments/nowpayments-ipn` : undefined;
+    // Build the IPN callback URL — always send one so NOWPayments notifies us on payment completion.
+    // Priority: explicit NOWPAYMENTS_IPN_CALLBACK_URL > REPLIT_DEV_DOMAIN > BASE_URL > production domain.
+    const ipnCallbackUrl = process.env.NOWPAYMENTS_IPN_CALLBACK_URL
+      ?? (process.env.REPLIT_DEV_DOMAIN
+        ? `https://${process.env.REPLIT_DEV_DOMAIN}/api/payments/nowpayments-ipn`
+        : process.env.BASE_URL?.startsWith("https://")
+          ? `${process.env.BASE_URL}/api/payments/nowpayments-ipn`
+          : "https://www.exenotifier.com/api/payments/nowpayments-ipn");
 
     const minUsd = await getNowPaymentsMinAmount(currency);
     if (minUsd > 0 && chargeAmount < minUsd) {
@@ -726,11 +724,6 @@ router.post("/verify-crypto", requireAuth, async (req: Request, res: Response) =
 
     if (payment.status === "completed") {
       res.json({ success: true, message: "Payment already verified" });
-      return;
-    }
-
-    if (payment.expiresAt && payment.expiresAt < new Date()) {
-      res.status(400).json({ error: "expired", message: "Payment session has expired" });
       return;
     }
 

@@ -8,6 +8,8 @@ import { getSettings, setSetting } from "../lib/settings.js";
 import { runAutoFulfillment } from "../lib/fulfillment.js";
 import { isLuarmorConfigured, createLuarmorUser, deleteLuarmorUser, getLuarmorUsers, pauseLuarmorUser, unpauseLuarmorUser } from "../lib/luarmor.js";
 import { sendPaymentWebhook, sendDiscordDM, addGuildRole } from "../lib/discord.js";
+import { activateSlotShared } from "../lib/slotActivation.js";
+import { runPaymentPoller } from "../lib/paymentPoller.js";
 
 const router = Router();
 
@@ -1265,6 +1267,75 @@ router.get("/bids", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to fetch admin bids");
     res.status(500).json({ error: "server_error" });
+  }
+});
+
+// Force-run the payment poller immediately (super admin only)
+router.post("/payments/run-poller", async (req, res) => {
+  if (!isSuperAdmin(req.session.discordId)) {
+    res.status(403).json({ error: "forbidden" });
+    return;
+  }
+  try {
+    await runPaymentPoller();
+    res.json({ success: true, message: "Payment poller ran successfully" });
+  } catch (err) {
+    req.log.error({ err }, "Admin: run-poller failed");
+    res.status(500).json({ error: "server_error", message: String(err) });
+  }
+});
+
+// Force-complete a specific payment by its internal payment ID (super admin only)
+router.post("/payments/force-complete", async (req, res) => {
+  if (!isSuperAdmin(req.session.discordId)) {
+    res.status(403).json({ error: "forbidden" });
+    return;
+  }
+
+  const { paymentId } = req.body;
+  if (!paymentId) {
+    res.status(400).json({ error: "paymentId required" });
+    return;
+  }
+
+  try {
+    const rows = await db.select().from(paymentsTable).where(eq(paymentsTable.id, paymentId)).limit(1);
+    if (!rows.length) {
+      res.status(404).json({ error: "not_found", message: "Payment not found" });
+      return;
+    }
+
+    const payment = rows[0];
+
+    if (payment.status === "completed") {
+      res.json({ success: true, message: "Payment was already completed" });
+      return;
+    }
+
+    if (payment.method === "balance-deposit-crypto" || payment.method === "balance-deposit-stripe") {
+      const depositAmount = parseFloat(payment.usdAmount ?? payment.amount ?? "0");
+      if (depositAmount <= 0) {
+        res.status(400).json({ error: "invalid_amount", message: "Amount is 0" });
+        return;
+      }
+      await db.update(paymentsTable).set({ status: "completed", updatedAt: new Date() }).where(eq(paymentsTable.id, payment.id));
+      await db.update(usersTable)
+        .set({ balance: sql`${usersTable.balance} + ${depositAmount.toFixed(2)}::numeric`, updatedAt: new Date() })
+        .where(eq(usersTable.id, payment.userId));
+      req.log.info({ paymentId, depositAmount }, "Admin force-completed balance deposit");
+      res.json({ success: true, message: `Balance deposit of $${depositAmount.toFixed(2)} credited to user` });
+    } else if (payment.slotNumber > 0) {
+      await activateSlotShared(payment.userId, payment.slotNumber, payment.id, payment.derivationIndex ?? undefined);
+      req.log.info({ paymentId, slotNumber: payment.slotNumber }, "Admin force-completed slot payment");
+      res.json({ success: true, message: `Slot #${payment.slotNumber} activated for user` });
+    } else {
+      await db.update(paymentsTable).set({ status: "completed", updatedAt: new Date() }).where(eq(paymentsTable.id, payment.id));
+      req.log.info({ paymentId }, "Admin force-marked payment as completed");
+      res.json({ success: true, message: "Payment marked as completed" });
+    }
+  } catch (err) {
+    req.log.error({ err }, "Admin force-complete failed");
+    res.status(500).json({ error: "server_error", message: String(err) });
   }
 });
 

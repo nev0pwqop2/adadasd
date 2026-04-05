@@ -136,6 +136,10 @@ export default function Admin() {
   const [testKeyCopied, setTestKeyCopied] = useState(false);
   const [testScriptCopied, setTestScriptCopied] = useState(false);
   const [testDmStatus, setTestDmStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [pollerStatus, setPollerStatus] = useState<"idle" | "running" | "done" | "error">("idle");
+  const [forcePaymentId, setForcePaymentId] = useState("");
+  const [forceCompleteStatus, setForceCompleteStatus] = useState<"idle" | "running" | "done" | "error">("idle");
+  const [forceCompleteMsg, setForceCompleteMsg] = useState("");
 
   // ── Danger zone state ─────────────────────────────────────────────────────
   const [confirmResetLeaderboard, setConfirmResetLeaderboard] = useState(false);
@@ -905,6 +909,88 @@ export default function Admin() {
         {/* ── TOOLS ─────────────────────────────────────────────────────────── */}
         {activeTab === "tools" && (
           <div className="space-y-4">
+
+            {/* Payment Recovery */}
+            {isSuperAdmin && (
+              <Card className="border-yellow-500/20 bg-yellow-500/[0.02]">
+                <div className="p-5 border-b border-yellow-500/20">
+                  <h2 className="font-semibold text-sm text-yellow-400">Payment Recovery</h2>
+                  <p className="text-xs text-muted-foreground mt-0.5">Manually fix stuck or unregistered payments.</p>
+                </div>
+                <div className="divide-y divide-white/[0.04]">
+                  {/* Run poller */}
+                  <div className="p-5 flex items-center justify-between gap-4">
+                    <div>
+                      <p className="font-mono text-sm font-bold text-foreground">Run Payment Poller Now</p>
+                      <p className="text-xs text-muted-foreground font-mono mt-0.5">Force-checks all pending crypto payments against NOWPayments API and completes any that are confirmed.</p>
+                    </div>
+                    <Button size="sm" variant="outline" className="border-yellow-500/30 text-yellow-400 shrink-0"
+                      disabled={pollerStatus === "running"}
+                      onClick={async () => {
+                        setPollerStatus("running");
+                        try {
+                          await apiFetch("api/admin/payments/run-poller", { method: "POST" });
+                          setPollerStatus("done");
+                          toast({ title: "Poller ran", description: "All pending crypto payments have been checked." });
+                        } catch (e: any) {
+                          setPollerStatus("error");
+                          toast({ title: "Poller failed", description: e.message, variant: "destructive" });
+                        }
+                        setTimeout(() => setPollerStatus("idle"), 4000);
+                      }}>
+                      {pollerStatus === "running" ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <RotateCcw className="w-4 h-4 mr-2" />}
+                      {pollerStatus === "done" ? "Done!" : pollerStatus === "error" ? "Failed" : "Run Poller"}
+                    </Button>
+                  </div>
+
+                  {/* Force complete */}
+                  <div className="p-5 space-y-3">
+                    <div>
+                      <p className="font-mono text-sm font-bold text-foreground">Force Complete Payment</p>
+                      <p className="text-xs text-muted-foreground font-mono mt-0.5">Manually complete a specific payment by its ID. Activates the slot or credits balance immediately, no questions asked.</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="Payment UUID (from DB)"
+                        value={forcePaymentId}
+                        onChange={e => setForcePaymentId(e.target.value)}
+                        className="flex-1 bg-background border border-white/10 text-foreground font-mono text-xs px-3 py-2 focus:outline-none focus:border-yellow-500/50"
+                      />
+                      <Button size="sm" variant="outline" className="border-yellow-500/30 text-yellow-400 shrink-0"
+                        disabled={forceCompleteStatus === "running" || !forcePaymentId.trim()}
+                        onClick={async () => {
+                          setForceCompleteStatus("running");
+                          setForceCompleteMsg("");
+                          try {
+                            const r = await apiFetch<{ message: string }>("api/admin/payments/force-complete", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ paymentId: forcePaymentId.trim() }),
+                            });
+                            setForceCompleteStatus("done");
+                            setForceCompleteMsg(r.message);
+                            setForcePaymentId("");
+                          } catch (e: any) {
+                            setForceCompleteStatus("error");
+                            setForceCompleteMsg(e.message);
+                          }
+                          setTimeout(() => { setForceCompleteStatus("idle"); setForceCompleteMsg(""); }, 6000);
+                        }}>
+                        {forceCompleteStatus === "running" ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle className="w-4 h-4 mr-2" />}
+                        Force Complete
+                      </Button>
+                    </div>
+                    {forceCompleteMsg && (
+                      <p className={`text-xs font-mono px-3 py-2 border ${forceCompleteStatus === "done" ? "text-green-400 bg-green-500/5 border-green-500/20" : "text-red-400 bg-red-500/5 border-red-500/20"}`}>
+                        {forceCompleteMsg}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </Card>
+            )}
+
             {/* Dev tools */}
             <Card className="border-white/[0.06]">
               <div className="p-5 border-b border-white/[0.06]">

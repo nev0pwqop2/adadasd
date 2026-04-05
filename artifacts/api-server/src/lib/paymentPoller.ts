@@ -141,7 +141,7 @@ async function pollStripePending(stripeKey: string) {
 }
 
 async function pollCryptoPending(apiKey: string) {
-  const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000);
+  const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000); // look back 7 days
   const pending = await db.select()
     .from(paymentsTable)
     .where(
@@ -187,9 +187,8 @@ async function pollCryptoPending(apiKey: string) {
         );
       } else if (payment.slotNumber > 0) {
         if (!confirmed) continue; // Don't give slot for partial payment
-        await completeSlotPayment(
-          payment.id, payment.userId, payment.slotNumber, payment.method,
-          payment.currency, payment.amount, payment.derivationIndex,
+        await activateSlotShared(
+          payment.userId, payment.slotNumber, payment.id, payment.derivationIndex ?? undefined,
         );
       } else {
         await db.update(paymentsTable)
