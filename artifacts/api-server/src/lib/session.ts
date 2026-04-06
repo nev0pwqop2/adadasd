@@ -5,7 +5,7 @@ if (!process.env.SESSION_SECRET) {
   throw new Error("SESSION_SECRET must be set");
 }
 
-const dbUrl = process.env.SUPABASE_DATABASE_URL ?? process.env.DATABASE_URL;
+const dbUrl = process.env.NEON_DATABASE_URL ?? process.env.DATABASE_URL;
 
 let store: session.Store | undefined;
 if (dbUrl && process.env.NODE_ENV === "production") {
