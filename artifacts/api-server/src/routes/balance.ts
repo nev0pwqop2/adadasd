@@ -273,22 +273,6 @@ router.post("/deposit/verify", requireAuth, async (req: Request, res: Response) 
   }
 });
 
-// DELETE /api/balance/deposit/cancel — cancel any pending deposit payments
-router.delete("/deposit/cancel", requireAuth, async (req: Request, res: Response) => {
-  try {
-    await db.update(paymentsTable).set({ status: "cancelled", updatedAt: new Date() }).where(
-      and(
-        eq(paymentsTable.userId, req.session.userId!),
-        eq(paymentsTable.status, "pending"),
-        eq(paymentsTable.method, "balance-deposit-crypto"),
-      )
-    );
-    res.json({ success: true });
-  } catch (err) {
-    req.log.error({ err }, "Failed to cancel pending deposit");
-    res.status(500).json({ error: "server_error" });
-  }
-});
 
 // POST /api/balance/use — buy a slot using account balance
 router.post("/use", requireAuth, async (req: Request, res: Response) => {

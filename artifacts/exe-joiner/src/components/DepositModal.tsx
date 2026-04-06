@@ -50,17 +50,7 @@ export function DepositModal({ isOpen, onClose, onSuccess }: DepositModalProps) 
     setCopied(null);
   };
 
-  const cancelPendingDeposit = () => {
-    fetch(`${BASE}api/balance/deposit/cancel`, {
-      method: 'DELETE',
-      credentials: 'include',
-    }).catch(() => {});
-  };
-
   const handleClose = () => {
-    if (!cryptoSession) {
-      cancelPendingDeposit();
-    }
     reset();
     onClose();
   };

@@ -706,24 +706,6 @@ router.post("/nowpayments-ipn", async (req: Request, res: Response) => {
   }
 });
 
-router.delete("/cancel-pending", requireAuth, async (req: Request, res: Response) => {
-  try {
-    await db.update(paymentsTable).set({ status: "cancelled", updatedAt: new Date() }).where(
-      and(
-        eq(paymentsTable.userId, req.session.userId!),
-        eq(paymentsTable.status, "pending"),
-        ne(paymentsTable.method, "preorder-stripe"),
-        ne(paymentsTable.method, "preorder-crypto"),
-        ne(paymentsTable.method, "balance-deposit-stripe"),
-        ne(paymentsTable.method, "balance-deposit-crypto"),
-      )
-    );
-    res.json({ success: true });
-  } catch (err) {
-    req.log.error({ err }, "Failed to cancel pending payments");
-    res.status(500).json({ error: "server_error", message: "Failed to cancel pending payments" });
-  }
-});
 
 router.post("/verify-crypto", requireAuth, async (req: Request, res: Response) => {
   const { paymentId } = req.body;

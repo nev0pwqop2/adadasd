@@ -67,12 +67,6 @@ export function PaymentModal({
   const durationLabel = hourlyPricingEnabled ? `${selectedHours}h` : `${slotDurationHours}h`;
 
   const handleClose = () => {
-    if (!cryptoSession) {
-      fetch(`${import.meta.env.BASE_URL}api/payments/cancel-pending`, {
-        method: 'DELETE',
-        credentials: 'include',
-      }).catch(() => {});
-    }
     resetCrypto();
     onClose();
   };
