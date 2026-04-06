@@ -198,7 +198,7 @@ async function pollCryptoPending(apiKey: string) {
     .from(paymentsTable)
     .where(
       and(
-        inArray(paymentsTable.status, ["pending", "cancelled"]),
+        eq(paymentsTable.status, "pending"),
         inArray(paymentsTable.method, ["crypto", "balance-deposit-crypto"]),
         gte(paymentsTable.createdAt, cutoff),
       ),

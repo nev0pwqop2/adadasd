@@ -620,10 +620,8 @@ router.post("/nowpayments-ipn", async (req: Request, res: Response) => {
       }
     }
 
-    const fulfillableStatuses = ["pending", "cancelled"] as const;
-
     let payments = await db.select().from(paymentsTable)
-      .where(and(eq(paymentsTable.id, order_id), inArray(paymentsTable.status, [...fulfillableStatuses])))
+      .where(and(eq(paymentsTable.id, order_id), eq(paymentsTable.status, "pending")))
       .limit(1);
 
     // Fallback: look up by NowPayments payment_id stored in txHash in case the
