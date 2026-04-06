@@ -1149,8 +1149,8 @@ router.post("/bids/fulfill", async (req, res) => {
     }
 
     const winnerUser = winnerUsers[0];
-    const { slotCount, slotDurationHours, hourlyPricingEnabled } = await getSettings();
-    const bidHours = hourlyPricingEnabled ? 1 : slotDurationHours;
+    const { slotCount } = await getSettings();
+    const bidHours = 1;
     const expiryMs = bidHours * 60 * 60 * 1000;
 
     const otherActiveSlots = await db.select({ slotNumber: slotsTable.slotNumber })
