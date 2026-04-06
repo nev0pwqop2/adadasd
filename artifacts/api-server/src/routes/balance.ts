@@ -71,12 +71,13 @@ router.post("/deposit/stripe", requireAuth, async (req: Request, res: Response) 
     return;
   }
 
+  let stripeSessionId: string | undefined;
   try {
     const Stripe = (await import("stripe")).default;
     const stripe = new Stripe(stripeKey);
     const baseUrl = process.env.REPLIT_DEV_DOMAIN
       ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-      : process.env.BASE_URL || "http://localhost:80";
+      : "https://www.exenotifier.com";
     const unitAmount = Math.round(amount * 100);
 
     const session = await stripe.checkout.sessions.create({
@@ -99,6 +100,7 @@ router.post("/deposit/stripe", requireAuth, async (req: Request, res: Response) 
       cancel_url: `${baseUrl}/dashboard?tab=deposit`,
     });
 
+    stripeSessionId = session.id;
     const paymentId = crypto.randomUUID();
     await db.insert(paymentsTable).values({
       id: paymentId,
@@ -115,7 +117,7 @@ router.post("/deposit/stripe", requireAuth, async (req: Request, res: Response) 
 
     res.json({ url: session.url });
   } catch (err) {
-    req.log.error({ err }, "Balance Stripe session failed");
+    req.log.error({ err, stripeSessionId, userId: req.session.userId }, "Balance Stripe session failed — stripeSessionId logged for manual recovery if session was created");
     res.status(500).json({ error: "server_error", message: "Failed to create payment session" });
   }
 });
@@ -196,7 +198,7 @@ router.post("/deposit/crypto", requireAuth, async (req: Request, res: Response) 
     });
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
-    req.log.error({ err }, "Balance crypto deposit failed");
+    req.log.error({ err, userId: req.session.userId }, "Balance crypto deposit failed — check logs for nowPaymentsId if payment was created before DB insert failed");
     res.status(500).json({ error: "server_error", message: `Failed to create crypto payment: ${detail}` });
   }
 });

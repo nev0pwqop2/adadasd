@@ -185,13 +185,14 @@ router.post("/create-stripe-session", requireAuth, async (req: Request, res: Res
     return;
   }
 
+  let stripeSessionId: string | undefined;
   try {
     const Stripe = (await import("stripe")).default;
     const stripe = new Stripe(stripeKey);
 
     const baseUrl = process.env.REPLIT_DEV_DOMAIN
       ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-      : process.env.BASE_URL || "http://localhost:80";
+      : "https://www.exenotifier.com";
     const unitAmount = Math.round(chargeAmount * 100);
 
     const session = await stripe.checkout.sessions.create({
@@ -219,6 +220,7 @@ router.post("/create-stripe-session", requireAuth, async (req: Request, res: Res
       cancel_url: `${baseUrl}/dashboard?payment=cancelled`,
     });
 
+    stripeSessionId = session.id;
     const paymentId = crypto.randomUUID();
     await db.insert(paymentsTable).values({
       id: paymentId,
@@ -237,7 +239,7 @@ router.post("/create-stripe-session", requireAuth, async (req: Request, res: Res
 
     res.json({ sessionId: session.id, url: session.url });
   } catch (err) {
-    req.log.error({ err }, "Stripe session creation failed");
+    req.log.error({ err, stripeSessionId, userId: req.session.userId }, "Stripe session creation failed — stripeSessionId logged for manual recovery if session was created");
     res.status(500).json({ error: "server_error", message: "Failed to create payment session" });
   }
 });
@@ -516,7 +518,7 @@ router.post("/create-crypto-session", requireAuth, async (req: Request, res: Res
     });
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
-    req.log.error({ err }, "Crypto session creation failed");
+    req.log.error({ err, userId: req.session.userId }, "Crypto session creation failed — check logs for nowPaymentsId if payment was created before DB insert failed");
     res.status(500).json({ error: "server_error", message: `Failed to create crypto payment: ${detail}` });
   }
 });
@@ -618,11 +620,23 @@ router.post("/nowpayments-ipn", async (req: Request, res: Response) => {
       }
     }
 
-    const payments = await db.select().from(paymentsTable)
+    let payments = await db.select().from(paymentsTable)
       .where(and(eq(paymentsTable.id, order_id), eq(paymentsTable.status, "pending")))
       .limit(1);
 
+    // Fallback: look up by NowPayments payment_id stored in txHash in case the
+    // DB record was saved but order_id didn't match (or was a retry)
+    if (!payments.length && payment_id) {
+      payments = await db.select().from(paymentsTable)
+        .where(and(eq(paymentsTable.txHash, String(payment_id)), eq(paymentsTable.status, "pending")))
+        .limit(1);
+      if (payments.length) {
+        req.log.info({ order_id, payment_id }, "NOWPayments IPN: matched via txHash fallback");
+      }
+    }
+
     if (!payments.length) {
+      req.log.warn({ order_id, payment_id }, "NOWPayments IPN: no matching pending payment found — possible lost record");
       res.json({ received: true });
       return;
     }
