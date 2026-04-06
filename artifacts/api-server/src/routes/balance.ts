@@ -276,7 +276,7 @@ router.post("/deposit/verify", requireAuth, async (req: Request, res: Response) 
 // DELETE /api/balance/deposit/cancel — cancel any pending deposit payments
 router.delete("/deposit/cancel", requireAuth, async (req: Request, res: Response) => {
   try {
-    await db.delete(paymentsTable).where(
+    await db.update(paymentsTable).set({ status: "cancelled", updatedAt: new Date() }).where(
       and(
         eq(paymentsTable.userId, req.session.userId!),
         eq(paymentsTable.status, "pending"),
