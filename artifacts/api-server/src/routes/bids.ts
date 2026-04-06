@@ -110,15 +110,16 @@ router.post("/", requireAuth, async (req, res) => {
     const userRows = await db.select({ balance: usersTable.balance }).from(usersTable).where(eq(usersTable.id, userId)).limit(1);
     const currentBalance = parseFloat(userRows[0]?.balance ?? "0");
 
-    // The existing bid is always held from balance; new bid must be higher
-    const alreadyHeld = existing.length ? parseFloat(existing[0].amount) : 0;
+    // Only "active" bids have balance held; "won" bids are already closed
+    const activeBid = existing.length && existing[0].status === "active" ? existing[0] : null;
+    const alreadyHeld = activeBid ? parseFloat(activeBid.amount) : 0;
 
-    if (existing.length && amount <= alreadyHeld) {
+    if (activeBid && amount <= alreadyHeld) {
       res.status(400).json({ error: "bid_too_low", message: "New bid must be higher than your current bid." });
       return;
     }
 
-    // Only deduct the difference (the rest is already held)
+    // Only deduct the difference (the rest is already held for active bids)
     const netCost = amount - alreadyHeld;
 
     if (currentBalance < netCost) {
@@ -145,7 +146,7 @@ router.post("/", requireAuth, async (req, res) => {
     if (existing.length) {
       await db
         .update(bidsTable)
-        .set({ amount: amount.toFixed(2), paidWithBalance: true, updatedAt: new Date() })
+        .set({ amount: amount.toFixed(2), paidWithBalance: true, status: "active", updatedAt: new Date() })
         .where(eq(bidsTable.userId, userId));
       res.json({ success: true, message: "Bid updated" });
     } else {
