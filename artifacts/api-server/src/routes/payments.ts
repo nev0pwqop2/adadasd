@@ -706,7 +706,7 @@ router.post("/nowpayments-ipn", async (req: Request, res: Response) => {
 
 router.delete("/cancel-pending", requireAuth, async (req: Request, res: Response) => {
   try {
-    await db.delete(paymentsTable).where(
+    await db.update(paymentsTable).set({ status: "cancelled", updatedAt: new Date() }).where(
       and(
         eq(paymentsTable.userId, req.session.userId!),
         eq(paymentsTable.status, "pending"),
