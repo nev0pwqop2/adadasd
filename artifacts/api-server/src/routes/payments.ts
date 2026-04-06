@@ -40,6 +40,17 @@ async function applyCouponDiscount(couponId: number | undefined, baseAmount: num
 
 const router = Router();
 
+// Temporarily pause all payment initiation (does not affect incoming webhooks)
+router.use((req, res, next) => {
+  const paused = process.env.PAYMENTS_PAUSED === "true";
+  const isWebhook = req.path.includes("webhook") || req.path.includes("ipn");
+  if (paused && !isWebhook) {
+    res.status(503).json({ error: "payments_paused", message: "Payments are temporarily unavailable. Please try again soon." });
+    return;
+  }
+  next();
+});
+
 const VALID_CURRENCIES = ["BTC", "LTC", "USDT", "ETH", "SOL"];
 
 const NOWPAYMENTS_CURRENCY_MAP: Record<string, string> = {
