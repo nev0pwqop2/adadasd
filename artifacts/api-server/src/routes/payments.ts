@@ -40,10 +40,10 @@ async function applyCouponDiscount(couponId: number | undefined, baseAmount: num
 
 const router = Router();
 
-// Temporarily pause Stripe and crypto payment initiation (balance payments still work)
+// Temporarily pause all payment initiation (does not affect incoming webhooks)
 router.use((req, res, next) => {
-  const blockedPaths = ["/create-stripe-session", "/create-crypto-session", "/verify-crypto"];
-  if (blockedPaths.includes(req.path)) {
+  const isWebhook = req.path.includes("webhook") || req.path.includes("ipn");
+  if (!isWebhook) {
     res.status(503).json({ error: "payments_paused", message: "Payments are temporarily unavailable. Please try again soon." });
     return;
   }
