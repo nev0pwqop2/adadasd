@@ -265,15 +265,15 @@ export default function Dashboard() {
           </div>
         </motion.div>
 
-        {/* ── Bid Queue — only shown when all slots are full ── */}
-        {allFull && <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="mb-8">
+        {/* ── Bid Queue — shown when all slots are full OR user has an active bid ── */}
+        {(allFull || myBid) && <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="mb-8">
             <div className="rounded-2xl border border-[#f5a623]/20 bg-[#f5a623]/[0.03] overflow-hidden">
               <div className="border-b border-[#f5a623]/10 px-5 py-4 flex items-center gap-2">
                 <Gavel className="w-4 h-4 text-[#f5a623]" />
                 <div>
                   <h3 className="font-bold text-[#f5a623] text-sm">Slot Queue</h3>
                   <p className="text-xs text-white/35 mt-0.5">
-                    {allFull ? 'All slots occupied — highest bid gets the next free slot.' : 'Bid to reserve your spot in the queue.'}
+                    {allFull ? 'All slots occupied — highest bid gets the next free slot.' : 'Slots available — your bid will be fulfilled first when a slot opens.'}
                     {' '}<span className="text-[#f5a623]/50">Winner gets 1h access.</span>
                   </p>
                 </div>
