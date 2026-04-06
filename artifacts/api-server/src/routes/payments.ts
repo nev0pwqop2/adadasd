@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import { db, slotsTable, paymentsTable, usersTable, preordersTable, couponsTable } from "@workspace/db";
-import { eq, and, ne, sql } from "drizzle-orm";
+import { eq, and, ne, sql, inArray } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { getSettings } from "../lib/settings.js";
 import { isLuarmorConfigured, createLuarmorUser } from "../lib/luarmor.js";
@@ -620,15 +620,17 @@ router.post("/nowpayments-ipn", async (req: Request, res: Response) => {
       }
     }
 
+    const fulfillableStatuses = ["pending", "cancelled"] as const;
+
     let payments = await db.select().from(paymentsTable)
-      .where(and(eq(paymentsTable.id, order_id), eq(paymentsTable.status, "pending")))
+      .where(and(eq(paymentsTable.id, order_id), inArray(paymentsTable.status, [...fulfillableStatuses])))
       .limit(1);
 
     // Fallback: look up by NowPayments payment_id stored in txHash in case the
     // DB record was saved but order_id didn't match (or was a retry)
     if (!payments.length && payment_id) {
       payments = await db.select().from(paymentsTable)
-        .where(and(eq(paymentsTable.txHash, String(payment_id)), eq(paymentsTable.status, "pending")))
+        .where(and(eq(paymentsTable.txHash, String(payment_id)), inArray(paymentsTable.status, [...fulfillableStatuses])))
         .limit(1);
       if (payments.length) {
         req.log.info({ order_id, payment_id }, "NOWPayments IPN: matched via txHash fallback");
@@ -636,7 +638,7 @@ router.post("/nowpayments-ipn", async (req: Request, res: Response) => {
     }
 
     if (!payments.length) {
-      req.log.warn({ order_id, payment_id }, "NOWPayments IPN: no matching pending payment found — possible lost record");
+      req.log.warn({ order_id, payment_id }, "NOWPayments IPN: no matching unfulfilled payment found — possible duplicate or already completed");
       res.json({ received: true });
       return;
     }

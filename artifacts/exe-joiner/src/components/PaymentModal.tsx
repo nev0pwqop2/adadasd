@@ -449,15 +449,11 @@ export function PaymentModal({
                       variant="outline" 
                       className="flex-1" 
                       onClick={() => {
-                        fetch(`${import.meta.env.BASE_URL}api/payments/cancel-pending`, {
-                          method: 'DELETE',
-                          credentials: 'include',
-                        }).catch(() => {});
                         resetCrypto();
                       }}
                       disabled={isVerifyLoading}
                     >
-                      Cancel
+                      Back
                     </Button>
                     <Button 
                       className="flex-[2]" 
