@@ -165,6 +165,7 @@ export async function runAutoFulfillment(): Promise<void> {
         amount: winner.amount,
         usdAmount: winner.amount,
         currency: "USD",
+        derivationIndex: 1,
       });
 
       // Refund all losers

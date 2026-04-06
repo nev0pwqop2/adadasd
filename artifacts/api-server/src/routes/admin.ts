@@ -1216,6 +1216,7 @@ router.post("/bids/fulfill", async (req, res) => {
       amount: winner.amount,
       usdAmount: winner.amount,
       currency: "USD",
+      derivationIndex: 1,
     });
 
     // Delete ALL bids
