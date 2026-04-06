@@ -10,6 +10,16 @@ import crypto from "crypto";
 
 const router = Router();
 
+// Temporarily pause all deposit and balance payment initiation
+router.use((req, res, next) => {
+  const isWebhook = req.path.includes("webhook") || req.path.includes("ipn");
+  if (req.method !== "GET" && !isWebhook) {
+    res.status(503).json({ error: "payments_paused", message: "Payments are temporarily unavailable. Please try again soon." });
+    return;
+  }
+  next();
+});
+
 const NOWPAYMENTS_BASE = "https://api.nowpayments.io/v1";
 
 async function nowpaymentsRequest(path: string, options: RequestInit = {}) {
