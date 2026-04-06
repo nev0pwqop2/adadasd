@@ -9,6 +9,7 @@ const DEFAULTS: Record<string, string> = {
   pricePerHour: "5.00",
   minHours: "2",
   ownWalletLTC: "LRipFjnvu2tcHdasX7iALXMdEJbE9jpNNQ",
+  paymentsEnabled: "true",
 };
 
 export async function getSetting(key: string): Promise<string> {
@@ -25,6 +26,7 @@ export async function getSettings(): Promise<{
   pricePerHour: number;
   minHours: number;
   ownWalletLTC: string;
+  paymentsEnabled: boolean;
 }> {
   const rows = await db.select().from(settingsTable);
   const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
@@ -37,6 +39,7 @@ export async function getSettings(): Promise<{
     pricePerHour: parseFloat(g("pricePerHour")),
     minHours: parseInt(g("minHours"), 10),
     ownWalletLTC: g("ownWalletLTC"),
+    paymentsEnabled: g("paymentsEnabled") !== "false",
   };
 }
 

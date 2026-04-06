@@ -112,6 +112,8 @@ export default function Admin() {
   const [hourlyPricingEnabled, setHourlyPricingEnabled] = useState(false);
   const [pricePerHour, setPricePerHour] = useState("");
   const [minHours, setMinHours] = useState("");
+  const [paymentsEnabled, setPaymentsEnabled] = useState(true);
+  const [paymentsToggling, setPaymentsToggling] = useState(false);
 
   // ── User management state ─────────────────────────────────────────────────
   const [editingUser, setEditingUser] = useState<string | null>(null);
@@ -284,6 +286,7 @@ export default function Admin() {
       setHourlyPricingEnabled(Boolean((settings as any).hourlyPricingEnabled));
       setPricePerHour(String((settings as any).pricePerHour ?? 5));
       setMinHours(String((settings as any).minHours ?? 2));
+      setPaymentsEnabled((settings as any).paymentsEnabled !== false);
     }
   }, [settings]);
 
@@ -909,6 +912,41 @@ export default function Admin() {
         {/* ── TOOLS ─────────────────────────────────────────────────────────── */}
         {activeTab === "tools" && (
           <div className="space-y-4">
+
+            {/* Payments on/off */}
+            <Card className={paymentsEnabled ? "border-primary/20 bg-primary/[0.02]" : "border-red-500/20 bg-red-500/[0.02]"}>
+              <div className="p-5 flex items-center justify-between gap-4">
+                <div>
+                  <h2 className={`font-semibold text-sm ${paymentsEnabled ? "text-foreground" : "text-red-400"}`}>Payments</h2>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {paymentsEnabled ? "All payment methods are active." : "Payments are disabled — users cannot purchase slots or deposit."}
+                  </p>
+                </div>
+                <button
+                  disabled={paymentsToggling}
+                  onClick={async () => {
+                    const next = !paymentsEnabled;
+                    setPaymentsToggling(true);
+                    try {
+                      await apiFetch("api/admin/settings", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ paymentsEnabled: next }),
+                      });
+                      setPaymentsEnabled(next);
+                      toast({ title: next ? "Payments enabled" : "Payments disabled", description: next ? "Users can now make payments." : "All payment methods are now blocked." });
+                    } catch (e: any) {
+                      toast({ title: "Error", description: e.message, variant: "destructive" });
+                    } finally {
+                      setPaymentsToggling(false);
+                    }
+                  }}
+                  className={`relative w-11 h-6 border cursor-pointer transition-colors disabled:opacity-50 ${paymentsEnabled ? "bg-primary border-primary" : "bg-secondary border-red-500/30"}`}
+                >
+                  <div className={`absolute top-0.5 w-5 h-5 bg-background transition-transform ${paymentsEnabled ? "translate-x-5" : "translate-x-0.5"}`} />
+                </button>
+              </div>
+            </Card>
 
             {/* Payment Recovery */}
             {isSuperAdmin && (

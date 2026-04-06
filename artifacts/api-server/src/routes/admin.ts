@@ -27,7 +27,7 @@ router.get("/settings", async (req, res) => {
 
 router.post("/settings", async (req, res) => {
   try {
-    const { slotCount, pricePerDay, slotDurationHours, hourlyPricingEnabled, pricePerHour, minHours } = req.body;
+    const { slotCount, pricePerDay, slotDurationHours, hourlyPricingEnabled, pricePerHour, minHours, paymentsEnabled } = req.body;
 
     if (slotCount !== undefined) {
       const count = parseInt(slotCount, 10);
@@ -76,6 +76,10 @@ router.post("/settings", async (req, res) => {
         return;
       }
       await setSetting("minHours", String(min));
+    }
+
+    if (paymentsEnabled !== undefined) {
+      await setSetting("paymentsEnabled", paymentsEnabled ? "true" : "false");
     }
 
     const updated = await getSettings();

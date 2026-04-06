@@ -145,6 +145,11 @@ router.post("/create-stripe-session", requireAuth, async (req: Request, res: Res
 
   const { slotNumber, hours, couponId } = req.body;
   const { slotCount, pricePerDay, slotDurationHours, hourlyPricingEnabled, pricePerHour, minHours } = await getSettings();
+
+  if ((await getSetting("paymentsEnabled")) === "false") {
+    res.status(503).json({ error: "payments_disabled", message: "Payments are currently disabled." });
+    return;
+  }
   if (!slotNumber || slotNumber < 1 || slotNumber > slotCount) {
     res.status(400).json({ error: "invalid_slot", message: "Invalid slot number" });
     return;
@@ -424,6 +429,11 @@ router.post("/stripe-webhook", async (req: Request, res: Response) => {
 router.post("/create-crypto-session", requireAuth, async (req: Request, res: Response) => {
   const { slotNumber, currency, hours, couponId } = req.body;
   const { slotCount, pricePerDay, slotDurationHours, hourlyPricingEnabled, pricePerHour, minHours } = await getSettings();
+
+  if ((await getSetting("paymentsEnabled")) === "false") {
+    res.status(503).json({ error: "payments_disabled", message: "Payments are currently disabled." });
+    return;
+  }
 
   if (!slotNumber || slotNumber < 1 || slotNumber > slotCount) {
     res.status(400).json({ error: "invalid_slot", message: "Invalid slot number" });

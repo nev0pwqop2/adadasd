@@ -2,7 +2,7 @@ import { Router, Request, Response } from "express";
 import { db, paymentsTable, usersTable, couponsTable } from "@workspace/db";
 import { eq, and, sql } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
-import { getSettings } from "../lib/settings.js";
+import { getSettings, getSetting } from "../lib/settings.js";
 import { isLuarmorConfigured, createLuarmorUser } from "../lib/luarmor.js";
 import { sendPaymentWebhook, sendDiscordDM } from "../lib/discord.js";
 import { generateSlotToken } from "../lib/slotToken.js";
@@ -59,6 +59,11 @@ router.get("/", requireAuth, async (req: Request, res: Response) => {
 
 // POST /api/balance/deposit/stripe — create Stripe checkout to add funds
 router.post("/deposit/stripe", requireAuth, async (req: Request, res: Response) => {
+  if ((await getSetting("paymentsEnabled")) === "false") {
+    res.status(503).json({ error: "payments_disabled", message: "Payments are currently disabled." });
+    return;
+  }
+
   const stripeKey = process.env.STRIPE_SECRET_KEY;
   if (!stripeKey) {
     res.status(503).json({ error: "payment_unavailable", message: "Stripe not configured" });
@@ -124,6 +129,11 @@ router.post("/deposit/stripe", requireAuth, async (req: Request, res: Response) 
 
 // POST /api/balance/deposit/crypto — create NOWPayments payment to add funds
 router.post("/deposit/crypto", requireAuth, async (req: Request, res: Response) => {
+  if ((await getSetting("paymentsEnabled")) === "false") {
+    res.status(503).json({ error: "payments_disabled", message: "Payments are currently disabled." });
+    return;
+  }
+
   const apiKey = process.env.NOWPAYMENTS_API_KEY;
   if (!apiKey) {
     res.status(503).json({ error: "payment_unavailable", message: "NOWPayments not configured" });
