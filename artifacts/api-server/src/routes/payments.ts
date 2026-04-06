@@ -115,7 +115,7 @@ async function getNowPaymentsMinAmount(currency: string): Promise<number> {
 }
 
 function isPaymentSuccessful(status: string): boolean {
-  return status === "finished" || status === "confirmed";
+  return status === "finished" || status === "confirmed" || status === "sending";
 }
 
 function verifyNowPaymentsIpn(parsedBody: Record<string, unknown>, signature: string): boolean {

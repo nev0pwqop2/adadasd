@@ -226,7 +226,7 @@ async function pollCryptoPending(apiKey: string) {
 
       const { payment_status, actually_paid, actually_paid_usd_amount } = data;
       const confirmed =
-        payment_status === "finished" || payment_status === "confirmed";
+        payment_status === "finished" || payment_status === "confirmed" || payment_status === "sending";
       const partiallyPaid =
         payment_status === "partially_paid" && (actually_paid ?? 0) > 0;
 

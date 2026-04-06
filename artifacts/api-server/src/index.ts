@@ -376,8 +376,8 @@ runMigrations()
     setInterval(cleanupThenFulfill, 60 * 1000);
     setTimeout(cleanupThenFulfill, 15_000);
 
-    // Payment poller — auto-complete pending crypto payments every 30 seconds
-    setInterval(() => runPaymentPoller().catch(err => logger.warn({ err }, "Payment poller error")), 30 * 1000);
+    // Payment poller — auto-complete pending crypto payments every 15 seconds
+    setInterval(() => runPaymentPoller().catch(err => logger.warn({ err }, "Payment poller error")), 15 * 1000);
     setTimeout(() => runPaymentPoller().catch(err => logger.warn({ err }, "Payment poller error")), 15_000);
 
     // Audit buyer roles on startup — remove role from anyone whose slot has expired
