@@ -140,12 +140,10 @@ router.post("/deposit/crypto", requireAuth, async (req: Request, res: Response) 
 
   try {
     const paymentId = crypto.randomUUID();
-    const baseUrl = process.env.REPLIT_DEV_DOMAIN
-      ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-      : process.env.BASE_URL?.startsWith("https://")
-        ? process.env.BASE_URL
-        : null;
-    const ipnCallbackUrl = baseUrl ? `${baseUrl}/api/payments/nowpayments-ipn` : undefined;
+    const ipnCallbackUrl = process.env.NOWPAYMENTS_IPN_CALLBACK_URL
+      ?? (process.env.REPLIT_DEV_DOMAIN
+        ? `https://${process.env.REPLIT_DEV_DOMAIN}/api/payments/nowpayments-ipn`
+        : "https://www.exenotifier.com/api/payments/nowpayments-ipn");
     const nowCurrency = NOWPAYMENTS_CURRENCY_MAP[currency];
 
     let minAmount = 2;

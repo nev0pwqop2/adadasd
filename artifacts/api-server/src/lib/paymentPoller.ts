@@ -98,7 +98,7 @@ async function pollStripePending(stripeKey: string) {
   const Stripe = (await import("stripe")).default;
   const stripe = new Stripe(stripeKey);
 
-  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const cutoff = new Date(Date.now() - 72 * 60 * 60 * 1000);
   const pending = await db.select()
     .from(paymentsTable)
     .where(

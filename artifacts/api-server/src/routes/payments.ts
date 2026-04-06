@@ -471,13 +471,11 @@ router.post("/create-crypto-session", requireAuth, async (req: Request, res: Res
     const paymentId = crypto.randomUUID();
 
     // Build the IPN callback URL — always send one so NOWPayments notifies us on payment completion.
-    // Priority: explicit NOWPAYMENTS_IPN_CALLBACK_URL > REPLIT_DEV_DOMAIN > BASE_URL > production domain.
+    // Priority: explicit NOWPAYMENTS_IPN_CALLBACK_URL > REPLIT_DEV_DOMAIN (dev only) > production domain.
     const ipnCallbackUrl = process.env.NOWPAYMENTS_IPN_CALLBACK_URL
       ?? (process.env.REPLIT_DEV_DOMAIN
         ? `https://${process.env.REPLIT_DEV_DOMAIN}/api/payments/nowpayments-ipn`
-        : process.env.BASE_URL?.startsWith("https://")
-          ? `${process.env.BASE_URL}/api/payments/nowpayments-ipn`
-          : "https://www.exenotifier.com/api/payments/nowpayments-ipn");
+        : "https://www.exenotifier.com/api/payments/nowpayments-ipn");
 
     const minUsd = await getNowPaymentsMinAmount(currency);
     if (minUsd > 0 && chargeAmount < minUsd) {
