@@ -42,7 +42,7 @@ const router = Router();
 
 // Temporarily pause all payment initiation (does not affect incoming webhooks)
 router.use((req, res, next) => {
-  const paused = process.env.PAYMENTS_PAUSED === "true";
+  const paused = true;
   const isWebhook = req.path.includes("webhook") || req.path.includes("ipn");
   if (paused && !isWebhook) {
     res.status(503).json({ error: "payments_paused", message: "Payments are temporarily unavailable. Please try again soon." });
