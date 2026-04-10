@@ -130,7 +130,17 @@ async function pollStripePending(stripeKey: string) {
 
   const cutoff = new Date(Date.now() - 72 * 60 * 60 * 1000);
   const pending = await db
-    .select()
+    .select({
+      id: paymentsTable.id,
+      userId: paymentsTable.userId,
+      slotNumber: paymentsTable.slotNumber,
+      method: paymentsTable.method,
+      amount: paymentsTable.amount,
+      usdAmount: paymentsTable.usdAmount,
+      currency: paymentsTable.currency,
+      stripeSessionId: paymentsTable.stripeSessionId,
+      derivationIndex: paymentsTable.derivationIndex,
+    })
     .from(paymentsTable)
     .where(
       and(
@@ -194,7 +204,17 @@ async function pollStripePending(stripeKey: string) {
 async function pollCryptoPending(apiKey: string) {
   const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000); // look back 7 days
   const pending = await db
-    .select()
+    .select({
+      id: paymentsTable.id,
+      userId: paymentsTable.userId,
+      slotNumber: paymentsTable.slotNumber,
+      method: paymentsTable.method,
+      amount: paymentsTable.amount,
+      usdAmount: paymentsTable.usdAmount,
+      currency: paymentsTable.currency,
+      txHash: paymentsTable.txHash,
+      derivationIndex: paymentsTable.derivationIndex,
+    })
     .from(paymentsTable)
     .where(
       and(

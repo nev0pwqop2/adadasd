@@ -1,5 +1,5 @@
 import { db, slotsTable, usersTable, bidsTable, preordersTable, paymentsTable } from "@workspace/db";
-import { sql, eq, and, ne, desc, lt } from "drizzle-orm";
+import { sql, eq, and, ne, desc, lt, count } from "drizzle-orm";
 import { sendDiscordDM, sendPaymentWebhook, addGuildRole, removeGuildRole } from "./discord.js";
 import { isLuarmorConfigured, createLuarmorUser, deleteLuarmorUser } from "./luarmor.js";
 import { getSettings } from "./settings.js";
@@ -11,7 +11,15 @@ import crypto from "crypto";
 export async function runSlotCleanup(): Promise<number> {
   const now = new Date();
   const expired = await db
-    .select({ slot: slotsTable, discordId: usersTable.discordId })
+    .select({
+      slot: {
+        id: slotsTable.id,
+        slotNumber: slotsTable.slotNumber,
+        userId: slotsTable.userId,
+        luarmorUserId: slotsTable.luarmorUserId,
+      },
+      discordId: usersTable.discordId,
+    })
     .from(slotsTable)
     .innerJoin(usersTable, eq(slotsTable.userId, usersTable.id))
     .where(and(eq(slotsTable.isActive, true), eq(slotsTable.isPaused, false), lt(slotsTable.expiresAt, now)));
@@ -65,7 +73,7 @@ async function findAvailableSlot(userId: string, slotCount: number): Promise<num
 /** Activate a slot for a user and return the Luarmor user_key if applicable */
 async function activateSlot(userId: string, discordId: string, username: string, slotNum: number, expiresAt: Date): Promise<string | null> {
   const existing = await db
-    .select()
+    .select({ id: slotsTable.id })
     .from(slotsTable)
     .where(and(eq(slotsTable.userId, userId), eq(slotsTable.slotNumber, slotNum)))
     .limit(1);
@@ -110,24 +118,23 @@ export async function runAutoFulfillment(): Promise<void> {
     const { slotCount, slotDurationHours, hourlyPricingEnabled, pricePerHour, minHours } = await getSettings();
 
     // Count active slots within the configured limit
-    const activeSlots = await db
-      .select({ slotNumber: slotsTable.slotNumber })
+    const [{ activeCount }] = await db
+      .select({ activeCount: count() })
       .from(slotsTable)
-      .where(eq(slotsTable.isActive, true));
-    const activeCount = activeSlots.filter((s) => s.slotNumber <= slotCount).length;
-    const freeSlots = slotCount - activeCount;
+      .where(and(eq(slotsTable.isActive, true), sql`${slotsTable.slotNumber} <= ${slotCount}`));
+    const freeSlots = slotCount - Number(activeCount);
 
     if (freeSlots <= 0) return;
 
-    // Get top active bid and top pre-order
+    // Get top active bid and top pre-order (only needed columns)
     const topBids = await db
-      .select()
+      .select({ id: bidsTable.id, userId: bidsTable.userId, amount: bidsTable.amount, createdAt: bidsTable.createdAt })
       .from(bidsTable)
       .where(eq(bidsTable.status, "active"))
       .orderBy(desc(bidsTable.amount), bidsTable.createdAt);
 
     const topPreorderRows = await db
-      .select()
+      .select({ id: preordersTable.id, userId: preordersTable.userId, amount: preordersTable.amount, currency: preordersTable.currency, hoursRequested: preordersTable.hoursRequested })
       .from(preordersTable)
       .where(eq(preordersTable.status, "paid"))
       .orderBy(desc(preordersTable.amount))
@@ -145,7 +152,7 @@ export async function runAutoFulfillment(): Promise<void> {
       const winner = topBid;
       const losers = topBids.slice(1);
 
-      const winnerUserRows = await db.select().from(usersTable).where(eq(usersTable.id, winner.userId)).limit(1);
+      const winnerUserRows = await db.select({ discordId: usersTable.discordId, username: usersTable.username }).from(usersTable).where(eq(usersTable.id, winner.userId)).limit(1);
       if (!winnerUserRows.length) return;
       const wu = winnerUserRows[0];
 
@@ -214,7 +221,7 @@ export async function runAutoFulfillment(): Promise<void> {
       // ── Fulfill top pre-order ──
       const preorder = topPreorder;
 
-      const preorderUserRows = await db.select().from(usersTable).where(eq(usersTable.id, preorder.userId)).limit(1);
+      const preorderUserRows = await db.select({ discordId: usersTable.discordId, username: usersTable.username }).from(usersTable).where(eq(usersTable.id, preorder.userId)).limit(1);
       if (!preorderUserRows.length) return;
       const pu = preorderUserRows[0];
 

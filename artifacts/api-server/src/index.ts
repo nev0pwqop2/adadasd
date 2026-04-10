@@ -368,17 +368,17 @@ runMigrations()
   .then(() => {
     logger.info("DB migrations complete — starting background jobs");
 
-    // Expiry notifications every minute
-    setInterval(runExpiryNotifications, 60 * 1000);
-    setTimeout(runExpiryNotifications, 10_000);
+    // Expiry notifications every 3 minutes
+    setInterval(runExpiryNotifications, 3 * 60 * 1000);
+    setTimeout(runExpiryNotifications, 15_000);
 
-    // Cleanup + fulfillment every 60 seconds as a safety net
-    setInterval(cleanupThenFulfill, 60 * 1000);
-    setTimeout(cleanupThenFulfill, 15_000);
+    // Cleanup + fulfillment every 2 minutes
+    setInterval(cleanupThenFulfill, 2 * 60 * 1000);
+    setTimeout(cleanupThenFulfill, 20_000);
 
-    // Payment poller — auto-complete pending crypto payments every 15 seconds
-    setInterval(() => runPaymentPoller().catch(err => logger.warn({ err }, "Payment poller error")), 15 * 1000);
-    setTimeout(() => runPaymentPoller().catch(err => logger.warn({ err }, "Payment poller error")), 15_000);
+    // Payment poller — webhooks handle real-time; this is a fallback every 60 seconds
+    setInterval(() => runPaymentPoller().catch(err => logger.warn({ err }, "Payment poller error")), 60 * 1000);
+    setTimeout(() => runPaymentPoller().catch(err => logger.warn({ err }, "Payment poller error")), 25_000);
 
     // Audit buyer roles on startup — remove role from anyone whose slot has expired
     setTimeout(() => auditBuyerRoles().catch(err => logger.warn({ err }, "Startup role audit error")), 20_000);
