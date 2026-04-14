@@ -4,8 +4,8 @@ import * as schema from "./schema";
 
 const { Pool } = pg;
 
-const connectionString = process.env.NEON_DATABASE_URL || process.env.SUPABASE_DATABASE_URL || process.env.DATABASE_URL;
-if (!connectionString) throw new Error("NEON_DATABASE_URL, SUPABASE_DATABASE_URL, or DATABASE_URL environment variable is not set");
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) throw new Error("DATABASE_URL environment variable is not set");
 
 
 export const pool = new Pool({ connectionString, max: 5 });
