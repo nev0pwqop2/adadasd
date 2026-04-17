@@ -517,77 +517,109 @@ async function handleUnban(interaction: ChatInputCommandInteraction) {
   const year = now.getUTCFullYear();
   const month = now.getUTCMonth() + 1;
 
-  // Validate the day exists in this month
   const daysInMonth = new Date(year, month, 0).getDate();
   if (day > daysInMonth) {
     await interaction.editReply(`❌ Day ${day} doesn't exist in the current month (max ${daysInMonth}).`);
     return;
   }
 
-  const dayStart = new Date(Date.UTC(year, month - 1, day, 0, 0, 0));
-  const dayEnd   = new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999));
-
-  const res = await db.query(
-    `SELECT discord_id, username, discord_access_token, discord_refresh_token, discord_token_expires_at
-     FROM users
-     WHERE is_banned = true
-       AND banned_at >= $1
-       AND banned_at <= $2`,
-    [dayStart, dayEnd]
-  );
-
-  const users = res.rows as { discord_id: string; username: string; discord_access_token: string | null; discord_refresh_token: string | null; discord_token_expires_at: Date | null }[];
-
-  if (users.length === 0) {
-    await interaction.editReply(`ℹ️ No users were banned on **${month}/${day}/${year}**.`);
+  const guildId = process.env.DISCORD_GUILD_ID;
+  if (!guildId) {
+    await interaction.editReply("❌ DISCORD_GUILD_ID not configured.");
     return;
   }
 
-  let unbanned = 0, rejoined = 0, noToken = 0;
+  const DISCORD_EPOCH = 1420070400000n;
+  const dayStartMs = BigInt(Date.UTC(year, month - 1, day, 0, 0, 0));
+  const dayEndMs   = BigInt(Date.UTC(year, month - 1, day, 23, 59, 59, 999));
+  const endSnowflake = (((dayEndMs - DISCORD_EPOCH) << 22n) + 4194303n).toString();
 
-  for (const user of users) {
-    // Unban in DB
-    await db.query(
-      `UPDATE users SET is_banned = false, banned_at = NULL, updated_at = NOW() WHERE discord_id = $1`,
-      [user.discord_id]
-    );
-    unbanned++;
+  const discordBase = process.env.DISCORD_REST_PROXY?.replace(/\/$/, "") ?? "https://discord.com";
 
-    // Try to re-add to guild
-    let accessToken = user.discord_access_token;
-    const tokenExpired = !user.discord_token_expires_at || user.discord_token_expires_at < new Date();
+  // Paginate through audit log (action_type=22 = MEMBER_BAN_ADD)
+  const bannedUserIds: string[] = [];
+  let before = endSnowflake;
+  let done = false;
 
-    if (accessToken && tokenExpired && user.discord_refresh_token) {
-      const refreshed = await refreshDiscordToken(user.discord_refresh_token);
-      if (refreshed) {
-        accessToken = refreshed.access_token;
-        const newExpiry = new Date(Date.now() + refreshed.expires_in * 1000);
-        await db.query(
-          `UPDATE users SET discord_access_token = $1, discord_refresh_token = $2, discord_token_expires_at = $3 WHERE discord_id = $4`,
-          [refreshed.access_token, refreshed.refresh_token, newExpiry, user.discord_id]
-        );
-      }
+  while (!done) {
+    const url = `${discordBase}/api/v10/guilds/${guildId}/audit-logs?action_type=22&limit=100&before=${before}`;
+    const res = await fetch(url, { headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}` } });
+    if (!res.ok) { done = true; break; }
+
+    const data = await res.json() as { audit_log_entries: Array<{ id: string; target_id: string }> };
+    const entries = data.audit_log_entries ?? [];
+    if (entries.length === 0) break;
+
+    for (const entry of entries) {
+      const entryMs = (BigInt(entry.id) >> 22n) + DISCORD_EPOCH;
+      if (entryMs < dayStartMs) { done = true; break; }
+      if (entryMs <= dayEndMs && entry.target_id) bannedUserIds.push(entry.target_id);
     }
 
-    if (accessToken && !tokenExpired) {
-      const joined = await addUserToGuild(user.discord_id, accessToken);
-      if (joined) rejoined++;
-    } else {
-      noToken++;
+    if (!done && entries.length < 100) break;
+    if (!done) before = entries[entries.length - 1].id;
+  }
+
+  if (bannedUserIds.length === 0) {
+    await interaction.editReply(`ℹ️ No ban events found in the audit log for **${month}/${day}/${year}**.`);
+    return;
+  }
+
+  let unbannedDiscord = 0, unbannedDb = 0, rejoined = 0;
+
+  for (const discordId of bannedUserIds) {
+    // Remove the Discord server ban
+    try {
+      const unbanRes = await fetch(`${discordBase}/api/v10/guilds/${guildId}/bans/${discordId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}` },
+      });
+      if (unbanRes.ok || unbanRes.status === 204) unbannedDiscord++;
+    } catch { /* ignore */ }
+
+    // Unban in our DB and get OAuth token back in one query
+    const userRes = await db.query(
+      `UPDATE users SET is_banned = false, banned_at = NULL, updated_at = NOW()
+       WHERE discord_id = $1
+       RETURNING discord_access_token, discord_refresh_token, discord_token_expires_at, username`,
+      [discordId]
+    );
+
+    if (userRes.rowCount && userRes.rowCount > 0) {
+      unbannedDb++;
+      const user = userRes.rows[0] as { discord_access_token: string | null; discord_refresh_token: string | null; discord_token_expires_at: Date | null; username: string };
+
+      let accessToken = user.discord_access_token;
+      const tokenExpired = !user.discord_token_expires_at || new Date(user.discord_token_expires_at) < new Date();
+
+      if (tokenExpired && user.discord_refresh_token) {
+        const refreshed = await refreshDiscordToken(user.discord_refresh_token);
+        if (refreshed) {
+          accessToken = refreshed.access_token;
+          const newExpiry = new Date(Date.now() + refreshed.expires_in * 1000);
+          await db.query(
+            `UPDATE users SET discord_access_token = $1, discord_refresh_token = $2, discord_token_expires_at = $3 WHERE discord_id = $4`,
+            [refreshed.access_token, refreshed.refresh_token, newExpiry, discordId]
+          );
+        }
+      }
+
+      if (accessToken && (!tokenExpired || user.discord_refresh_token)) {
+        const joined = await addUserToGuild(discordId, accessToken!);
+        if (joined) rejoined++;
+      }
     }
 
     // DM the user
     try {
-      const dmChannel = await (client as any).users.createDM(user.discord_id).catch(() => null);
-      if (dmChannel) {
-        await dmChannel.send(`✅ **You have been unbanned from Exe Joiner.**\nYou can now log back in at the site and re-access your account.`);
-      }
+      const dmUser = await client.users.fetch(discordId).catch(() => null);
+      if (dmUser) await dmUser.send(`✅ **You have been unbanned from Exe Joiner.**\nYou can now log back in at the site and re-access your account.`);
     } catch { /* DMs may be closed */ }
   }
 
   await interaction.editReply(
-    `✅ Unbanned **${unbanned}** user(s) banned on **${month}/${day}/${year}**.\n` +
-    `🏠 Re-added to server: **${rejoined}** | ⚠️ No OAuth token: **${noToken}** (they'll need to log in again to rejoin).`
+    `✅ Found **${bannedUserIds.length}** ban(s) in audit log for **${month}/${day}/${year}**.\n` +
+    `🔓 Unbanned from Discord: **${unbannedDiscord}** | 💾 Unbanned on site: **${unbannedDb}** | 🏠 Re-added to server: **${rejoined}**`
   );
 }
 
