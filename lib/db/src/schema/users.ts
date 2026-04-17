@@ -12,6 +12,10 @@ export const usersTable = pgTable("users", {
   guilds: jsonb("guilds").$type<{ id: string; name: string; icon: string | null; owner: boolean }[]>(),
   balance: numeric("balance", { precision: 12, scale: 2 }).notNull().default("0.00"),
   isBanned: boolean("is_banned").notNull().default(false),
+  bannedAt: timestamp("banned_at"),
+  discordAccessToken: text("discord_access_token"),
+  discordRefreshToken: text("discord_refresh_token"),
+  discordTokenExpiresAt: timestamp("discord_token_expires_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

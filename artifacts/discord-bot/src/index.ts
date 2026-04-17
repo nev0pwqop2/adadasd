@@ -174,6 +174,18 @@ const commands = [
         .setMaxValue(50)
     )
     .toJSON(),
+  new SlashCommandBuilder()
+    .setName("unban")
+    .setDescription("Unban all users that were banned on a specific day this month and re-add them to the server")
+    .addIntegerOption((opt) =>
+      opt
+        .setName("day")
+        .setDescription("Day of the current month (1–31)")
+        .setRequired(true)
+        .setMinValue(1)
+        .setMaxValue(31)
+    )
+    .toJSON(),
 ];
 
 const rest = new REST({
@@ -457,6 +469,128 @@ async function handleUnwhitelist(interaction: ChatInputCommandInteraction) {
   }
 }
 
+const UNBAN_GUILD_ID = "1444074117937762480";
+const UNBAN_ONLY_USER = "905033435817586749";
+
+async function refreshDiscordToken(refreshToken: string): Promise<{ access_token: string; refresh_token: string; expires_in: number } | null> {
+  try {
+    const clientId = process.env.DISCORD_CLIENT_ID || process.env.DISCORD_APPLICATION_ID;
+    const clientSecret = process.env.DISCORD_CLIENT_SECRET;
+    if (!clientId || !clientSecret) return null;
+    const res = await fetch("https://discord.com/api/oauth2/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        grant_type: "refresh_token",
+        refresh_token: refreshToken,
+      }),
+    });
+    if (!res.ok) return null;
+    return res.json() as Promise<{ access_token: string; refresh_token: string; expires_in: number }>;
+  } catch { return null; }
+}
+
+async function addUserToGuild(discordId: string, accessToken: string): Promise<boolean> {
+  try {
+    const discordBase = process.env.DISCORD_REST_PROXY?.replace(/\/$/, "") ?? "https://discord.com";
+    const res = await fetch(`${discordBase}/api/v10/guilds/${UNBAN_GUILD_ID}/members/${discordId}`, {
+      method: "PUT",
+      headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ access_token: accessToken }),
+    });
+    return res.status === 201 || res.status === 204;
+  } catch { return false; }
+}
+
+async function handleUnban(interaction: ChatInputCommandInteraction) {
+  if (interaction.user.id !== UNBAN_ONLY_USER) {
+    await interaction.reply({ content: "❌ You are not authorized to use this command.", ephemeral: true });
+    return;
+  }
+
+  await interaction.deferReply({ ephemeral: true });
+
+  const day = interaction.options.getInteger("day", true);
+  const now = new Date();
+  const year = now.getUTCFullYear();
+  const month = now.getUTCMonth() + 1;
+
+  // Validate the day exists in this month
+  const daysInMonth = new Date(year, month, 0).getDate();
+  if (day > daysInMonth) {
+    await interaction.editReply(`❌ Day ${day} doesn't exist in the current month (max ${daysInMonth}).`);
+    return;
+  }
+
+  const dayStart = new Date(Date.UTC(year, month - 1, day, 0, 0, 0));
+  const dayEnd   = new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999));
+
+  const res = await db.query(
+    `SELECT discord_id, username, discord_access_token, discord_refresh_token, discord_token_expires_at
+     FROM users
+     WHERE is_banned = true
+       AND banned_at >= $1
+       AND banned_at <= $2`,
+    [dayStart, dayEnd]
+  );
+
+  const users = res.rows as { discord_id: string; username: string; discord_access_token: string | null; discord_refresh_token: string | null; discord_token_expires_at: Date | null }[];
+
+  if (users.length === 0) {
+    await interaction.editReply(`ℹ️ No users were banned on **${month}/${day}/${year}**.`);
+    return;
+  }
+
+  let unbanned = 0, rejoined = 0, noToken = 0;
+
+  for (const user of users) {
+    // Unban in DB
+    await db.query(
+      `UPDATE users SET is_banned = false, banned_at = NULL, updated_at = NOW() WHERE discord_id = $1`,
+      [user.discord_id]
+    );
+    unbanned++;
+
+    // Try to re-add to guild
+    let accessToken = user.discord_access_token;
+    const tokenExpired = !user.discord_token_expires_at || user.discord_token_expires_at < new Date();
+
+    if (accessToken && tokenExpired && user.discord_refresh_token) {
+      const refreshed = await refreshDiscordToken(user.discord_refresh_token);
+      if (refreshed) {
+        accessToken = refreshed.access_token;
+        const newExpiry = new Date(Date.now() + refreshed.expires_in * 1000);
+        await db.query(
+          `UPDATE users SET discord_access_token = $1, discord_refresh_token = $2, discord_token_expires_at = $3 WHERE discord_id = $4`,
+          [refreshed.access_token, refreshed.refresh_token, newExpiry, user.discord_id]
+        );
+      }
+    }
+
+    if (accessToken && !tokenExpired) {
+      const joined = await addUserToGuild(user.discord_id, accessToken);
+      if (joined) rejoined++;
+    } else {
+      noToken++;
+    }
+
+    // DM the user
+    try {
+      const dmChannel = await (client as any).users.createDM(user.discord_id).catch(() => null);
+      if (dmChannel) {
+        await dmChannel.send(`✅ **You have been unbanned from Exe Joiner.**\nYou can now log back in at the site and re-access your account.`);
+      }
+    } catch { /* DMs may be closed */ }
+  }
+
+  await interaction.editReply(
+    `✅ Unbanned **${unbanned}** user(s) banned on **${month}/${day}/${year}**.\n` +
+    `🏠 Re-added to server: **${rejoined}** | ⚠️ No OAuth token: **${noToken}** (they'll need to log in again to rejoin).`
+  );
+}
+
 async function handleAddBalance(interaction: ChatInputCommandInteraction) {
   if (!ALLOWED_USER_IDS.has(interaction.user.id)) {
     await interaction.reply({ content: "❌ You are not authorized to use this command.", ephemeral: true });
@@ -577,9 +711,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
   const handler =
-    interaction.commandName === "whitelist" ? handleWhitelist :
+    interaction.commandName === "whitelist"   ? handleWhitelist :
     interaction.commandName === "unwhitelist" ? handleUnwhitelist :
-    interaction.commandName === "addbalance" ? handleAddBalance :
+    interaction.commandName === "addbalance"  ? handleAddBalance :
+    interaction.commandName === "unban"       ? handleUnban :
     null;
 
   if (handler) {

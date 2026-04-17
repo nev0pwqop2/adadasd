@@ -991,7 +991,11 @@ router.post("/users/:discordId/ban", async (req, res) => {
       return;
     }
     const newBanned = !users[0].isBanned;
-    await db.update(usersTable).set({ isBanned: newBanned, updatedAt: new Date() }).where(eq(usersTable.discordId, discordId));
+    await db.update(usersTable).set({
+      isBanned: newBanned,
+      bannedAt: newBanned ? new Date() : null,
+      updatedAt: new Date(),
+    } as any).where(eq(usersTable.discordId, discordId));
     // Immediately purge from ban cache so the ban/unban takes effect on the user's
     // very next request rather than waiting for the 30-second cache TTL to expire.
     invalidateBanCache(users[0].id);

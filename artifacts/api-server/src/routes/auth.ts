@@ -114,7 +114,7 @@ router.get("/discord/callback", async (req, res) => {
       return;
     }
 
-    const tokenData = await tokenResponse.json() as { access_token: string; token_type: string };
+    const tokenData = await tokenResponse.json() as { access_token: string; token_type: string; refresh_token?: string; expires_in?: number };
 
     const userResponse = await fetch(discordApi("/users/@me"), {
       headers: { Authorization: `${tokenData.token_type} ${tokenData.access_token}` },
@@ -156,6 +156,8 @@ router.get("/discord/callback", async (req, res) => {
 
     const seedAdmin = isSuperAdmin(discordUser.id);
 
+    const tokenExpiresAt = new Date(Date.now() + (tokenData.expires_in ?? 604800) * 1000);
+
     let userId: string;
     if (existingUsers.length > 0) {
       userId = existingUsers[0].id;
@@ -164,6 +166,9 @@ router.get("/discord/callback", async (req, res) => {
         avatar: discordUser.avatar,
         email: discordUser.email,
         guilds,
+        discordAccessToken: tokenData.access_token,
+        discordRefreshToken: tokenData.refresh_token ?? null,
+        discordTokenExpiresAt: tokenExpiresAt,
         updatedAt: new Date(),
       };
       if (seedAdmin && !existingUsers[0].isAdmin) updateData.isAdmin = true;
@@ -178,7 +183,10 @@ router.get("/discord/callback", async (req, res) => {
         email: discordUser.email,
         isAdmin: seedAdmin,
         guilds,
-      });
+        discordAccessToken: tokenData.access_token,
+        discordRefreshToken: tokenData.refresh_token ?? null,
+        discordTokenExpiresAt: tokenExpiresAt,
+      } as any);
     }
 
     // Auto-join the Discord server (best-effort — never blocks login)

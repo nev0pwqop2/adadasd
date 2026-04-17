@@ -162,6 +162,11 @@ async function runMigrations() {
     ALTER TABLE slots ADD COLUMN IF NOT EXISTS notified_10m BOOLEAN NOT NULL DEFAULT FALSE
   `);
 
+  await step("users.banned_at", sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS banned_at TIMESTAMP`);
+  await step("users.discord_access_token", sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS discord_access_token TEXT`);
+  await step("users.discord_refresh_token", sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS discord_refresh_token TEXT`);
+  await step("users.discord_token_expires_at", sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS discord_token_expires_at TIMESTAMP`);
+
   // Reset notified_10m for active slots that expire more than 20 minutes from now —
   // these clearly haven't been legitimately notified (the old scheduler may have set the
   // flag even when the DM failed), so resetting lets the new polling code send the DM.
