@@ -526,54 +526,41 @@ async function handleUnban(interaction: ChatInputCommandInteraction) {
   const discordBase = process.env.DISCORD_REST_PROXY?.replace(/\/$/, "") ?? "https://discord.com";
   const guildId = process.env.DISCORD_GUILD_ID || UNBAN_GUILD_ID;
 
-  // Find users banned on this day via the DB banned_at column (covers any timezone)
-  // We search the full 24-hour span plus a ±1 hour buffer to handle timezone edge cases
-  const dayStart = new Date(Date.UTC(year, month - 1, day, 0, 0, 0) - 60 * 60 * 1000);
-  const dayEnd   = new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999) + 60 * 60 * 1000);
+  // Search audit log for bans on the given day — use ±12h buffer to cover all timezones
+  const DISCORD_EPOCH = 1420070400000n;
+  const dayStartMs = BigInt(Date.UTC(year, month - 1, day, 0, 0, 0)) - 43200000n; // -12h
+  const dayEndMs   = BigInt(Date.UTC(year, month - 1, day, 23, 59, 59, 999)) + 43200000n; // +12h
+  const endSnowflake = (((dayEndMs - DISCORD_EPOCH) << 22n) + 4194303n).toString();
 
-  const dbRes = await db.query(
-    `SELECT discord_id FROM users WHERE is_banned = true AND banned_at >= $1 AND banned_at <= $2`,
-    [dayStart, dayEnd]
-  );
+  const bannedUserIds: string[] = [];
+  let before = endSnowflake;
+  let done = false;
 
-  const bannedUserIds: string[] = dbRes.rows.map((r: { discord_id: string }) => r.discord_id);
-
-  if (bannedUserIds.length === 0) {
-    // Fall back to Discord audit log if no DB records (e.g. bans made before banned_at was tracked)
-    const DISCORD_EPOCH = 1420070400000n;
-    const dayStartMs = BigInt(Date.UTC(year, month - 1, day, 0, 0, 0) - 60 * 60 * 1000);
-    const dayEndMs   = BigInt(Date.UTC(year, month - 1, day, 23, 59, 59, 999) + 60 * 60 * 1000);
-    const endSnowflake = (((dayEndMs - DISCORD_EPOCH) << 22n) + 4194303n).toString();
-
-    let before = endSnowflake;
-    let done = false;
-
-    while (!done) {
-      const url = `${discordBase}/api/v10/guilds/${guildId}/audit-logs?action_type=22&limit=100&before=${before}`;
-      const res = await fetch(url, { headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}` } });
-      if (!res.ok) {
-        const errText = await res.text();
-        await interaction.editReply(`❌ No DB records found and audit log also failed (HTTP ${res.status}): ${errText}`);
-        return;
-      }
-
-      const data = await res.json() as { audit_log_entries: Array<{ id: string; target_id: string }> };
-      const entries = data.audit_log_entries ?? [];
-      if (entries.length === 0) break;
-
-      for (const entry of entries) {
-        const entryMs = (BigInt(entry.id) >> 22n) + DISCORD_EPOCH;
-        if (entryMs < dayStartMs) { done = true; break; }
-        if (entryMs <= dayEndMs && entry.target_id) bannedUserIds.push(entry.target_id);
-      }
-
-      if (!done && entries.length < 100) break;
-      if (!done) before = entries[entries.length - 1].id;
+  while (!done) {
+    const url = `${discordBase}/api/v10/guilds/${guildId}/audit-logs?action_type=22&limit=100&before=${before}`;
+    const res = await fetch(url, { headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}` } });
+    if (!res.ok) {
+      const errText = await res.text();
+      await interaction.editReply(`❌ Failed to fetch audit log (HTTP ${res.status}): ${errText}`);
+      return;
     }
+
+    const data = await res.json() as { audit_log_entries: Array<{ id: string; target_id: string }> };
+    const entries = data.audit_log_entries ?? [];
+    if (entries.length === 0) break;
+
+    for (const entry of entries) {
+      const entryMs = (BigInt(entry.id) >> 22n) + DISCORD_EPOCH;
+      if (entryMs < dayStartMs) { done = true; break; }
+      if (entryMs <= dayEndMs && entry.target_id) bannedUserIds.push(entry.target_id);
+    }
+
+    if (!done && entries.length < 100) break;
+    if (!done) before = entries[entries.length - 1].id;
   }
 
   if (bannedUserIds.length === 0) {
-    await interaction.editReply(`ℹ️ No users found banned on **${month}/${day}/${year}** (checked DB + audit log).`);
+    await interaction.editReply(`ℹ️ No bans found in the audit log for **${month}/${day}/${year}**.`);
     return;
   }
 
