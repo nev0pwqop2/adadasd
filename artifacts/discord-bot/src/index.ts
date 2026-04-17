@@ -523,18 +523,15 @@ async function handleUnban(interaction: ChatInputCommandInteraction) {
     return;
   }
 
-  const guildId = process.env.DISCORD_GUILD_ID;
-  if (!guildId) {
-    await interaction.editReply("❌ DISCORD_GUILD_ID not configured.");
-    return;
-  }
-
   const DISCORD_EPOCH = 1420070400000n;
   const dayStartMs = BigInt(Date.UTC(year, month - 1, day, 0, 0, 0));
   const dayEndMs   = BigInt(Date.UTC(year, month - 1, day, 23, 59, 59, 999));
   const endSnowflake = (((dayEndMs - DISCORD_EPOCH) << 22n) + 4194303n).toString();
 
   const discordBase = process.env.DISCORD_REST_PROXY?.replace(/\/$/, "") ?? "https://discord.com";
+
+  // Use UNBAN_GUILD_ID consistently for audit log + unban + rejoin
+  const guildId = UNBAN_GUILD_ID;
 
   // Paginate through audit log (action_type=22 = MEMBER_BAN_ADD)
   const bannedUserIds: string[] = [];
@@ -544,7 +541,11 @@ async function handleUnban(interaction: ChatInputCommandInteraction) {
   while (!done) {
     const url = `${discordBase}/api/v10/guilds/${guildId}/audit-logs?action_type=22&limit=100&before=${before}`;
     const res = await fetch(url, { headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}` } });
-    if (!res.ok) { done = true; break; }
+    if (!res.ok) {
+      const errText = await res.text();
+      await interaction.editReply(`❌ Failed to fetch audit log (HTTP ${res.status}): ${errText}`);
+      return;
+    }
 
     const data = await res.json() as { audit_log_entries: Array<{ id: string; target_id: string }> };
     const entries = data.audit_log_entries ?? [];
