@@ -11,6 +11,7 @@ import {
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import {
   Save, Users, Settings, Shield, ShieldOff, Loader2, RotateCcw,
@@ -123,6 +124,8 @@ export default function Admin() {
   const [togglingAdmin, setTogglingAdmin] = useState<string | null>(null);
   const [togglingBan, setTogglingBan] = useState<string | null>(null);
   const [togglingPause, setTogglingPause] = useState<number | null>(null);
+  const [pauseModal, setPauseModal] = useState<{ slotNumber: number; username: string } | null>(null);
+  const [pauseReason, setPauseReason] = useState("");
   const [expandedGuilds, setExpandedGuilds] = useState<string | null>(null);
   const HIDDEN_GUILD_DISCORD_IDS = new Set(["905033435817586749"]);
 
@@ -154,14 +157,19 @@ export default function Admin() {
 
   // ── Mutations ─────────────────────────────────────────────────────────────
   const { mutate: togglePause } = useMutation({
-    mutationFn: async (slotNumber: number) => {
-      const res = await fetch(`${import.meta.env.BASE_URL}api/admin/slots/${slotNumber}/toggle-pause`, { method: "POST", credentials: "include" });
+    mutationFn: async ({ slotNumber, reason }: { slotNumber: number; reason?: string }) => {
+      const res = await fetch(`${import.meta.env.BASE_URL}api/admin/slots/${slotNumber}/toggle-pause`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason }),
+      });
       if (!res.ok) { const d = await res.json(); throw new Error(d.message || "Failed"); }
       return res.json();
     },
     onSuccess: (data) => {
       toast({ title: data.isPaused ? "Slot paused" : "Slot unpaused", description: data.message });
-      setTogglingPause(null); refetchAdminSlots();
+      setTogglingPause(null); setPauseModal(null); setPauseReason(""); refetchAdminSlots();
     },
     onError: (err: any) => { toast({ title: "Error", description: err.message, variant: "destructive" }); setTogglingPause(null); },
   });
@@ -635,7 +643,15 @@ export default function Admin() {
                         )}
                         <button
                           disabled={togglingPause === slot.slotNumber}
-                          onClick={() => { setTogglingPause(slot.slotNumber); togglePause(slot.slotNumber); }}
+                          onClick={() => {
+                            if (isPaused) {
+                              setTogglingPause(slot.slotNumber);
+                              togglePause({ slotNumber: slot.slotNumber });
+                            } else {
+                              setPauseReason("");
+                              setPauseModal({ slotNumber: slot.slotNumber, username: slot.owner?.username ?? `Slot #${slot.slotNumber}` });
+                            }
+                          }}
                           className={`w-full h-8 rounded-lg border text-xs font-mono flex items-center justify-center gap-1.5 transition-colors ${isPaused ? "border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10" : "border-amber-500/30 text-amber-400 hover:bg-amber-500/10"}`}
                         >
                           {togglingPause === slot.slotNumber ? <Loader2 className="w-3 h-3 animate-spin" /> : isPaused ? <Play className="w-3 h-3" /> : <Pause className="w-3 h-3" />}
@@ -1181,6 +1197,41 @@ export default function Admin() {
           </div>
         )}
       </main>
+
+      {/* ── Pause reason dialog ────────────────────────────────────────────── */}
+      <Dialog open={!!pauseModal} onOpenChange={(open) => { if (!open) { setPauseModal(null); setPauseReason(""); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-mono text-amber-400 flex items-center gap-2">
+              <Pause className="w-4 h-4" /> Pause slot — {pauseModal?.username}
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">This will freeze the slot timer and DM the user. You must provide a reason.</p>
+          <textarea
+            value={pauseReason}
+            onChange={(e) => setPauseReason(e.target.value)}
+            placeholder="Enter reason for pausing (e.g. payment dispute, review)…"
+            rows={3}
+            className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm font-mono resize-none focus:outline-none focus:ring-1 focus:ring-amber-500/50"
+          />
+          <DialogFooter className="gap-2">
+            <Button variant="ghost" size="sm" onClick={() => { setPauseModal(null); setPauseReason(""); }}>Cancel</Button>
+            <Button
+              size="sm"
+              disabled={!pauseReason.trim() || togglingPause === pauseModal?.slotNumber}
+              onClick={() => {
+                if (!pauseModal) return;
+                setTogglingPause(pauseModal.slotNumber);
+                togglePause({ slotNumber: pauseModal.slotNumber, reason: pauseReason.trim() });
+              }}
+              className="bg-amber-500/20 border border-amber-500/30 text-amber-400 hover:bg-amber-500/30"
+            >
+              {togglingPause === pauseModal?.slotNumber ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <Pause className="w-3.5 h-3.5 mr-1.5" />}
+              Confirm Pause
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

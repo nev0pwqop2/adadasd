@@ -206,7 +206,7 @@ async function runExpiryNotifications() {
     const slots24h = await db
       .select({ id: slotsTable.id, userId: slotsTable.userId, expiresAt: slotsTable.expiresAt })
       .from(slotsTable)
-      .where(and(eq(slotsTable.isActive, true), eq(slotsTable.notified24h, false), gt(slotsTable.expiresAt, in24h), lte(slotsTable.expiresAt, in25h)));
+      .where(and(eq(slotsTable.isActive, true), eq(slotsTable.isPaused, false), eq(slotsTable.notified24h, false), gt(slotsTable.expiresAt, in24h), lte(slotsTable.expiresAt, in25h)));
 
     for (const slot of slots24h) {
       const userRows = await db.select({ discordId: usersTable.discordId, username: usersTable.username })
@@ -222,7 +222,7 @@ async function runExpiryNotifications() {
     const slots1h = await db
       .select({ id: slotsTable.id, userId: slotsTable.userId, expiresAt: slotsTable.expiresAt })
       .from(slotsTable)
-      .where(and(eq(slotsTable.isActive, true), eq(slotsTable.notified1h, false), gt(slotsTable.expiresAt, in1h), lte(slotsTable.expiresAt, in2h)));
+      .where(and(eq(slotsTable.isActive, true), eq(slotsTable.isPaused, false), eq(slotsTable.notified1h, false), gt(slotsTable.expiresAt, in1h), lte(slotsTable.expiresAt, in2h)));
 
     for (const slot of slots1h) {
       const userRows = await db.select({ discordId: usersTable.discordId, username: usersTable.username })
@@ -238,7 +238,7 @@ async function runExpiryNotifications() {
     const slots10m = await db
       .select({ id: slotsTable.id, userId: slotsTable.userId, expiresAt: slotsTable.expiresAt })
       .from(slotsTable)
-      .where(and(eq(slotsTable.isActive, true), eq(slotsTable.notified10m, false), gt(slotsTable.expiresAt, in1m), lte(slotsTable.expiresAt, in15m)));
+      .where(and(eq(slotsTable.isActive, true), eq(slotsTable.isPaused, false), eq(slotsTable.notified10m, false), gt(slotsTable.expiresAt, in1m), lte(slotsTable.expiresAt, in15m)));
 
     for (const slot of slots10m) {
       const userRows = await db.select({ discordId: usersTable.discordId, username: usersTable.username })

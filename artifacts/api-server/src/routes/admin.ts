@@ -263,7 +263,14 @@ router.post("/slots/:slotNumber/toggle-pause", async (req, res) => {
     const now = new Date();
 
     if (!slot.isPaused) {
-      // Pause: freeze expiry, disable Luarmor key
+      // Pause: require a reason
+      const { reason } = req.body as { reason?: string };
+      if (!reason || !reason.trim()) {
+        res.status(400).json({ error: "reason_required", message: "A reason is required when pausing a slot" });
+        return;
+      }
+
+      // Disable Luarmor key
       if (isLuarmorConfigured() && slot.luarmorUserId) {
         try {
           await pauseLuarmorUser(slot.luarmorUserId);
@@ -277,7 +284,17 @@ router.post("/slots/:slotNumber/toggle-pause", async (req, res) => {
         .set({ isPaused: true, pausedAt: now })
         .where(eq(slotsTable.id, slot.id));
 
-      req.log.info({ adminDiscordId: req.session.discordId, slotNumber }, "Slot paused");
+      // DM the user
+      const userRows = await db.select({ discordId: usersTable.discordId, username: usersTable.username })
+        .from(usersTable).where(eq(usersTable.id, slot.userId)).limit(1);
+      if (userRows.length) {
+        sendDiscordDM(
+          userRows[0].discordId,
+          `⏸️ **Your slot #${slotNumber} has been paused.**\n📋 **Reason:** ${reason.trim()}\n\nYour remaining time is frozen and will resume when your slot is unpaused. Contact support if you have questions.`
+        ).catch(() => {});
+      }
+
+      req.log.info({ adminDiscordId: req.session.discordId, slotNumber, reason: reason.trim() }, "Slot paused");
       res.json({ success: true, isPaused: true, message: `Slot #${slotNumber} paused` });
     } else {
       // Unpause: extend expiresAt by the time it was paused, re-enable Luarmor key
@@ -322,6 +339,17 @@ router.post("/slots/:slotNumber/toggle-pause", async (req, res) => {
         .update(slotsTable)
         .set({ isPaused: false, pausedAt: null, expiresAt: newExpiresAt, luarmorUserId: finalLuarmorKey } as any)
         .where(eq(slotsTable.id, slot.id));
+
+      // DM the user on unpause
+      const unpauseUserRows = await db.select({ discordId: usersTable.discordId, username: usersTable.username })
+        .from(usersTable).where(eq(usersTable.id, slot.userId)).limit(1);
+      if (unpauseUserRows.length) {
+        const ts = Math.floor(newExpiresAt.getTime() / 1000);
+        sendDiscordDM(
+          unpauseUserRows[0].discordId,
+          `▶️ **Your slot #${slotNumber} has been unpaused.**\n⏰ Your time has been restored — new expiry: <t:${ts}:F>.`
+        ).catch(() => {});
+      }
 
       req.log.info({ adminDiscordId: req.session.discordId, slotNumber, newExpiresAt, luarmorKeyRecreated: finalLuarmorKey !== slot.luarmorUserId }, "Slot unpaused");
       res.json({ success: true, isPaused: false, message: `Slot #${slotNumber} unpaused — expiry extended by ${Math.round(pausedMs / 60000)} min` });
