@@ -524,7 +524,7 @@ async function handleUnban(interaction: ChatInputCommandInteraction) {
   }
 
   const discordBase = process.env.DISCORD_REST_PROXY?.replace(/\/$/, "") ?? "https://discord.com";
-  const guildId = UNBAN_GUILD_ID;
+  const guildId = interaction.guildId ?? UNBAN_GUILD_ID;
 
   // Search audit log for bans on the given day — use ±12h buffer to cover all timezones
   const DISCORD_EPOCH = 1420070400000n;
