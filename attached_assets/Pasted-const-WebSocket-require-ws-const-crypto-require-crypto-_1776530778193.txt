@@ -1,0 +1,133 @@
+const WebSocket = require('ws');
+const crypto = require('crypto');
+const https = require('https');
+
+const SENDER_AUTH_KEY = "6767";
+const LUARMOR_API_KEY = "your_luarmor_api_key";
+const LUARMOR_PROJECT = "your_luarmor_project_id";
+const ENCRYPTION_KEY  = "12345678901234567890123456789012";
+const PORT            = process.env.PORT || 8080;
+
+const wss = new WebSocket.Server({ port: PORT });
+console.log(`WS relay running on port ${PORT}`);
+
+function xorEncrypt(text, key) {
+  const textBytes = Buffer.from(text, 'utf8');
+  const keyBytes  = Buffer.from(key, 'utf8');
+  const result    = Buffer.alloc(textBytes.length);
+  for (let i = 0; i < textBytes.length; i++) {
+    result[i] = textBytes[i] ^ keyBytes[i % keyBytes.length];
+  }
+  return result.toString('hex');
+}
+
+function encrypt(plaintext) {
+  return xorEncrypt(plaintext, ENCRYPTION_KEY);
+}
+
+async function validateLuarmorKey(userKey) {
+  return new Promise((resolve) => {
+    const req = https.request({
+      hostname: 'api.luarmor.net',
+      path: `/v3/projects/${LUARMOR_PROJECT}/users`,
+      method: 'GET',
+      headers: { 'Authorization': LUARMOR_API_KEY, 'Content-Type': 'application/json' },
+    }, (res) => {
+      let body = '';
+      res.on('data', (chunk) => body += chunk);
+      res.on('end', () => {
+        try {
+          const users = JSON.parse(body).users || [];
+          const match = users.find(u => u.user_key === userKey);
+          if (!match) return resolve({ valid: false, reason: 'Key not found' });
+          if (match.banned === 1) return resolve({ valid: false, reason: 'Key is banned' });
+          const now = Math.floor(Date.now() / 1000);
+          if (match.auth_expire > 0 && match.auth_expire < now) return resolve({ valid: false, reason: 'Key expired' });
+          resolve({ valid: true, user: match });
+        } catch { resolve({ valid: false, reason: 'API error' }); }
+      });
+    });
+    req.on('error', () => resolve({ valid: false, reason: 'Network error' }));
+    req.setTimeout(5000, () => { req.destroy(); resolve({ valid: false, reason: 'Timeout' }); });
+    req.end();
+  });
+}
+
+function broadcastToReceivers(payload) {
+  const encrypted = encrypt(JSON.stringify(payload));
+  let count = 0;
+  wss.clients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN && client.isAuthenticated && client.role === 'receiver') {
+      client.send(encrypted);
+      count++;
+    }
+  });
+  console.log(`Broadcast -> ${count} receiver(s)`);
+}
+
+function normalizeAuthFromUrl(rawUrl) {
+  if (!rawUrl || !rawUrl.startsWith('/auth/')) return "";
+  const noQuery = rawUrl.split('?')[0];
+  const tokenPart = noQuery.slice('/auth/'.length).replace(/\/+$/, '');
+  try { return decodeURIComponent(tokenPart); } catch { return tokenPart; }
+}
+
+async function authenticateReceiver(ws, luarmorKey) {
+  ws.send(JSON.stringify({ info: 'Validating key...' }));
+  const result = await validateLuarmorKey(luarmorKey);
+  if (!result.valid) {
+    ws.send(JSON.stringify({ error: `Invalid key: ${result.reason}` }));
+    ws.close(1008, result.reason);
+    return;
+  }
+  ws.isAuthenticated = true;
+  ws.role = 'receiver';
+  ws.send(JSON.stringify({ success: 'Authenticated', role: 'receiver' }));
+  console.log(`Receiver authenticated: ${luarmorKey.slice(0, 8)}...`);
+}
+
+wss.on('connection', async (ws, req) => {
+  ws.isAuthenticated = false;
+  ws.role = null;
+
+  if (req.url && req.url.startsWith('/auth/')) {
+    const provided = normalizeAuthFromUrl(req.url);
+    if (provided === SENDER_AUTH_KEY) {
+      ws.isAuthenticated = true;
+      ws.role = 'sender';
+      ws.send(JSON.stringify({ success: 'Sender authenticated', role: 'sender' }));
+      bindMessageHandler(ws);
+      return;
+    }
+    await authenticateReceiver(ws, provided);
+    bindMessageHandler(ws);
+    return;
+  }
+
+  ws.send(JSON.stringify({ info: 'Send {"auth":"SENDER_KEY"} or {"luarmor_key":"YOUR_KEY"}' }));
+  bindMessageHandler(ws);
+});
+
+function bindMessageHandler(ws) {
+  ws.on('message', async (msg) => {
+    let data;
+    try { data = JSON.parse(msg); } catch { ws.send(JSON.stringify({ error: 'Invalid JSON' })); return; }
+
+    if (!ws.isAuthenticated) {
+      if (data.auth === SENDER_AUTH_KEY) {
+        ws.isAuthenticated = true;
+        ws.role = 'sender';
+        ws.send(JSON.stringify({ success: 'Sender authenticated', role: 'sender' }));
+        return;
+      }
+      if (data.luarmor_key) { await authenticateReceiver(ws, data.luarmor_key); return; }
+      ws.send(JSON.stringify({ error: 'Wrong auth' }));
+      return;
+    }
+
+    if (ws.role === 'sender') { broadcastToReceivers(data); return; }
+    ws.send(JSON.stringify({ info: 'You are a receiver' }));
+  });
+
+  ws.on('close', () => console.log('Client disconnected'));
+}
