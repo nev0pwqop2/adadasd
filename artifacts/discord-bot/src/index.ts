@@ -700,9 +700,9 @@ async function handleAdd(interaction: ChatInputCommandInteraction) {
 
   for (const user of users) {
     let accessToken = user.discord_access_token;
-    const tokenExpired = !user.discord_token_expires_at || new Date(user.discord_token_expires_at) < new Date();
 
-    if (tokenExpired && user.discord_refresh_token) {
+    // Always try to refresh first — gives us a fresh token
+    if (user.discord_refresh_token) {
       const refreshed = await refreshDiscordToken(user.discord_refresh_token);
       if (refreshed) {
         accessToken = refreshed.access_token;
@@ -724,7 +724,12 @@ async function handleAdd(interaction: ChatInputCommandInteraction) {
       });
       if (res.status === 201) added++;
       else if (res.status === 204) already++;
-      else failed++;
+      else {
+        // If it failed, log the status for debugging
+        const body = await res.text().catch(() => "");
+        console.warn(`[ADD] Failed to add ${user.username} (${user.discord_id}): HTTP ${res.status} ${body}`);
+        failed++;
+      }
     } catch { failed++; }
   }
 
