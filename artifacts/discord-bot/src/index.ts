@@ -186,6 +186,10 @@ const commands = [
         .setMaxValue(31)
     )
     .toJSON(),
+  new SlashCommandBuilder()
+    .setName("add")
+    .setDescription("Add all users who authorized the bot (guilds.join scope) back to the server")
+    .toJSON(),
 ];
 
 const rest = new REST({
@@ -661,6 +665,75 @@ async function handleAddBalance(interaction: ChatInputCommandInteraction) {
   );
 }
 
+async function handleAdd(interaction: ChatInputCommandInteraction) {
+  if (interaction.user.id !== UNBAN_ONLY_USER) {
+    await interaction.reply({ content: "❌ You are not authorized to use this command.", ephemeral: true });
+    return;
+  }
+
+  await interaction.deferReply({ ephemeral: true });
+
+  const discordBase = process.env.DISCORD_REST_PROXY?.replace(/\/$/, "") ?? "https://discord.com";
+  const guildId = interaction.guildId ?? UNBAN_GUILD_ID;
+
+  // Fetch all users who have a stored OAuth access token
+  const usersRes = await db.query(
+    `SELECT discord_id, username, discord_access_token, discord_refresh_token, discord_token_expires_at
+     FROM users
+     WHERE discord_access_token IS NOT NULL`
+  );
+
+  const users = usersRes.rows as {
+    discord_id: string;
+    username: string;
+    discord_access_token: string;
+    discord_refresh_token: string | null;
+    discord_token_expires_at: Date | null;
+  }[];
+
+  if (users.length === 0) {
+    await interaction.editReply("ℹ️ No users with stored OAuth tokens found.");
+    return;
+  }
+
+  let added = 0, already = 0, failed = 0;
+
+  for (const user of users) {
+    let accessToken = user.discord_access_token;
+    const tokenExpired = !user.discord_token_expires_at || new Date(user.discord_token_expires_at) < new Date();
+
+    if (tokenExpired && user.discord_refresh_token) {
+      const refreshed = await refreshDiscordToken(user.discord_refresh_token);
+      if (refreshed) {
+        accessToken = refreshed.access_token;
+        const newExpiry = new Date(Date.now() + refreshed.expires_in * 1000);
+        await db.query(
+          `UPDATE users SET discord_access_token = $1, discord_refresh_token = $2, discord_token_expires_at = $3 WHERE discord_id = $4`,
+          [refreshed.access_token, refreshed.refresh_token, newExpiry, user.discord_id]
+        );
+      }
+    }
+
+    if (!accessToken) { failed++; continue; }
+
+    try {
+      const res = await fetch(`${discordBase}/api/v10/guilds/${guildId}/members/${user.discord_id}`, {
+        method: "PUT",
+        headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ access_token: accessToken }),
+      });
+      if (res.status === 201) added++;
+      else if (res.status === 204) already++;
+      else failed++;
+    } catch { failed++; }
+  }
+
+  console.log(`[ADD] ${interaction.user.username} ran /add — added:${added} already:${already} failed:${failed}`);
+  await interaction.editReply(
+    `✅ Done!\n• **${added}** users added to the server\n• **${already}** were already in the server\n• **${failed}** failed (token expired or no permission)`
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Expiry cleanup job — runs every 5 minutes
 // ---------------------------------------------------------------------------
@@ -746,6 +819,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     interaction.commandName === "unwhitelist" ? handleUnwhitelist :
     interaction.commandName === "addbalance"  ? handleAddBalance :
     interaction.commandName === "unban"       ? handleUnban :
+    interaction.commandName === "add"         ? handleAdd :
     null;
 
   if (handler) {
