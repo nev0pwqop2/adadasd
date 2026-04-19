@@ -8,8 +8,6 @@ const PORT            = process.env.PORT || 8080;
 const wss = new WebSocket.Server({ port: PORT });
 console.log(`WS relay running on port ${PORT}`);
 
-// SHA256 stream cipher encrypt/decrypt
-// keystream block i = SHA256(sha256(key) || i as 4 bytes BE)
 function sha256(buf) {
   return crypto.createHash('sha256').update(buf).digest();
 }

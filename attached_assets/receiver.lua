@@ -1,12 +1,6 @@
--- WebSocket Receiver Script
--- Connects to the relay server, receives encrypted messages, decrypts with SHA256 stream cipher
-
 local WS_URL        = "ws://YOUR_SERVER_URL/auth/receiver"
 local ENCRYPTION_KEY = "12345678901234567890123456789012"
 
--- ============================================================
--- Pure Lua SHA256
--- ============================================================
 local SHA256 do
   local band, bor, bxor, bnot, rshift, lshift =
     bit32 and bit32.band or bit.band,
@@ -47,7 +41,6 @@ local SHA256 do
     h[7]=(h[7]+g)%0x100000000; h[8]=(h[8]+hh)%0x100000000
   end
 
-  -- Returns SHA256 digest as a table of 32 bytes
   function SHA256(data)
     local bytes = {}
     for i = 1, #data do bytes[i] = string.byte(data, i) end
@@ -84,9 +77,6 @@ local SHA256 do
   end
 end
 
--- ============================================================
--- SHA256 stream cipher (must match server logic)
--- ============================================================
 local function uint32BE(n)
   return string.char(
     math.floor(n / 0x1000000) % 256,
@@ -106,7 +96,6 @@ local keyBaseBytes = SHA256(ENCRYPTION_KEY)
 local keyBaseStr   = bytesToStr(keyBaseBytes)
 
 local function decrypt(hexStr)
-  -- hex -> bytes
   local cipherBytes = {}
   for hex in hexStr:gmatch("..") do
     cipherBytes[#cipherBytes+1] = tonumber(hex, 16)
@@ -131,26 +120,19 @@ local function decrypt(hexStr)
   return table.concat(out)
 end
 
--- ============================================================
--- WebSocket connection
--- ============================================================
 local ws = WebSocket.connect(WS_URL)
 
 ws.OnMessage:Connect(function(msg)
-  -- First message from server is plain JSON (handshake)
   local ok, data = pcall(function() return game:GetService("HttpService"):JSONDecode(msg) end)
   if ok and data then
     print("[WS] Server:", msg)
     return
   end
 
-  -- Everything else is encrypted hex
   local decrypted = decrypt(msg)
   local success, parsed = pcall(function() return game:GetService("HttpService"):JSONDecode(decrypted) end)
   if success then
     print("[WS] Received:", decrypted)
-    -- Handle your payload here
-    -- e.g. if parsed.command == "execute" then ...
   else
     print("[WS] Decrypt failed or not JSON:", decrypted)
   end
