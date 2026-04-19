@@ -15,6 +15,20 @@ const router = Router();
 
 router.use(requireAdmin);
 
+// Quick Luarmor connectivity test — call from browser or curl to diagnose auth issues
+router.get("/luarmor/test", async (req, res) => {
+  try {
+    if (!isLuarmorConfigured()) {
+      return res.status(400).json({ ok: false, error: "LUARMOR_API_KEY or LUARMOR_PROJECT_ID not set in env" });
+    }
+    const users = await getLuarmorUsers();
+    return res.json({ ok: true, userCount: users.length, message: "Luarmor connection successful" });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return res.status(500).json({ ok: false, error: msg });
+  }
+});
+
 router.get("/settings", async (req, res) => {
   try {
     const settings = await getSettings();
