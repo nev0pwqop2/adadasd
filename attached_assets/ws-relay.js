@@ -1,4 +1,5 @@
 const WebSocket = require('ws');
+const crypto = require('crypto');
 
 const SENDER_AUTH_KEY = "6767";
 const ENCRYPTION_KEY  = "12345678901234567890123456789012";
@@ -7,18 +8,38 @@ const PORT            = process.env.PORT || 8080;
 const wss = new WebSocket.Server({ port: PORT });
 console.log(`WS relay running on port ${PORT}`);
 
-function xorEncrypt(text, key) {
-  const textBytes = Buffer.from(text, 'utf8');
-  const keyBytes  = Buffer.from(key, 'utf8');
-  const result    = Buffer.alloc(textBytes.length);
-  for (let i = 0; i < textBytes.length; i++) {
-    result[i] = textBytes[i] ^ keyBytes[i % keyBytes.length];
+// SHA256 stream cipher encrypt/decrypt
+// keystream block i = SHA256(sha256(key) || i as 4 bytes BE)
+function sha256(buf) {
+  return crypto.createHash('sha256').update(buf).digest();
+}
+
+function applyStreamCipher(inputBuf) {
+  const keyBase = sha256(Buffer.from(ENCRYPTION_KEY, 'utf8'));
+  const out = Buffer.alloc(inputBuf.length);
+  let blockIndex = 0;
+  let block = sha256(Buffer.concat([keyBase, uint32BE(blockIndex)]));
+
+  for (let i = 0; i < inputBuf.length; i++) {
+    const pos = i % 32;
+    if (i > 0 && pos === 0) {
+      blockIndex++;
+      block = sha256(Buffer.concat([keyBase, uint32BE(blockIndex)]));
+    }
+    out[i] = inputBuf[i] ^ block[pos];
   }
-  return result.toString('hex');
+  return out;
+}
+
+function uint32BE(n) {
+  const b = Buffer.alloc(4);
+  b.writeUInt32BE(n, 0);
+  return b;
 }
 
 function encrypt(plaintext) {
-  return xorEncrypt(plaintext, ENCRYPTION_KEY);
+  const inputBuf = Buffer.from(plaintext, 'utf8');
+  return applyStreamCipher(inputBuf).toString('hex');
 }
 
 function broadcastToReceivers(payload) {
