@@ -76,8 +76,9 @@ export async function activateSlotShared(
       try {
         const luarmorUser = await createLuarmorUser(user.discordId, user.username, expiresAt);
         luarmorUserId = luarmorUser.user_key;
-      } catch {
-        // Luarmor failure should not block slot activation
+        logger.info({ discordId: user.discordId, luarmorUserId }, "Luarmor key created");
+      } catch (err) {
+        logger.error({ err: err instanceof Error ? err.message : String(err), discordId: user.discordId }, "Luarmor key creation FAILED");
       }
     }
 
