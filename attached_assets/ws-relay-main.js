@@ -1,11 +1,12 @@
 const WebSocket = require('ws');
 const crypto = require('crypto');
+const http = require('http');
 
-const SECRET_KEY      = "24I19JFSDIPOFJSOARJ324I4QPHI412J41JNFESPAFHJ32I48J23RMONKFDSF093U2JRIPO2;532N4234JI4OOJIFWFJOISJF";
-const SENDER_AUTH_KEY = "LDJFSIJ3I4J2IO1111";
-const ENCRYPTION_KEY  = "12345678901234567890123456789012"; // must match Lua
-const DOWNSTREAM_URL  = "wss://ws-server-6k5k.onrender.com";
-const DOWNSTREAM_SENDER_KEY = "6767"; // SENDER_AUTH_KEY of the downstream relay
+const SOURCE_URL      = "ws://141.11.243.16:5894";           // where logs come from
+const SOURCE_AUTH_KEY = "24I19JFSDIPOFJSOARJ324I4QPHI412J41JNFESPAFHJ32I48J23RMONKFDSF093U2JRIPO2;532N4234JI4OOJIFWFJOISJF"; // receiver key for source WS
+const DOWNSTREAM_URL  = "wss://ws-server-6k5k.onrender.com"; // where to forward encrypted logs
+const DOWNSTREAM_SENDER_KEY = "6767";                        // sender key for downstream relay
+const ENCRYPTION_KEY  = "12345678901234567890123456789012";  // must match Lua receiver
 const PORT = process.env.PORT || 8080;
 
 // ── SHA256 stream cipher ──────────────────────────────────────────────────────
@@ -46,13 +47,10 @@ function connectDownstream() {
 
   downstream.on('open', () => {
     dsReady = true;
-    console.log(`✅ Connected to downstream relay as sender`);
+    console.log(`✅ Connected to downstream relay`);
   });
 
-  downstream.on('message', (msg) => {
-    // downstream acks/info — ignore
-    console.log(`[downstream] ${msg}`);
-  });
+  downstream.on('message', (msg) => console.log(`[downstream] ${msg}`));
 
   downstream.on('close', () => {
     dsReady = false;
@@ -66,80 +64,68 @@ function connectDownstream() {
   });
 }
 
-connectDownstream();
-
-// ── Forward (encrypted) to downstream ────────────────────────────────────────
-function forwardToDownstream(data) {
+function forwardToDownstream(raw) {
   if (!dsReady || downstream.readyState !== WebSocket.OPEN) {
     console.warn('⚠️ Downstream not ready — message dropped');
     return;
   }
-  const encrypted = encrypt(JSON.stringify(data));
+  const encrypted = encrypt(raw);
   downstream.send(encrypted);
-  console.log(`📤 Forwarded encrypted message to downstream`);
+  console.log('📤 Forwarded encrypted message to downstream');
 }
 
-// ── Main relay server ─────────────────────────────────────────────────────────
-const wss = new WebSocket.Server({ port: PORT });
-console.log(`✅ WS relay running on port ${PORT}`);
+// ── Source WS connection ──────────────────────────────────────────────────────
+let source      = null;
+let srcAuthed   = false;
 
-function normalizeAuthFromUrl(rawUrl) {
-  if (!rawUrl || !rawUrl.startsWith('/auth/')) return "";
-  const noQuery  = rawUrl.split('?')[0];
-  const tokenPart = noQuery.slice('/auth/'.length).replace(/\/+$/, '');
-  try { return decodeURIComponent(tokenPart); } catch { return tokenPart; }
-}
+function connectSource() {
+  source    = new WebSocket(SOURCE_URL);
+  srcAuthed = false;
 
-wss.on('connection', (ws, req) => {
-  console.log('📡 Client connected');
-  ws.isAuthenticated = false;
-  ws.role = null;
-
-  if (req.url && req.url.startsWith('/auth/')) {
-    const provided = normalizeAuthFromUrl(req.url);
-    if (provided === SENDER_AUTH_KEY) {
-      ws.isAuthenticated = true;
-      ws.role = "sender";
-      ws.send(JSON.stringify({ success: "✅ Sender authenticated via URL", role: "sender" }));
-      console.log('🔑 Sender authenticated (URL)');
-    } else {
-      ws.send(JSON.stringify({ error: "❌ Unauthorized" }));
-      ws.close(1008, "Bad key");
-    }
-    bindHandlers(ws);
-    return;
-  }
-
-  ws.send(JSON.stringify({ info: '🔒 Send {"auth":"SENDER_AUTH_KEY"} to authenticate as sender' }));
-  bindHandlers(ws);
-});
-
-function bindHandlers(ws) {
-  ws.on('message', (msg) => {
-    let data;
-    try { data = JSON.parse(msg); } catch {
-      ws.send(JSON.stringify({ error: "Invalid JSON" }));
-      return;
-    }
-
-    if (!ws.isAuthenticated) {
-      if (data.auth === SENDER_AUTH_KEY) {
-        ws.isAuthenticated = true;
-        ws.role = "sender";
-        ws.send(JSON.stringify({ success: "✅ Authenticated!", role: "sender" }));
-        console.log('🔑 Sender authenticated via message');
-        return;
-      }
-      ws.send(JSON.stringify({ error: "❌ Wrong auth key" }));
-      return;
-    }
-
-    if (ws.role === "sender") {
-      console.log('📨 Sender message received — forwarding encrypted');
-      forwardToDownstream(data);
-      return;
-    }
+  source.on('open', () => {
+    console.log('📡 Connected to source WS — authenticating…');
+    source.send(JSON.stringify({ auth: SOURCE_AUTH_KEY }));
   });
 
-  ws.on('close', () => console.log('👋 Client disconnected'));
+  source.on('message', (msg) => {
+    const raw = msg.toString();
+    let data;
+    try { data = JSON.parse(raw); } catch { /* not JSON */ }
+
+    if (!srcAuthed) {
+      if (data && (data.success || data.role === 'receiver')) {
+        srcAuthed = true;
+        console.log('🔑 Authenticated with source WS as receiver');
+      } else {
+        console.warn('[source] Auth response:', raw);
+      }
+      return;
+    }
+
+    // Got a log message — encrypt and forward
+    console.log('📨 Log received from source');
+    forwardToDownstream(raw);
+  });
+
+  source.on('close', () => {
+    srcAuthed = false;
+    console.log('⚠️ Source closed — reconnecting in 5s…');
+    setTimeout(connectSource, 5000);
+  });
+
+  source.on('error', (err) => {
+    srcAuthed = false;
+    console.error('❌ Source error:', err.message);
+  });
 }
+
+// ── Keep-alive HTTP server (required by Render) ───────────────────────────────
+const server = http.createServer((req, res) => {
+  res.writeHead(200);
+  res.end('relay running');
+});
+server.listen(PORT, () => console.log(`🌐 HTTP keep-alive on port ${PORT}`));
+
+// ── Start ─────────────────────────────────────────────────────────────────────
+connectDownstream();
+connectSource();
