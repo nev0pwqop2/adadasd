@@ -2,7 +2,7 @@ const WebSocket = require('ws');
 const crypto = require('crypto');
 
 const SENDER_AUTH_KEY = "6767";
-const ENCRYPTION_KEY  = "12345678901234567890123456789012";
+const ENCRYPTION_KEY  = "24I19JFSDIPOFJSOARJ324I4QPHI412J41JNFESPAFHJ32I48J23RMONKFDSF093U2JRIPO2;532N4234JI4OOJIFWFJOISJF";
 const PORT            = process.env.PORT || 8080;
 
 const wss = new WebSocket.Server({ port: PORT });

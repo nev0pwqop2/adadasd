@@ -1,5 +1,5 @@
 local WS_URL         = "wss://ws-server-6k5k.onrender.com"
-local ENCRYPTION_KEY = "12345678901234567890123456789012" -- must match relay
+local ENCRYPTION_KEY = "24I19JFSDIPOFJSOARJ324I4QPHI412J41JNFESPAFHJ32I48J23RMONKFDSF093U2JRIPO2;532N4234JI4OOJIFWFJOISJF" -- must match relay
 
 -- ── Pure-Lua SHA256 ───────────────────────────────────────────────────────────
 local SHA256 do
