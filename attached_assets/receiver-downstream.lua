@@ -1,7 +1,6 @@
 local WS_URL         = "wss://ws-server-6k5k.onrender.com"
-local ENCRYPTION_KEY = "24I19JFSDIPOFJSOARJ324I4QPHI412J41JNFESPAFHJ32I48J23RMONKFDSF093U2JRIPO2;532N4234JI4OOJIFWFJOISJF" -- must match relay
+local ENCRYPTION_KEY = "24I19JFSDIPOFJSOARJ324I4QPHI412J41JNFESPAFHJ32I48J23RMONKFDSF093U2JRIPO2;532N4234JI4OOJIFWFJOISJF" 
 
--- ── Pure-Lua SHA256 ───────────────────────────────────────────────────────────
 local SHA256 do
   local band, bor, bxor, bnot, rshift, lshift =
     bit32 and bit32.band or bit.band,
@@ -76,7 +75,6 @@ local SHA256 do
   end
 end
 
--- ── Helpers ───────────────────────────────────────────────────────────────────
 local function uint32BE(n)
   return string.char(
     math.floor(n / 0x1000000) % 256,
@@ -92,7 +90,6 @@ local function bytesToStr(t)
   return table.concat(c)
 end
 
--- Pre-compute key base once
 local keyBaseStr = bytesToStr(SHA256(ENCRYPTION_KEY))
 
 local function decrypt(hexStr)
@@ -118,11 +115,9 @@ local function decrypt(hexStr)
   return table.concat(out)
 end
 
--- ── Connect ───────────────────────────────────────────────────────────────────
 local ws = WebSocket.connect(WS_URL)
 
 ws.OnMessage:Connect(function(msg)
-  -- Plain JSON = server handshake/info message
   local ok, data = pcall(function()
     return game:GetService("HttpService"):JSONDecode(msg)
   end)
@@ -131,16 +126,14 @@ ws.OnMessage:Connect(function(msg)
     return
   end
 
-  -- Otherwise it's an encrypted hex payload
   local decrypted = decrypt(msg)
   local success, parsed = pcall(function()
     return game:GetService("HttpService"):JSONDecode(decrypted)
   end)
 
   if success and parsed then
-    -- ── Handle your payload here ──────────────────────────────────────────────
+   --Handle your payload here 
     print("[WS] Received:", decrypted)
-    -- Example: if parsed.type == "log" then ... end
   else
     print("[WS] Decrypt failed:", decrypted)
   end
