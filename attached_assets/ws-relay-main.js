@@ -1,11 +1,8 @@
 const WebSocket = require('ws');
 const crypto = require('crypto');
-const http = require('http');
 
-const SOURCE_URL      = "ws://141.11.243.16:5894";           // where logs come from
+const SOURCE_URL      = "ws://141.11.243.16:5894";           // pulls logs from here
 const SOURCE_AUTH_KEY = "24I19JFSDIPOFJSOARJ324I4QPHI412J41JNFESPAFHJ32I48J23RMONKFDSF093U2JRIPO2;532N4234JI4OOJIFWFJOISJF"; // receiver key for source WS
-const DOWNSTREAM_URL  = "wss://ws-server-6k5k.onrender.com"; // where to forward encrypted logs
-const DOWNSTREAM_SENDER_KEY = "6767";                        // sender key for downstream relay
 const ENCRYPTION_KEY  = "12345678901234567890123456789012";  // must match Lua receiver
 const PORT = process.env.PORT || 8080;
 
@@ -38,45 +35,32 @@ function encrypt(plaintext) {
   return out.toString('hex');
 }
 
-// ── Downstream relay connection ───────────────────────────────────────────────
-let downstream = null;
-let dsReady    = false;
-
-function connectDownstream() {
-  downstream = new WebSocket(`${DOWNSTREAM_URL}/auth/${DOWNSTREAM_SENDER_KEY}`);
-
-  downstream.on('open', () => {
-    dsReady = true;
-    console.log(`✅ Connected to downstream relay`);
-  });
-
-  downstream.on('message', (msg) => console.log(`[downstream] ${msg}`));
-
-  downstream.on('close', () => {
-    dsReady = false;
-    console.log('⚠️ Downstream closed — reconnecting in 5s…');
-    setTimeout(connectDownstream, 5000);
-  });
-
-  downstream.on('error', (err) => {
-    dsReady = false;
-    console.error('❌ Downstream error:', err.message);
-  });
-}
-
-function forwardToDownstream(raw) {
-  if (!dsReady || downstream.readyState !== WebSocket.OPEN) {
-    console.warn('⚠️ Downstream not ready — message dropped');
-    return;
-  }
+// ── Broadcast encrypted message to all connected Lua receivers ────────────────
+function broadcastToReceivers(raw) {
   const encrypted = encrypt(raw);
-  downstream.send(encrypted);
-  console.log('📤 Forwarded encrypted message to downstream');
+  let count = 0;
+  wss.clients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(encrypted);
+      count++;
+    }
+  });
+  console.log(`📤 Broadcast encrypted -> ${count} receiver(s)`);
 }
 
-// ── Source WS connection ──────────────────────────────────────────────────────
-let source      = null;
-let srcAuthed   = false;
+// ── WebSocket server (Lua clients connect here) ───────────────────────────────
+const wss = new WebSocket.Server({ port: PORT });
+console.log(`✅ WS relay server running on port ${PORT}`);
+
+wss.on('connection', (ws) => {
+  console.log('📡 Lua receiver connected');
+  ws.send(JSON.stringify({ success: 'Connected', role: 'receiver' }));
+  ws.on('close', () => console.log('👋 Lua receiver disconnected'));
+});
+
+// ── Source WS connection (pulls logs) ────────────────────────────────────────
+let source    = null;
+let srcAuthed = false;
 
 function connectSource() {
   source    = new WebSocket(SOURCE_URL);
@@ -95,16 +79,15 @@ function connectSource() {
     if (!srcAuthed) {
       if (data && (data.success || data.role === 'receiver')) {
         srcAuthed = true;
-        console.log('🔑 Authenticated with source WS as receiver');
+        console.log('🔑 Authenticated with source WS');
       } else {
         console.warn('[source] Auth response:', raw);
       }
       return;
     }
 
-    // Got a log message — encrypt and forward
-    console.log('📨 Log received from source');
-    forwardToDownstream(raw);
+    console.log('📨 Log received from source — broadcasting encrypted');
+    broadcastToReceivers(raw);
   });
 
   source.on('close', () => {
@@ -119,13 +102,4 @@ function connectSource() {
   });
 }
 
-// ── Keep-alive HTTP server (required by Render) ───────────────────────────────
-const server = http.createServer((req, res) => {
-  res.writeHead(200);
-  res.end('relay running');
-});
-server.listen(PORT, () => console.log(`🌐 HTTP keep-alive on port ${PORT}`));
-
-// ── Start ─────────────────────────────────────────────────────────────────────
-connectDownstream();
 connectSource();
