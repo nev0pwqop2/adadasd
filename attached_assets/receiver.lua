@@ -1,4 +1,4 @@
-local WS_URL        = "ws://YOUR_SERVER_URL/auth/receiver"
+local WS_URL        = "wss://ws-server-6k5k.onrender.com"
 local ENCRYPTION_KEY = "12345678901234567890123456789012"
 
 local SHA256 do
