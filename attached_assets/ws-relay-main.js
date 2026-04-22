@@ -1,5 +1,6 @@
 const WebSocket = require('ws');
 const crypto = require('crypto');
+const http = require('http');
 
 const SOURCE_URL      = "ws://141.11.243.16:4141";
 const SOURCE_AUTH_KEY = "24I19JFSDIPOFJSOARJ324I4QPHI412J41JNFESPAFHJ32I48J23RMONKFDSF093U2JRIPO2;532N4234JI4OOJIFWFJOISJF";
@@ -66,9 +67,26 @@ function encrypt(plaintext) {
   return out.toString('hex');
 }
 
-// ── WebSocket server ──────────────────────────────────────────────────────────
-const wss = new WebSocket.Server({ port: PORT });
-console.log(`✅ WS relay server running on port ${PORT}`);
+// ── HTTP + WebSocket server ───────────────────────────────────────────────────
+const httpServer = http.createServer(async (req, res) => {
+  if (req.url === '/api/ip') {
+    try {
+      const ipRes = await fetch('https://api.ipify.org?format=json');
+      const { ip } = await ipRes.json();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ip }));
+    } catch {
+      res.writeHead(500);
+      res.end(JSON.stringify({ error: 'Failed to fetch IP' }));
+    }
+    return;
+  }
+  res.writeHead(200);
+  res.end('relay running');
+});
+
+const wss = new WebSocket.Server({ server: httpServer });
+httpServer.listen(PORT, () => console.log(`✅ WS relay server running on port ${PORT}`));
 
 function broadcastToReceivers(raw) {
   const encrypted = encrypt(raw);
