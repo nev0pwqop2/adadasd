@@ -115,24 +115,37 @@ local function decrypt(hexStr)
   return table.concat(out)
 end
 
+local LUARMOR_KEY = "YOUR_LUARMOR_KEY_HERE" -- paste your script key here
+
 local ws = WebSocket.connect(WS_URL)
 
 ws.OnMessage:Connect(function(msg)
   local ok, data = pcall(function()
     return game:GetService("HttpService"):JSONDecode(msg)
   end)
+
   if ok and data then
-    print("[WS] Info:", msg)
+    if data.info then
+      -- Server is asking for auth — send Luarmor key
+      ws:Send(game:GetService("HttpService"):JSONEncode({ key = LUARMOR_KEY }))
+    elseif data.error then
+      warn("[WS] Error:", data.error)
+    elseif data.success then
+      print("[WS] Authenticated:", data.success)
+    else
+      print("[WS] Info:", msg)
+    end
     return
   end
 
+  -- Encrypted payload — decrypt it
   local decrypted = decrypt(msg)
   local success, parsed = pcall(function()
     return game:GetService("HttpService"):JSONDecode(decrypted)
   end)
 
   if success and parsed then
-   --Handle your payload here 
+    -- Handle your payload here
     print("[WS] Received:", decrypted)
   else
     print("[WS] Decrypt failed:", decrypted)

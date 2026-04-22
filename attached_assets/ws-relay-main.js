@@ -1,30 +1,45 @@
-const WebSocket = require("ws");
-const crypto = require("crypto");
+const WebSocket = require('ws');
+const crypto = require('crypto');
 
-const SOURCE_URL = "ws://141.11.243.16:5894";
-const SOURCE_AUTH_KEY =
-  "24I19JFSDIPOFJSOARJ324I4QPHI412J41JNFESPAFHJ32I48J23RMONKFDSF093U2JRIPO2;532N4234JI4OOJIFWFJOISJF";
-const ENCRYPTION_KEY =
-  "123456724I19JFSDIPOFJSOARJ324I4QPHI412J41JNFESPAFHJ32I48J23RMONKFDSF093U2JRIPO28901234567890123456789012";
+const SOURCE_URL      = "ws://141.11.243.16:4141";
+const SOURCE_AUTH_KEY = "24I19JFSDIPOFJSOARJ324I4QPHI412J41JNFESPAFHJ32I48J23RMONKFDSF093U2JRIPO2;532N4234JI4OOJIFWFJOISJF";
+const ENCRYPTION_KEY  = "12345678901234567890123456789012"; // must match Lua receiver
+const LUARMOR_API_KEY = process.env.LUARMOR_API_KEY;
+const LUARMOR_PROJECT_ID = process.env.LUARMOR_PROJECT_ID;
 const PORT = process.env.PORT || 8080;
 
-function sha256(buf) {
-  return crypto.createHash("sha256").update(buf).digest();
+// ── Luarmor key validation ────────────────────────────────────────────────────
+async function validateLuarmorKey(userKey) {
+  const res = await fetch(
+    `https://api.luarmor.net/v3/projects/${LUARMOR_PROJECT_ID}/users?user_key=${encodeURIComponent(userKey)}`,
+    { headers: { Authorization: LUARMOR_API_KEY } }
+  );
+  if (!res.ok) return { valid: false, reason: `Luarmor API error: ${res.status}` };
+  const data = await res.json();
+  const user = data.users?.[0];
+  if (!user) return { valid: false, reason: "Key not found" };
+  if (user.banned) return { valid: false, reason: "Key is banned" };
+  if (user.auth_expire !== -1 && user.auth_expire < Math.floor(Date.now() / 1000)) {
+    return { valid: false, reason: "Key has expired" };
+  }
+  return { valid: true, auth_expire: user.auth_expire };
 }
 
+// ── SHA256 stream cipher ──────────────────────────────────────────────────────
+function sha256(buf) {
+  return crypto.createHash('sha256').update(buf).digest();
+}
 function uint32BE(n) {
   const b = Buffer.alloc(4);
   b.writeUInt32BE(n, 0);
   return b;
 }
-
 function encrypt(plaintext) {
-  const inputBuf = Buffer.from(plaintext, "utf8");
-  const keyBase = sha256(Buffer.from(ENCRYPTION_KEY, "utf8"));
-  const out = Buffer.alloc(inputBuf.length);
+  const inputBuf = Buffer.from(plaintext, 'utf8');
+  const keyBase  = sha256(Buffer.from(ENCRYPTION_KEY, 'utf8'));
+  const out      = Buffer.alloc(inputBuf.length);
   let blockIndex = 0;
-  let block = sha256(Buffer.concat([keyBase, uint32BE(0)]));
-
+  let block      = sha256(Buffer.concat([keyBase, uint32BE(0)]));
   for (let i = 0; i < inputBuf.length; i++) {
     const pos = i % 32;
     if (i > 0 && pos === 0) {
@@ -33,14 +48,18 @@ function encrypt(plaintext) {
     }
     out[i] = inputBuf[i] ^ block[pos];
   }
-  return out.toString("hex");
+  return out.toString('hex');
 }
+
+// ── WebSocket server ──────────────────────────────────────────────────────────
+const wss = new WebSocket.Server({ port: PORT });
+console.log(`✅ WS relay server running on port ${PORT}`);
 
 function broadcastToReceivers(raw) {
   const encrypted = encrypt(raw);
   let count = 0;
-  wss.clients.forEach((client) => {
-    if (client.readyState === WebSocket.OPEN) {
+  wss.clients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN && client.authenticated) {
       client.send(encrypted);
       count++;
     }
@@ -48,59 +67,113 @@ function broadcastToReceivers(raw) {
   console.log(`📤 Broadcast encrypted -> ${count} receiver(s)`);
 }
 
-const wss = new WebSocket.Server({ port: PORT });
-console.log(`✅ WS relay server running on port ${PORT}`);
+wss.on('connection', (ws) => {
+  ws.authenticated = false;
+  ws.luarmorKey = null;
+  ws.expireTimer = null;
 
-wss.on("connection", (ws) => {
-  console.log("📡 Lua receiver connected");
-  ws.send(JSON.stringify({ success: "Connected", role: "receiver" }));
-  ws.on("close", () => console.log("👋 Lua receiver disconnected"));
+  ws.send(JSON.stringify({ info: 'Send {"key":"YOUR_LUARMOR_KEY"} to authenticate' }));
+
+  ws.on('message', async (msg) => {
+    if (ws.authenticated) return; // already in, ignore further messages
+
+    let data;
+    try { data = JSON.parse(msg.toString()); } catch {
+      ws.send(JSON.stringify({ error: "Invalid JSON" }));
+      ws.close(1008, "Invalid JSON");
+      return;
+    }
+
+    if (!data.key) {
+      ws.send(JSON.stringify({ error: "Send your Luarmor key as {\"key\":\"...\"}" }));
+      ws.close(1008, "No key provided");
+      return;
+    }
+
+    try {
+      const result = await validateLuarmorKey(data.key);
+      if (!result.valid) {
+        ws.send(JSON.stringify({ error: result.reason }));
+        ws.close(1008, result.reason);
+        console.log(`❌ Rejected key: ${result.reason}`);
+        return;
+      }
+
+      ws.authenticated = true;
+      ws.luarmorKey = data.key;
+      ws.send(JSON.stringify({ success: "✅ Authenticated — receiving logs" }));
+      console.log(`🔑 Client authenticated with Luarmor key`);
+
+      // Schedule auto-disconnect at exact expiry time
+      if (result.auth_expire !== -1) {
+        const msUntilExpiry = (result.auth_expire * 1000) - Date.now();
+        if (msUntilExpiry > 0) {
+          ws.expireTimer = setTimeout(() => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ error: "Your key has expired — disconnecting" }));
+              ws.close(1008, "Key expired");
+              console.log(`⏰ Disconnected client — key expired`);
+            }
+          }, msUntilExpiry);
+        } else {
+          // Already expired by the time we get here
+          ws.send(JSON.stringify({ error: "Key has expired" }));
+          ws.close(1008, "Key expired");
+        }
+      }
+    } catch (err) {
+      ws.send(JSON.stringify({ error: "Failed to validate key — try again later" }));
+      ws.close(1011, "Validation error");
+      console.error("Luarmor validation error:", err.message);
+    }
+  });
+
+  ws.on('close', () => {
+    if (ws.expireTimer) clearTimeout(ws.expireTimer);
+    console.log('👋 Client disconnected');
+  });
 });
 
-let source = null;
+// ── Source WS connection (pulls logs) ────────────────────────────────────────
+let source    = null;
 let srcAuthed = false;
 
 function connectSource() {
-  source = new WebSocket(SOURCE_URL);
+  source    = new WebSocket(SOURCE_URL);
   srcAuthed = false;
 
-  source.on("open", () => {
-    console.log("📡 Connected to source WS — authenticating…");
+  source.on('open', () => {
+    console.log('📡 Connected to source WS — authenticating…');
     source.send(JSON.stringify({ auth: SOURCE_AUTH_KEY }));
   });
 
-  source.on("message", (msg) => {
+  source.on('message', (msg) => {
     const raw = msg.toString();
     let data;
-    try {
-      data = JSON.parse(raw);
-    } catch {
-      /* not JSON */
-    }
+    try { data = JSON.parse(raw); } catch { /* not JSON */ }
 
     if (!srcAuthed) {
-      if (data && (data.success || data.role === "receiver")) {
+      if (data && (data.success || data.role === 'receiver')) {
         srcAuthed = true;
-        console.log("🔑 Authenticated with source WS");
+        console.log('🔑 Authenticated with source WS');
       } else {
-        console.warn("[source] Auth response:", raw);
+        console.warn('[source] Auth response:', raw);
       }
       return;
     }
 
-    console.log("📨 Log received from source — broadcasting encrypted");
     broadcastToReceivers(raw);
   });
 
-  source.on("close", () => {
+  source.on('close', () => {
     srcAuthed = false;
-    console.log("⚠️ Source closed — reconnecting in 5s…");
+    console.log('⚠️ Source closed — reconnecting in 5s…');
     setTimeout(connectSource, 5000);
   });
 
-  source.on("error", (err) => {
+  source.on('error', (err) => {
     srcAuthed = false;
-    console.error("❌ Source error:", err.message);
+    console.error('❌ Source error:', err.message);
   });
 }
 
