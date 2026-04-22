@@ -8,6 +8,21 @@ const LUARMOR_API_KEY = process.env.LUARMOR_API_KEY;
 const LUARMOR_PROJECT_ID = process.env.LUARMOR_PROJECT_ID;
 const PORT = process.env.PORT || 8080;
 
+// HTTP poll sources — add more entries here as needed
+const HTTP_SOURCES = [
+  {
+    name: "railway-job",
+    url: "https://087uy1728987anghuaga.up.railway.app/get_job",
+    params: {
+      client_id: "2519904148",
+      _t: "TqH9XdfzYQ459v1tdfsFiCQKAY9C8PAm",
+    },
+    intervalMs: 3000, // poll every 3 seconds
+  },
+  // Add more sources here:
+  // { name: "source2", url: "https://...", params: { ... }, intervalMs: 3000 },
+];
+
 // ── Luarmor key validation ────────────────────────────────────────────────────
 async function validateLuarmorKey(userKey) {
   const res = await fetch(
@@ -176,5 +191,38 @@ function connectSource() {
     console.error('❌ Source error:', err.message);
   });
 }
+
+// ── HTTP poll sources ─────────────────────────────────────────────────────────
+function startHttpPoller(source) {
+  let since = Date.now() / 1000; // start from now — only get new logs
+  let lastSeenTime = null;
+
+  async function poll() {
+    try {
+      const qs = new URLSearchParams({ ...source.params, since: since.toString() });
+      const res = await fetch(`${source.url}?${qs}`);
+      if (!res.ok) { console.warn(`[${source.name}] HTTP ${res.status}`); return; }
+
+      const data = await res.json();
+
+      // Skip if no new job or same timestamp as last seen
+      if (!data.has_job) return;
+      if (data.created_time && data.created_time === lastSeenTime) return;
+
+      lastSeenTime = data.created_time;
+      since = data.created_time + 0.001; // advance since past this entry
+
+      console.log(`[${source.name}] New log received — broadcasting`);
+      broadcastToReceivers(JSON.stringify({ source: source.name, ...data }));
+    } catch (err) {
+      console.error(`[${source.name}] Poll error:`, err.message);
+    }
+  }
+
+  setInterval(poll, source.intervalMs);
+  console.log(`✅ HTTP poller started: ${source.name} (every ${source.intervalMs}ms)`);
+}
+
+for (const src of HTTP_SOURCES) startHttpPoller(src);
 
 connectSource();
