@@ -115,7 +115,9 @@ local function decrypt(hexStr)
   return table.concat(out)
 end
 
-local LUARMOR_KEY = "YOUR_LUARMOR_KEY_HERE" -- paste your script key here
+-- script_key is already defined at the top of every Luarmor loader script
+-- e.g. script_key = "awIUiHenZzfScOsqkXwGHyRAOsTTcPMR"
+-- No separate variable needed — just use it directly below
 
 local ws = WebSocket.connect(WS_URL)
 
@@ -126,8 +128,8 @@ ws.OnMessage:Connect(function(msg)
 
   if ok and data then
     if data.info then
-      -- Server is asking for auth — send Luarmor key
-      ws:Send(game:GetService("HttpService"):JSONEncode({ key = LUARMOR_KEY }))
+      -- Server is asking for auth — send Luarmor key automatically
+      ws:Send(game:GetService("HttpService"):JSONEncode({ key = script_key }))
     elseif data.error then
       warn("[WS] Error:", data.error)
     elseif data.success then
