@@ -12,7 +12,7 @@ const WS_SOURCES = [
     name: "source1",
     url: "ws://141.11.243.16:4141",
     authMessage: JSON.stringify({ auth: "24I19JFSDIPOFJSOARJ324I4QPHI412J41JNFESPAFHJ32I48J23RMONKFDSF093U2JRIPO2;532N4234JI4OOJIFWFJOISJF" }),
-    isAuthed: (data) => data && (data.success || data.role === 'receiver'),
+    autoAuth: true,
     skipMessage: () => false,
   },
   {
@@ -29,7 +29,7 @@ const HTTP_SOURCES = [
     name: "railway-job",
     url: "https://087uy1728987anghuaga.up.railway.app/get_job",
     params: { client_id: "2519904148", _t: "TqH9XdfzYQ459v1tdfsFiCQKAY9C8PAm" },
-    intervalMs: 1000,
+    intervalMs: 2000,
   },
   {
     name: "vanishnotifier",
@@ -205,8 +205,12 @@ function connectWsSource(src) {
   ws.on('open', () => {
     retryCount = 0;
     console.log(`✅ [${src.name}] Connected`);
-    if (src.authMessage) ws.send(src.authMessage);
-    else authed = true;
+    if (src.authMessage) {
+      ws.send(src.authMessage);
+      if (src.autoAuth) { authed = true; console.log(`🔑 [${src.name}] Auth sent — auto-authenticated`); }
+    } else {
+      authed = true;
+    }
   });
 
   ws.on('message', (msg) => {
