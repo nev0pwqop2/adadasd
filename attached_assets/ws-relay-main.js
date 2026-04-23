@@ -1,37 +1,3 @@
-ay-job] -> 0 receiver(s) | 1x Graipuss Medussi $18,000,000 duel=false
-📤 [projectx] -> 0 receiver(s) | 1x Los Cucarachas $18,100,000 duel=false
-📤 [projectx] -> 0 receiver(s) | 1x Tung Tung Tung Sahur $7,500,000 duel=false
-📤 [projectx] -> 0 receiver(s) | 1x Strawberrita $87,700,000 duel=false
-📤 [projectx] -> 0 receiver(s) | 1x Spaghetti Tualetti $75,000,000 duel=false
-📤 [projectx] -> 0 receiver(s) | 1x Los Cucarachas $6,200,000 duel=false
-📤 [projectx] -> 0 receiver(s) | 1x Arcadopus $5,000,000 duel=false
-📤 [projectx] -> 0 receiver(s) | 1x Love Love Love Sahur $5,000,000 duel=false
-📤 [projectx] -> 0 receiver(s) | 1x Las Tralaleritas $5,500,000 duel=false
-📤 [projectx] -> 0 receiver(s) | 1x Tang Tang Keletang $268,000,000 duel=false
-📤 [projectx] -> 0 receiver(s) | 1x Easter Easter Easter Sahur $5,000,000 duel=false
-❌ [railway-job] HTTP 429 (fail #1)
-❌ [railway-job] HTTP 429 (fail #2)
-❌ [railway-job] HTTP 429 (fail #3)
-❌ [railway-job] HTTP 429 (fail #4)
-❌ [railway-job] HTTP 429 (fail #5)
-❌ [railway-job] HTTP 429 (fail #6)
-❌ [railway-job] HTTP 429 (fail #7)
-❌ [railway-job] HTTP 429 (fail #8)
-❌ [railway-job] HTTP 429 (fail #9)
-❌ [railway-job] HTTP 429 (fail #10)
-❌ [railway-job] HTTP 429 (fail #11)
-==> Your service is live 🎉
-❌ [railway-job] HTTP 429 (fail #12)
-❌ [railway-job] HTTP 429 (fail #13)
-📤 [projectx] -> 0 receiver(s) | 1x Eid Eid Eid Sahur $58,600,000 duel=false
-❌ [railway-job] HTTP 429 (fail #14)
-==> 
-==> ///////////////////////////////////////////////////////////
-==> 
-==> Available at your primary URL https://gigue.onrender.com
-==> 
-==> ///////////////////////////////////////////////////////////
-❌ [railway-job] HTTP 429 (fail #15)
 const WebSocket = require('ws');
 const crypto = require('crypto');
 const http = require('http');
@@ -63,7 +29,7 @@ const HTTP_SOURCES = [
     name: "railway-job",
     url: "https://087uy1728987anghuaga.up.railway.app/get_job",
     params: { client_id: "2519904148", _t: "TqH9XdfzYQ459v1tdfsFiCQKAY9C8PAm" },
-    intervalMs: 2000,
+    intervalMs: 1000,
   },
   {
     name: "vanishnotifier",
