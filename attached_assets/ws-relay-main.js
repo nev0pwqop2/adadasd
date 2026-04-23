@@ -3,7 +3,7 @@ const crypto = require('crypto');
 const http = require('http');
 
 const ENCRYPTION_KEY     = "12345678901234567890123456789012";
-const LUARMOR_API_KEY    = process.env.LUARMOR_API_KEbY;
+const LUARMOR_API_KEY    = process.env.LUARMOR_API_KEY;
 const LUARMOR_PROJECT_ID = process.env.LUARMOR_PROJECT_ID;
 const PORT = process.env.PORT || 8080;
 
