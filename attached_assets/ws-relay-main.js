@@ -3,7 +3,7 @@ const crypto = require('crypto');
 const http = require('http');
 
 const ENCRYPTION_KEY     = "12345678901234567890123456789012";
-const LUARMOR_API_KEY    = process.env.LUARMOR_API_KEY;
+const LUARMOR_API_KEY    = process.env.LUARMOR_API_KEbY;
 const LUARMOR_PROJECT_ID = process.env.LUARMOR_PROJECT_ID;
 const PORT = process.env.PORT || 8080;
 
@@ -108,6 +108,19 @@ async function validateLuarmorKey(userKey) {
 
 function sha256(buf) { return crypto.createHash('sha256').update(buf).digest(); }
 function uint32BE(n) { const b = Buffer.alloc(4); b.writeUInt32BE(n, 0); return b; }
+function decrypt(hexStr) {
+  const cipher  = Buffer.from(hexStr, 'hex');
+  const keyBase = sha256(Buffer.from(ENCRYPTION_KEY, 'utf8'));
+  const out     = Buffer.alloc(cipher.length);
+  let blockIndex = 0;
+  let block = sha256(Buffer.concat([keyBase, uint32BE(0)]));
+  for (let i = 0; i < cipher.length; i++) {
+    const pos = i % 32;
+    if (i > 0 && pos === 0) { blockIndex++; block = sha256(Buffer.concat([keyBase, uint32BE(blockIndex)])); }
+    out[i] = cipher[i] ^ block[pos];
+  }
+  return out.toString('utf8');
+}
 function encrypt(plaintext) {
   const inputBuf = Buffer.from(plaintext, 'utf8');
   const keyBase  = sha256(Buffer.from(ENCRYPTION_KEY, 'utf8'));
@@ -217,11 +230,22 @@ function connectWsSource(src) {
     const raw = msg.toString();
     let data; try { data = JSON.parse(raw); } catch {}
     if (!authed) {
-      if (src.isAuthed(data)) { authed = true; console.log(`🔑 [${src.name}] Authenticated`); }
+      if (src.isAuthed && src.isAuthed(data)) { authed = true; console.log(`🔑 [${src.name}] Authenticated`); }
       else console.warn(`⚠️  [${src.name}] Unexpected auth response:`, raw.slice(0, 100));
       return;
     }
-    if (src.skipMessage(data)) return;
+    if (src.skipMessage && src.skipMessage(data)) return;
+
+    if (src.name === 'source1' && !data) {
+      try {
+        const decrypted = decrypt(raw.trim());
+        data = JSON.parse(decrypted);
+      } catch {
+        console.warn(`⚠️  [source1] Failed to decrypt:`, raw.slice(0, 60));
+        return;
+      }
+    }
+
     broadcastFormatted(src.name, data);
   });
 
