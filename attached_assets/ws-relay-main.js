@@ -1,3 +1,37 @@
+ay-job] -> 0 receiver(s) | 1x Graipuss Medussi $18,000,000 duel=false
+📤 [projectx] -> 0 receiver(s) | 1x Los Cucarachas $18,100,000 duel=false
+📤 [projectx] -> 0 receiver(s) | 1x Tung Tung Tung Sahur $7,500,000 duel=false
+📤 [projectx] -> 0 receiver(s) | 1x Strawberrita $87,700,000 duel=false
+📤 [projectx] -> 0 receiver(s) | 1x Spaghetti Tualetti $75,000,000 duel=false
+📤 [projectx] -> 0 receiver(s) | 1x Los Cucarachas $6,200,000 duel=false
+📤 [projectx] -> 0 receiver(s) | 1x Arcadopus $5,000,000 duel=false
+📤 [projectx] -> 0 receiver(s) | 1x Love Love Love Sahur $5,000,000 duel=false
+📤 [projectx] -> 0 receiver(s) | 1x Las Tralaleritas $5,500,000 duel=false
+📤 [projectx] -> 0 receiver(s) | 1x Tang Tang Keletang $268,000,000 duel=false
+📤 [projectx] -> 0 receiver(s) | 1x Easter Easter Easter Sahur $5,000,000 duel=false
+❌ [railway-job] HTTP 429 (fail #1)
+❌ [railway-job] HTTP 429 (fail #2)
+❌ [railway-job] HTTP 429 (fail #3)
+❌ [railway-job] HTTP 429 (fail #4)
+❌ [railway-job] HTTP 429 (fail #5)
+❌ [railway-job] HTTP 429 (fail #6)
+❌ [railway-job] HTTP 429 (fail #7)
+❌ [railway-job] HTTP 429 (fail #8)
+❌ [railway-job] HTTP 429 (fail #9)
+❌ [railway-job] HTTP 429 (fail #10)
+❌ [railway-job] HTTP 429 (fail #11)
+==> Your service is live 🎉
+❌ [railway-job] HTTP 429 (fail #12)
+❌ [railway-job] HTTP 429 (fail #13)
+📤 [projectx] -> 0 receiver(s) | 1x Eid Eid Eid Sahur $58,600,000 duel=false
+❌ [railway-job] HTTP 429 (fail #14)
+==> 
+==> ///////////////////////////////////////////////////////////
+==> 
+==> Available at your primary URL https://gigue.onrender.com
+==> 
+==> ///////////////////////////////////////////////////////////
+❌ [railway-job] HTTP 429 (fail #15)
 const WebSocket = require('ws');
 const crypto = require('crypto');
 const http = require('http');
@@ -29,7 +63,13 @@ const HTTP_SOURCES = [
     name: "railway-job",
     url: "https://087uy1728987anghuaga.up.railway.app/get_job",
     params: { client_id: "2519904148", _t: "TqH9XdfzYQ459v1tdfsFiCQKAY9C8PAm" },
-    intervalMs: 100,
+    intervalMs: 2000,
+  },
+  {
+    name: "vanishnotifier",
+    url: "https://ws.vanishnotifier.org/recent",
+    params: {},
+    intervalMs: 1000,
   },
 ];
 
@@ -54,6 +94,10 @@ function formatLog(source, data) {
       allBrainrots: `1x ${data.pet_name} ($${(Number(data.pet_value) || 0).toLocaleString('en-US')}/s)`,
       duel: data.duel_mode === true || data.duel_mode === 1 || false,
     };
+  } else if (source === 'vanishnotifier' && Array.isArray(data?.brainrots) && data.brainrots.length) {
+    brainrots = data.brainrots;
+    jobId = data.jobId || null;
+    duelMode = brainrots.some(b => b.duel > 0);
   }
 
   if (!brainrots || !brainrots.length) return null;
@@ -238,18 +282,41 @@ function startHttpPoller(src) {
   let since = Date.now() / 1000;
   let lastSeenTime = null;
   let failCount = 0;
+  const seenJobs = new Set();
 
   async function poll() {
     try {
       const qs = new URLSearchParams({ ...src.params, since: since.toString() });
-      const res = await fetch(`${src.url}?${qs}`);
+      const res = await fetch(`${src.url}?${qs}`, {
+        headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json', 'Referer': src.url },
+      });
       if (!res.ok) {
         failCount++;
         console.error(`❌ [${src.name}] HTTP ${res.status} (fail #${failCount})`);
         return;
       }
       failCount = 0;
-      const data = await res.json();
+      const text = (await res.text()).trim();
+      if (!text.startsWith('{') && !text.startsWith('[')) return;
+      const data = JSON.parse(text);
+
+      if (src.name === 'vanishnotifier') {
+        if (!data.findings || !Array.isArray(data.findings)) return;
+        const jobs = {};
+        for (const item of data.findings) {
+          const jid = item.job_id;
+          if (!jid) continue;
+          if (!jobs[jid]) jobs[jid] = [];
+          jobs[jid].push({ name: item.name, value: Number(item.value) || 0, duel: item.duel || 0 });
+        }
+        for (const [jobId, brainrots] of Object.entries(jobs)) {
+          if (seenJobs.has(jobId)) continue;
+          seenJobs.add(jobId);
+          broadcastFormatted(src.name, { jobId, brainrots });
+        }
+        return;
+      }
+
       if (!data.has_job || data.created_time === lastSeenTime) return;
       lastSeenTime = data.created_time;
       since = data.created_time + 0.001;
