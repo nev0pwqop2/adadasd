@@ -1,0 +1,349 @@
+   "jobId": "1c037488-a5d5-4da1-ae06-4cea5f15157f",
+      "brainrots": [
+        {
+          "name": "Blackhole Goat",
+          "value": 6400000,
+          "owner": "Mike",
+          "mutation": "Rainbow",
+          "duel": 0
+        },
+        {
+          "name": "Buntteo",
+          "value": 12700000,
+          "owner": "guelnunes6",
+          "mutation": "Rainbow",
+          "duel": 0
+        }
+      ],
+      "playerCount": 7,
+      "agentName": "CarterMagic202463"
+    },
+    "timestamp": 1776963586150
+  }
+}
+[LOG] {
+  "source": "projectx",
+  "type": "event",
+  "event": {
+    "id": 1776927557452,
+    "type": "server_scan",
+    "data": {
+      "jobId": "0cf4660b-d103-4511-a540-c46952c79420",
+      "brainrots": [
+        {
+          "name": "Los Chicleteiras",
+          "value": 7000000,
+          "owner": "Kdkddejeje",
+          "mutation": "None",
+          "duel": 0
+        }
+      ],
+      "playerCount": 6,
+      "agentName": "BrooklynProPrimal46Y"
+    },
+    "timestamp": 1776963587508
+  }
+}
+[LOG] {
+  "source": "projectx",
+  "type": "event",
+  "event": {
+    "id": 1776927557453,
+    "type": "server_scan",
+    "data": {
+      "jobId": "df7ccb10-d77f-4602-bb3a-9602390f81b6",
+      "brainrots": [
+        {
+          "name": "Los Chicleteiras",
+          "value": 21000000,
+          "owner": "SAD",
+          "mutation": "None",
+          "duel": 0
+        },
+        {
+          "name": "Arcadopus",
+          "value": 5000000,
+          "owner": "SAD",
+          "mutation": "None",
+          "duel": 0
+        },
+        {
+          "name": "Los Chicleteiras",
+          "value": 7000000,
+          "owner": "SAD",
+          "mutation": "None",
+          "duel": 0
+        },
+        {
+          "name": "Chicleteirina Bicicleteirina",
+          "value": 5000000,
+          "owner": "SAD",
+          "mutation": "Gold",
+          "duel": 0
+        },
+        {
+          "name": "Cigno Fulgoro",
+          "value": 20000000,
+          "owner": "SAD",
+          "mutation": "None",
+          "duel": 0
+        },
+        {
+          "name": "Los Chicleteiras",
+          "value": 7000000,
+          "owner": "SAD",
+          "mutation": "None",
+          "duel": 0
+        },
+        {
+          "name": "Buntteo",
+          "value": 5100000,
+          "owner": "SAD",
+          "mutation": "None",
+          "duel": 0
+        },
+        {
+          "name": "DJ Panda",
+          "value": 188100000,
+          "owner": "SAD",
+          "mutation": "Gold",
+          "duel": 0
+        },
+        {
+          "name": "La Grande Combinasion",
+          "value": 10000000,
+          "owner": "SAD",
+          "mutation": "None",
+          "duel": 0
+        },
+        {
+          "name": "Easter Easter Easter Sahur",
+          "value": 7500000,
+          "owner": "SAD",
+          "mutation": "Lava",
+          "duel": 0
+        },
+        {
+          "name": "Luck Luck Luck Sahur",
+          "value": 11200000,
+          "owner": "SAD",
+          "mutation": "None",
+          "duel": 0
+        },
+        {
+          "name": "67",
+          "value": 56200000,
+          "owner": "SAD",
+          "mutation": "Yin Yang",
+          "duel": 0
+        }
+      ],
+      "playerCount": 8,
+      "agentName": "Haz3lN3on97"
+    },
+    "timestamp": 1776963588858
+  }
+}
+[LOG] {
+  "source": "projectx",
+  "type": "event",
+  "event": {
+    "id": 1776927557454,
+    "type": "server_scan",
+    "data": {
+      "jobId": "578c5464-96c2-40fa-9211-457b01a89d58",
+      "brainrots": [
+        {
+          "name": "Tung Tung Tung Sahur",
+          "value": 15000000,
+          "owner": "Fatiscool",
+          "mutation": "None",
+          "duel": 0
+        },
+        {
+          "name": "La Cucaracha",
+          "value": 5300000,
+          "owner": "Fatiscool",
+          "mutation": "Gold",
+          "duel": 0
+        }
+      ],
+      "playerCount": 6,
+      "agentName": "Stealth_Ghost3219"
+    },
+    "timestamp": 1776963589361
+  }
+}
+[LOG] {
+  "source": "projectx",
+  "type": "event",
+  "event": {
+    "id": 1776927557455,
+    "type": "server_scan",
+    "data": {
+      "jobId": "ce10539d-814b-4baa-aafe-68eda8513300",
+      "brainrots": [
+        {
+          "name": "Guerriro Digitale",
+          "value": 5500000,
+          "owner": "233",
+          "mutation": "None",
+          "duel": 0
+        }
+      ],
+      "playerCount": 7,
+      "agentName": "AriaStreamPr0"
+    },
+    "timestamp": 1776963589429
+  }
+}
+[LOG] {
+  "source": "projectx",
+  "type": "event",
+  "event": {
+    "id": 1776927557456,
+    "type": "server_scan",
+    "data": {
+      "jobId": "206f599c-3cf7-4b10-8242-a93c2039a15e",
+      "brainrots": [
+        {
+          "name": "Los Tralaleritos",
+          "value": 5000000,
+          "owner": "Aggeloszaxas1926",
+          "mutation": "Divine",
+          "duel": 0
+        }
+      ],
+      "playerCount": 6,
+      "agentName": "KeithPhantomHunter11"
+    },
+    "timestamp": 1776963591309
+  }
+}
+[LOG] {
+  "source": "projectx",
+  "type": "event",
+  "event": {
+    "id": 1776927557457,
+    "type": "server_scan",
+    "data": {
+      "jobId": "692e5c9a-818f-44eb-8062-a18023a170d6",
+      "brainrots": [
+        {
+          "name": "Graipuss Medussi",
+          "value": 6000000,
+          "owner": "Mokhammad114",
+          "mutation": "None",
+          "duel": 0
+        },
+        {
+          "name": "Graipuss Medussi",
+          "value": 12000000,
+          "owner": "Mokhammad114",
+          "mutation": "None",
+          "duel": 0
+        },
+        {
+          "name": "Easter Easter Easter Sahur",
+          "value": 7500000,
+          "owner": "Mokhammad114",
+          "mutation": "Lava",
+          "duel": 0
+        },
+        {
+          "name": "Los Tortus",
+          "value": 6700000,
+          "owner": "LosNubinis_stok212",
+          "mutation": "None",
+          "duel": 0
+        }
+      ],
+      "playerCount": 6,
+      "agentName": "ClawSky3675"
+    },
+    "timestamp": 1776963591429
+  }
+}
+[LOG] {
+  "source": "projectx",
+  "type": "event",
+  "event": {
+    "id": 1776927557458,
+    "type": "server_scan",
+    "data": {
+      "jobId": "186da8a5-2369-42db-86ba-d316090a16ac",
+      "brainrots": [
+        {
+          "name": "Los Bunitos",
+          "value": 29700000,
+          "owner": "GolDan",
+          "mutation": "Galaxy",
+          "duel": 0
+        }
+      ],
+      "playerCount": 6,
+      "agentName": "FuryXBlade2892"
+    },
+    "timestamp": 1776963593410
+  }
+}
+[LOG] {
+  "source": "projectx",
+  "type": "event",
+  "event": {
+    "id": 1776927557459,
+    "type": "server_scan",
+    "data": {
+      "jobId": "60e7cd67-2c12-45d7-a19c-5414d185298c",
+      "brainrots": [
+        {
+          "name": "Los Cucarachas",
+          "value": 11200000,
+          "owner": "MRTZ_BRAYAN3",
+          "mutation": "Galaxy",
+          "duel": 0
+        },
+        {
+          "name": "Mi Gatito",
+          "value": 11300000,
+          "owner": "MRTZ_BRAYAN3",
+          "mutation": "Diamond",
+          "duel": 0
+        }
+      ],
+      "playerCount": 7,
+      "agentName": "NovaStrik3_Rogu37931"
+    },
+    "timestamp": 1776963594465
+  }
+}
+[LOG] {
+  "source": "projectx",
+  "type": "event",
+  "event": {
+    "id": 1776927557460,
+    "type": "server_scan",
+    "data": {
+      "jobId": "d544d8df-88de-45c1-a332-6c0a65dd990e",
+      "brainrots": [
+        {
+          "name": "Cigno Fulgoro",
+          "value": 20000000,
+          "owner": "wael",
+          "mutation": "None",
+          "duel": 0
+        },
+        {
+          "name": "Los Tortus",
+          "value": 5000000,
+          "owner": "wael",
+          "mutation": "None",
+          "duel": 0
+        }
+      ],
+      "playerCount": 6,
+      "agentName": "Olivia_Playz1705"
+    },
+    "timestamp": 1776963594981
+  }
+}
