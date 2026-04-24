@@ -218,7 +218,7 @@ wss.on('connection', (ws) => {
       ws.authenticated = true;
       ws.luarmorKey = data.key;
       ws.send(JSON.stringify({ success: "Authenticated — receiving logs" }));
-      console.log(`🔑 Client authenticated from ${ws.clientIp}`);
+      console.log(`🔑 Client authenticated`);
 
       ws.sessionTimer = setTimeout(() => {
         if (ws.readyState === WebSocket.OPEN) {
