@@ -157,19 +157,26 @@ const httpServer = http.createServer(async (req, res) => {
 const wss = new WebSocket.Server({ server: httpServer });
 httpServer.listen(PORT, () => console.log(`✅ WS relay running on port ${PORT}`));
 
-const SESSION_LIMIT_MS  = 30 * 60 * 1000;
-const COOLDOWN_MS       = 10 * 60 * 1000;
-const recentDisconnects = new Map();
+const SESSION_LIMIT_MS = 30 * 60 * 1000;
+const activeSessions   = new Map(); // key -> ws
+const authAttempts     = new Map(); // ip -> { count, resetAt }
+const ipBindings       = new Map(); // key -> ip
 
-function isOnCooldown(key) {
-  const t = recentDisconnects.get(key);
-  if (!t) return false;
-  if (Date.now() - t < COOLDOWN_MS) return true;
-  recentDisconnects.delete(key);
-  return false;
+function checkRateLimit(ip) {
+  const now = Date.now();
+  const entry = authAttempts.get(ip) || { count: 0, resetAt: now + 60000 };
+  if (now > entry.resetAt) { entry.count = 0; entry.resetAt = now + 60000; }
+  entry.count++;
+  authAttempts.set(ip, entry);
+  return entry.count > 3;
 }
-function markDisconnected(key) {
-  recentDisconnects.set(key, Date.now());
+
+function kickExistingSession(key) {
+  const old = activeSessions.get(key);
+  if (old && old.readyState === WebSocket.OPEN) {
+    old.send(JSON.stringify({ error: "Your key connected from another location — disconnecting this session" }));
+    old.close(1008, "Replaced by new session");
+  }
 }
 
 function broadcastFormatted(source, data) {
@@ -197,11 +204,12 @@ setInterval(async () => {
   }
 }, 5000);
 
-wss.on('connection', (ws) => {
+wss.on('connection', (ws, req) => {
   ws.authenticated = false;
   ws.luarmorKey = null;
   ws.expireTimer = null;
   ws.sessionTimer = null;
+  ws.clientIp = req.socket.remoteAddress || req.headers['x-forwarded-for'] || 'unknown';
   ws.send(JSON.stringify({ info: 'Send {"key":"YOUR_LUARMOR_KEY"} to authenticate' }));
 
   ws.on('message', async (msg) => {
@@ -212,28 +220,39 @@ wss.on('connection', (ws) => {
     }
     if (!data.key) { ws.send(JSON.stringify({ error: "No key provided" })); ws.close(1008); return; }
 
-    if (isOnCooldown(data.key)) {
-      const t = recentDisconnects.get(data.key);
-      const secsLeft = Math.ceil((COOLDOWN_MS - (Date.now() - t)) / 1000);
-      ws.send(JSON.stringify({ error: `Session ended — wait ${secsLeft}s before reconnecting` }));
-      ws.close(1008, "Cooldown active");
+    if (checkRateLimit(ws.clientIp)) {
+      ws.send(JSON.stringify({ error: "Too many auth attempts — try again in a minute" }));
+      ws.close(1008, "Rate limited");
+      console.warn(`🚫 Rate limited IP: ${ws.clientIp}`);
+      return;
+    }
+
+    const boundIp = ipBindings.get(data.key);
+    if (boundIp && boundIp !== ws.clientIp) {
+      ws.send(JSON.stringify({ error: "This key is already in use from a different location" }));
+      ws.close(1008, "IP mismatch");
+      console.warn(`🚫 IP mismatch for key — bound: ${boundIp}, attempted: ${ws.clientIp}`);
       return;
     }
 
     try {
       const result = await validateLuarmorKey(data.key);
       if (!result.valid) { ws.send(JSON.stringify({ error: result.reason })); ws.close(1008, result.reason); return; }
+
+      kickExistingSession(data.key);
+      activeSessions.set(data.key, ws);
+      ipBindings.set(data.key, ws.clientIp);
+
       ws.authenticated = true;
       ws.luarmorKey = data.key;
       ws.send(JSON.stringify({ success: "Authenticated — receiving logs" }));
-      console.log(`🔑 Client authenticated`);
+      console.log(`🔑 Client authenticated from ${ws.clientIp}`);
 
       ws.sessionTimer = setTimeout(() => {
         if (ws.readyState === WebSocket.OPEN) {
-          markDisconnected(ws.luarmorKey);
-          ws.send(JSON.stringify({ error: "30-minute session limit reached — reconnect after 10 minutes" }));
+          ws.send(JSON.stringify({ error: "30-minute session limit reached — reconnect to continue" }));
           ws.close(1008, "Session limit");
-          console.log(`⏰ Session limit reached — disconnected client`);
+          console.log(`⏰ Session limit — disconnected client`);
         }
       }, SESSION_LIMIT_MS);
 
@@ -251,7 +270,10 @@ wss.on('connection', (ws) => {
   ws.on('close', () => {
     if (ws.expireTimer) clearTimeout(ws.expireTimer);
     if (ws.sessionTimer) clearTimeout(ws.sessionTimer);
-    if (ws.luarmorKey) markDisconnected(ws.luarmorKey);
+    if (ws.luarmorKey) {
+      if (activeSessions.get(ws.luarmorKey) === ws) activeSessions.delete(ws.luarmorKey);
+      if (ipBindings.get(ws.luarmorKey) === ws.clientIp) ipBindings.delete(ws.luarmorKey);
+    }
   });
 });
 
