@@ -159,17 +159,6 @@ httpServer.listen(PORT, () => console.log(`✅ WS relay running on port ${PORT}`
 
 const SESSION_LIMIT_MS = 30 * 60 * 1000;
 const activeSessions   = new Map(); // key -> ws
-const authAttempts     = new Map(); // ip -> { count, resetAt }
-const ipBindings       = new Map(); // key -> ip
-
-function checkRateLimit(ip) {
-  const now = Date.now();
-  const entry = authAttempts.get(ip) || { count: 0, resetAt: now + 60000 };
-  if (now > entry.resetAt) { entry.count = 0; entry.resetAt = now + 60000; }
-  entry.count++;
-  authAttempts.set(ip, entry);
-  return entry.count > 3;
-}
 
 function kickExistingSession(key) {
   const old = activeSessions.get(key);
@@ -204,12 +193,11 @@ setInterval(async () => {
   }
 }, 5000);
 
-wss.on('connection', (ws, req) => {
+wss.on('connection', (ws) => {
   ws.authenticated = false;
   ws.luarmorKey = null;
   ws.expireTimer = null;
   ws.sessionTimer = null;
-  ws.clientIp = req.socket.remoteAddress || req.headers['x-forwarded-for'] || 'unknown';
   ws.send(JSON.stringify({ info: 'Send {"key":"YOUR_LUARMOR_KEY"} to authenticate' }));
 
   ws.on('message', async (msg) => {
@@ -220,28 +208,12 @@ wss.on('connection', (ws, req) => {
     }
     if (!data.key) { ws.send(JSON.stringify({ error: "No key provided" })); ws.close(1008); return; }
 
-    if (checkRateLimit(ws.clientIp)) {
-      ws.send(JSON.stringify({ error: "Too many auth attempts — try again in a minute" }));
-      ws.close(1008, "Rate limited");
-      console.warn(`🚫 Rate limited IP: ${ws.clientIp}`);
-      return;
-    }
-
-    const boundIp = ipBindings.get(data.key);
-    if (boundIp && boundIp !== ws.clientIp) {
-      ws.send(JSON.stringify({ error: "This key is already in use from a different location" }));
-      ws.close(1008, "IP mismatch");
-      console.warn(`🚫 IP mismatch for key — bound: ${boundIp}, attempted: ${ws.clientIp}`);
-      return;
-    }
-
     try {
       const result = await validateLuarmorKey(data.key);
       if (!result.valid) { ws.send(JSON.stringify({ error: result.reason })); ws.close(1008, result.reason); return; }
 
       kickExistingSession(data.key);
       activeSessions.set(data.key, ws);
-      ipBindings.set(data.key, ws.clientIp);
 
       ws.authenticated = true;
       ws.luarmorKey = data.key;
@@ -270,10 +242,7 @@ wss.on('connection', (ws, req) => {
   ws.on('close', () => {
     if (ws.expireTimer) clearTimeout(ws.expireTimer);
     if (ws.sessionTimer) clearTimeout(ws.sessionTimer);
-    if (ws.luarmorKey) {
-      if (activeSessions.get(ws.luarmorKey) === ws) activeSessions.delete(ws.luarmorKey);
-      if (ipBindings.get(ws.luarmorKey) === ws.clientIp) ipBindings.delete(ws.luarmorKey);
-    }
+    if (ws.luarmorKey && activeSessions.get(ws.luarmorKey) === ws) activeSessions.delete(ws.luarmorKey);
   });
 });
 
