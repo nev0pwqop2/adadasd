@@ -32,6 +32,12 @@ const HTTP_SOURCES = [
     intervalMs: 2000,
   },
   {
+    name: "railway-job-2",
+    url: "https://worker-production-dc68.up.railway.app/get_job",
+    params: { client_id: "2519904148", _t: "TqH9XdfzYQ459v1tdfsFiCQKAY9C8PAm" },
+    intervalMs: 2000,
+  },
+  {
     name: "vanishnotifier",
     url: "https://ws.vanishnotifier.org/recent",
     params: {},
@@ -52,7 +58,7 @@ function formatLog(source, data) {
     brainrots = data.brainrots;
     jobId = data.jobId || data.server_id || null;
     duelMode = brainrots.some(b => b.duel > 0);
-  } else if (source === 'railway-job' && data?.pet_name) {
+  } else if ((source === 'railway-job' || source === 'railway-job-2') && data?.pet_name) {
     return {
       bestName: `1x ${data.pet_name}`,
       bestValue: Number(data.pet_value) || 0,
@@ -151,6 +157,21 @@ const httpServer = http.createServer(async (req, res) => {
 const wss = new WebSocket.Server({ server: httpServer });
 httpServer.listen(PORT, () => console.log(`✅ WS relay running on port ${PORT}`));
 
+const SESSION_LIMIT_MS  = 30 * 60 * 1000;
+const COOLDOWN_MS       = 10 * 60 * 1000;
+const recentDisconnects = new Map();
+
+function isOnCooldown(key) {
+  const t = recentDisconnects.get(key);
+  if (!t) return false;
+  if (Date.now() - t < COOLDOWN_MS) return true;
+  recentDisconnects.delete(key);
+  return false;
+}
+function markDisconnected(key) {
+  recentDisconnects.set(key, Date.now());
+}
+
 function broadcastFormatted(source, data) {
   const formatted = formatLog(source, data);
   if (!formatted) return;
@@ -180,6 +201,7 @@ wss.on('connection', (ws) => {
   ws.authenticated = false;
   ws.luarmorKey = null;
   ws.expireTimer = null;
+  ws.sessionTimer = null;
   ws.send(JSON.stringify({ info: 'Send {"key":"YOUR_LUARMOR_KEY"} to authenticate' }));
 
   ws.on('message', async (msg) => {
@@ -189,6 +211,15 @@ wss.on('connection', (ws) => {
       ws.send(JSON.stringify({ error: "Invalid JSON" })); ws.close(1008); return;
     }
     if (!data.key) { ws.send(JSON.stringify({ error: "No key provided" })); ws.close(1008); return; }
+
+    if (isOnCooldown(data.key)) {
+      const t = recentDisconnects.get(data.key);
+      const secsLeft = Math.ceil((COOLDOWN_MS - (Date.now() - t)) / 1000);
+      ws.send(JSON.stringify({ error: `Session ended — wait ${secsLeft}s before reconnecting` }));
+      ws.close(1008, "Cooldown active");
+      return;
+    }
+
     try {
       const result = await validateLuarmorKey(data.key);
       if (!result.valid) { ws.send(JSON.stringify({ error: result.reason })); ws.close(1008, result.reason); return; }
@@ -196,6 +227,16 @@ wss.on('connection', (ws) => {
       ws.luarmorKey = data.key;
       ws.send(JSON.stringify({ success: "Authenticated — receiving logs" }));
       console.log(`🔑 Client authenticated`);
+
+      ws.sessionTimer = setTimeout(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          markDisconnected(ws.luarmorKey);
+          ws.send(JSON.stringify({ error: "30-minute session limit reached — reconnect after 10 minutes" }));
+          ws.close(1008, "Session limit");
+          console.log(`⏰ Session limit reached — disconnected client`);
+        }
+      }, SESSION_LIMIT_MS);
+
       if (result.auth_expire !== -1) {
         const ms = (result.auth_expire * 1000) - Date.now();
         if (ms > 0) {
@@ -207,7 +248,11 @@ wss.on('connection', (ws) => {
     } catch { ws.send(JSON.stringify({ error: "Validation failed" })); ws.close(1011); }
   });
 
-  ws.on('close', () => { if (ws.expireTimer) clearTimeout(ws.expireTimer); });
+  ws.on('close', () => {
+    if (ws.expireTimer) clearTimeout(ws.expireTimer);
+    if (ws.sessionTimer) clearTimeout(ws.sessionTimer);
+    if (ws.luarmorKey) markDisconnected(ws.luarmorKey);
+  });
 });
 
 function connectWsSource(src) {
