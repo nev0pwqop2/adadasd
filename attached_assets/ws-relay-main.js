@@ -29,13 +29,13 @@ const HTTP_SOURCES = [
     name: "railway-job",
     url: "https://087uy1728987anghuaga.up.railway.app/get_job",
     params: { client_id: "2519904148", _t: "TqH9XdfzYQ459v1tdfsFiCQKAY9C8PAm" },
-    intervalMs: 2000,
+    intervalMs: 500,
   },
   {
     name: "railway-job-2",
     url: "https://worker-production-dc68.up.railway.app/get_job",
-    params: { client_id: "2519904148", _t: "TqH9XdfzYQ459v1tdfsFiCQKAY9C8PAm" },
-    intervalMs: 2000,
+    params: {},
+    intervalMs: 500,
   },
   {
     name: "vanishnotifier",
