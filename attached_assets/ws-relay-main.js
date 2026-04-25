@@ -185,7 +185,7 @@ const httpServer = http.createServer(async (req, res) => {
       const body = await r.text();
       const expected = `https://087uy1728987anghuaga.up.railway.app/get_job?client_id=2519904148&_t=TqH9XdfzYQ459v1tdfsFiCQKAY9C8PAm&since=${since}`;
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ proxy_url: railway1Url, expected_railway_url: expected, status: r.status, body: body.slice(0, 300) }));
+      res.end(JSON.stringify({ proxy_url: railway1Url, expected_railway_url: expected, status: r.status, body: body.slice(0, 1000) }));
     } catch (e) {
       res.writeHead(500); res.end(JSON.stringify({ error: e.message }));
     }
@@ -381,10 +381,12 @@ function startHttpPoller(src) {
         shared.failCount++;
         if (res.status === 429) {
           const retryAfter = parseInt(res.headers.get('retry-after') || '1', 10);
-          if (shared.failCount <= 2) console.warn(`⚠️  [${src.name}] Rate limited (429) — backing off ${retryAfter}s`);
+          if (shared.failCount === 1 || shared.failCount % 20 === 0)
+            console.warn(`⚠️  [${src.name}] 429 rate limit (hit #${shared.failCount}) — backing off ${retryAfter}s`);
           await new Promise(r => setTimeout(r, retryAfter * 1000));
         } else {
-          if (shared.failCount <= 3) console.error(`❌ [${src.name}] HTTP ${res.status} (fail #${shared.failCount})`);
+          if (shared.failCount === 1 || shared.failCount % 20 === 0)
+            console.error(`❌ [${src.name}] HTTP ${res.status} (fail #${shared.failCount})`);
         }
         return;
       }
