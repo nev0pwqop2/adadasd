@@ -287,16 +287,13 @@ function kickExistingSession(key) {
 function broadcastFormatted(source, data) {
   const formatted = formatLog(source, data);
   if (!formatted) return;
-  const label = source === 'railway-job' ? 'railway job 1'
-    : source === 'railway-job-2' ? 'railway job 2'
-    : source;
-  const payload = encrypt(JSON.stringify({ ...formatted, source: label }));
+  const payload = encrypt(JSON.stringify(formatted));
   let count = 0;
   if (globalPaused) return;
   wss.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN && client.authenticated && !pausedKeys.has(client.luarmorKey)) { client.send(payload); count++; }
   });
-  console.log(`📤 [${label}] -> ${count} receiver(s) | ${formatted.bestName} ${fmtValue(formatted.bestValue, null)} duel=${formatted.duel}`);
+  console.log(`📤 [${source}] -> ${count} receiver(s) | ${formatted.bestName} ${fmtValue(formatted.bestValue, null)} duel=${formatted.duel}`);
 }
 
 setInterval(async () => {
