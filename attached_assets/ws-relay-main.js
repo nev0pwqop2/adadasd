@@ -22,6 +22,13 @@ const WS_SOURCES = [
     isAuthed: () => true,
     skipMessage: (data) => data && (data.type === 'ping' || data.type === 'init'),
   },
+  {
+    name: "railway-ws",
+    url: "wss://087uy1728987anghuaga.up.railway.app/get_job?client_id=2519904148&_t=TqH9XdfzYQ459v1tdfsFiCQKAY9C8PAm",
+    authMessage: null,
+    isAuthed: () => true,
+    skipMessage: (data) => !data,
+  },
 ];
 
 const HTTP_SOURCES = [
