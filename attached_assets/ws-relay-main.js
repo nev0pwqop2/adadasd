@@ -70,10 +70,11 @@ function formatLog(source, data) {
       duel: data.duel_mode === true || data.duel_mode === 1 || false,
     };
   } else if (source === 'vanishnotifier' && data?.name && data?.value) {
+    const serverId = data.server_id || data.job_id || data.serverid || data.jobid || data.serverID || data.jobID || null;
     return {
       bestName: `1x ${data.name}`,
       bestValue: Number(data.value) || 0,
-      serverID: null,
+      serverID: serverId,
       allBrainrots: `1x ${data.name} ($${(Number(data.value) || 0).toLocaleString('en-US')}/s)`,
       duel: false,
     };
@@ -353,6 +354,10 @@ function startHttpPoller(src) {
       if (src.name === 'vanishnotifier') {
         if (!data.findings || !Array.isArray(data.findings)) return;
         let newMax = shared.maxSeenId;
+        // log field names on first ever finding so we can confirm server ID key
+        if (shared.maxSeenId === 0 && data.findings.length > 0) {
+          console.log(`🔍 [vanishnotifier] finding keys: ${Object.keys(data.findings[0]).join(', ')}`);
+        }
         // sort ascending so we broadcast in chronological order
         const sorted = [...data.findings].sort((a, b) => a.id - b.id);
         for (const item of sorted) {
