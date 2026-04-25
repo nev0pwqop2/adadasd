@@ -179,12 +179,14 @@ function kickExistingSession(key) {
 function broadcastFormatted(source, data) {
   const formatted = formatLog(source, data);
   if (!formatted) return;
-  const payload = encrypt(JSON.stringify(formatted));
+  const label = source === 'railway-job' ? 'railway job 1'
+    : source === 'railway-job-2' ? 'railway job 2'
+    : source;
+  const payload = encrypt(JSON.stringify({ ...formatted, source: label }));
   let count = 0;
   wss.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN && client.authenticated) { client.send(payload); count++; }
   });
-  const label = source === 'railway-job' ? 'railway job 1' : source;
   console.log(`📤 [${label}] -> ${count} receiver(s) | ${formatted.bestName} $${formatted.bestValue?.toLocaleString('en-US')} duel=${formatted.duel}`);
 }
 
