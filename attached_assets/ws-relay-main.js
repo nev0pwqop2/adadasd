@@ -6,7 +6,7 @@ const ENCRYPTION_KEY     = "12345678901234567890123456789012";
 const LUARMOR_API_KEY    = process.env.LUARMOR_API_KEY;
 const LUARMOR_PROJECT_ID = process.env.LUARMOR_PROJECT_ID;
 const PORT               = process.env.PORT || 8080;
-const WORKER_URL         = process.env.WORKER_URL || "https://YOUR_WORKER.YOUR_NAME.workers.dev";
+const WORKER_URL         = process.env.WORKER_URL || "https://calm-night-4622.yohalvata.workers.dev";
 
 const WS_SOURCES = [
   {
@@ -29,7 +29,7 @@ const HTTP_SOURCES = [
   {
     name: "railway-job",
     url: () => `${WORKER_URL}/railway1`,
-    params: { client_id: "2519904148", _t: "TqH9XdfzYQ459v1tdfsFiCQKAY9C8PAm" },
+    params: {},
     intervalMs: 100,
     concurrency: 1,
   },
@@ -49,6 +49,15 @@ const HTTP_SOURCES = [
   },
 ];
 
+function fmtValue(num, formatted) {
+  if (formatted) return formatted;
+  const n = Number(num) || 0;
+  if (n >= 1e9) return `$${(n / 1e9).toFixed(2)}B/s`;
+  if (n >= 1e6) return `$${(n / 1e6).toFixed(2)}M/s`;
+  if (n >= 1e3) return `$${(n / 1e3).toFixed(2)}K/s`;
+  return `$${n}/s`;
+}
+
 function formatLog(source, data) {
   let brainrots = null;
   let jobId = null;
@@ -63,21 +72,24 @@ function formatLog(source, data) {
     jobId = data.jobId || data.server_id || null;
     duelMode = brainrots.some(b => b.duel > 0);
   } else if ((source === 'railway-job' || source === 'railway-job-2') && data?.pet_name) {
+    const val = Number(data.pet_value) || 0;
+    const fmt = fmtValue(val, data.pet_value_formatted);
     return {
-      bestName: `1x ${data.pet_name}`,
-      bestValue: Number(data.pet_value) || 0,
-      serverID: data.server_id || null,
-      allBrainrots: `1x ${data.pet_name} ($${(Number(data.pet_value) || 0).toLocaleString('en-US')}/s)`,
-      duel: data.duel_mode === true || data.duel_mode === 1 || false,
+      bestName:    `1x ${data.pet_name}`,
+      bestValue:   val,
+      serverID:    data.server_id || null,
+      allBrainrots:`1x ${data.pet_name} (${fmt})`,
+      duel:        data.duel_mode === true || data.duel_mode === 1 || false,
     };
   } else if (source === 'vanishnotifier' && data?.name && data?.value) {
+    const val = Number(data.value) || 0;
     const serverId = data.server_id || data.job_id || data.serverid || data.jobid || data.serverID || data.jobID || null;
     return {
-      bestName: `1x ${data.name}`,
-      bestValue: Number(data.value) || 0,
-      serverID: serverId,
-      allBrainrots: `1x ${data.name} ($${(Number(data.value) || 0).toLocaleString('en-US')}/s)`,
-      duel: false,
+      bestName:    `1x ${data.name}`,
+      bestValue:   val,
+      serverID:    serverId,
+      allBrainrots:`1x ${data.name} (${fmtValue(val, null)})`,
+      duel:        false,
     };
   }
 
@@ -93,16 +105,16 @@ function formatLog(source, data) {
   for (const b of brainrots) {
     if (!seen.has(b.name)) {
       seen.add(b.name);
-      parts.push(`${counts[b.name]}x ${b.name} ($${b.value.toLocaleString('en-US')}/s)`);
+      parts.push(`${counts[b.name]}x ${b.name} (${fmtValue(b.value, null)})`);
     }
   }
 
   return {
-    bestName: `${counts[best.name]}x ${best.name}`,
-    bestValue: Number(best.value) || 0,
-    serverID: jobId || null,
-    allBrainrots: parts.join(', '),
-    duel: duelMode === true || false,
+    bestName:    `${counts[best.name]}x ${best.name}`,
+    bestValue:   Number(best.value) || 0,
+    serverID:    jobId || null,
+    allBrainrots:parts.join(', '),
+    duel:        duelMode === true || false,
   };
 }
 
@@ -188,7 +200,7 @@ function broadcastFormatted(source, data) {
   wss.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN && client.authenticated) { client.send(payload); count++; }
   });
-  console.log(`📤 [${label}] -> ${count} receiver(s) | ${formatted.bestName} $${formatted.bestValue?.toLocaleString('en-US')} duel=${formatted.duel}`);
+  console.log(`📤 [${label}] -> ${count} receiver(s) | ${formatted.bestName} ${fmtValue(formatted.bestValue, null)} duel=${formatted.duel}`);
 }
 
 setInterval(async () => {
@@ -325,10 +337,10 @@ function startHttpPoller(src) {
   const staggerMs   = Math.floor(src.intervalMs / concurrency);
 
   const shared = {
-    since:      Date.now() / 1000,
-    seenTimes:  new Set(),
-    maxSeenId:  0,
-    failCount:  0,
+    since:     Date.now() / 1000,
+    seenTimes: new Set(),
+    maxSeenId: 0,
+    failCount: 0,
   };
 
   async function poll() {
@@ -366,7 +378,7 @@ function startHttpPoller(src) {
         if (!data.findings || !Array.isArray(data.findings)) return;
         let newMax = shared.maxSeenId;
         if (shared.maxSeenId === 0 && data.findings.length > 0) {
-          console.log(`🔍 [vanishnotifier] finding keys: ${Object.keys(data.findings[0]).join(', ')}`);
+          console.log(`🔍 [vanishnotifier] keys: ${Object.keys(data.findings[0]).join(', ')}`);
         }
         const sorted = [...data.findings].sort((a, b) => a.id - b.id);
         for (const item of sorted) {
