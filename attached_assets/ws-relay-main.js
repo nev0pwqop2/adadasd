@@ -233,16 +233,24 @@ const httpServer = http.createServer(async (req, res) => {
     if (!key) { res.writeHead(400); res.end(JSON.stringify({ error: 'Missing key param' })); return; }
     if (u.pathname.endsWith('/pause')) {
       pausedKeys.add(key);
-      const client = activeSessions.get(key);
-      if (client?.readyState === WebSocket.OPEN) client.send(JSON.stringify({ error: 'Your key has been paused by admin' }));
+      let luarmorResult = null, luarmorError = null;
+      try { luarmorResult = await luarmorPauseKey(key); } catch (e) { luarmorError = e.message; }
+      wss.clients.forEach(client => {
+        if (client.luarmorKey === key && client.readyState === WebSocket.OPEN)
+          client.send(JSON.stringify({ error: 'Your key has been paused by admin' }));
+      });
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ action: 'paused', key }));
+      res.end(JSON.stringify({ action: 'paused', key, luarmor: luarmorError ? { error: luarmorError } : { ok: true } }));
     } else if (u.pathname.endsWith('/unpause')) {
       pausedKeys.delete(key);
-      const client = activeSessions.get(key);
-      if (client?.readyState === WebSocket.OPEN) client.send(JSON.stringify({ info: 'Your key has been unpaused' }));
+      let luarmorError = null;
+      try { await luarmorUnpauseKey(key); } catch (e) { luarmorError = e.message; }
+      wss.clients.forEach(client => {
+        if (client.luarmorKey === key && client.readyState === WebSocket.OPEN)
+          client.send(JSON.stringify({ info: 'Your key has been unpaused' }));
+      });
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ action: 'unpaused', key }));
+      res.end(JSON.stringify({ action: 'unpaused', key, luarmor: luarmorError ? { error: luarmorError } : { ok: true } }));
     } else if (u.pathname.endsWith('/kick')) {
       pausedKeys.add(key);
       let found = false;
@@ -285,8 +293,42 @@ httpServer.listen(PORT, () => console.log(`✅ WS relay running on port ${PORT}`
 
 const SESSION_LIMIT_MS = 30 * 60 * 1000;
 const activeSessions   = new Map();
-const pausedKeys       = new Set();
-let globalPaused       = false;
+const pausedKeys        = new Set();
+const luarmorOrigExpiry = new Map();
+let globalPaused        = false;
+
+async function luarmorPatchUser(userKey, body) {
+  const res = await fetch(`https://api.luarmor.net/v3/projects/${LUARMOR_PROJECT_ID}/users`, {
+    method: 'PATCH',
+    headers: { Authorization: LUARMOR_API_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_key: userKey, ...body }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(`Luarmor PATCH ${res.status}: ${JSON.stringify(json)}`);
+  return json;
+}
+
+async function luarmorGetUser(userKey) {
+  const res = await fetch(
+    `https://api.luarmor.net/v3/projects/${LUARMOR_PROJECT_ID}/users?user_key=${encodeURIComponent(userKey)}`,
+    { headers: { Authorization: LUARMOR_API_KEY } }
+  );
+  if (!res.ok) throw new Error(`Luarmor GET ${res.status}`);
+  return res.json();
+}
+
+async function luarmorPauseKey(userKey) {
+  const data = await luarmorGetUser(userKey);
+  const original = data.auth_expire ?? -1;
+  luarmorOrigExpiry.set(userKey, original);
+  await luarmorPatchUser(userKey, { auth_expire: Math.floor(Date.now() / 1000) - 1 });
+}
+
+async function luarmorUnpauseKey(userKey) {
+  const original = luarmorOrigExpiry.has(userKey) ? luarmorOrigExpiry.get(userKey) : -1;
+  await luarmorPatchUser(userKey, { auth_expire: original });
+  luarmorOrigExpiry.delete(userKey);
+}
 
 function kickExistingSession(key) {
   const old = activeSessions.get(key);
