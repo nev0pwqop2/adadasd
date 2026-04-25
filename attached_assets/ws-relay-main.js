@@ -1,4 +1,4 @@
-const WebSocket = require('ws');
+rconst WebSocket = require('ws');
 const crypto = require('crypto');
 const http = require('http');
 
@@ -394,8 +394,13 @@ function startHttpPoller(src) {
     }
   }
 
+  async function pollLoop() {
+    await poll();
+    setTimeout(pollLoop, src.intervalMs);
+  }
+
   for (let i = 0; i < concurrency; i++) {
-    setTimeout(() => setInterval(poll, src.intervalMs), i * staggerMs);
+    setTimeout(pollLoop, i * staggerMs);
   }
 
   const effectiveMs = Math.round(src.intervalMs / concurrency);
