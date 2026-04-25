@@ -172,6 +172,20 @@ const httpServer = http.createServer(async (req, res) => {
     } catch { res.writeHead(500); res.end(JSON.stringify({ error: 'Failed to fetch IP' })); }
     return;
   }
+  if (req.url === '/api/test') {
+    try {
+      const railway1Url = `${WORKER_URL}/railway1?_ts=${Date.now()}`;
+      const r = await fetch(railway1Url, {
+        headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' },
+      });
+      const body = await r.text();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ polling_url: railway1Url, status: r.status, body: body.slice(0, 200) }));
+    } catch (e) {
+      res.writeHead(500); res.end(JSON.stringify({ error: e.message }));
+    }
+    return;
+  }
   res.writeHead(200); res.end('relay running');
 });
 
