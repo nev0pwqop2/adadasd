@@ -69,10 +69,14 @@ function formatLog(source, data) {
       allBrainrots: `1x ${data.pet_name} ($${(Number(data.pet_value) || 0).toLocaleString('en-US')}/s)`,
       duel: data.duel_mode === true || data.duel_mode === 1 || false,
     };
-  } else if (source === 'vanishnotifier' && Array.isArray(data?.brainrots) && data.brainrots.length) {
-    brainrots = data.brainrots;
-    jobId = data.jobId || null;
-    duelMode = brainrots.some(b => b.duel > 0);
+  } else if (source === 'vanishnotifier' && data?.name && data?.value) {
+    return {
+      bestName: `1x ${data.name}`,
+      bestValue: Number(data.value) || 0,
+      serverID: null,
+      allBrainrots: `1x ${data.name} ($${(Number(data.value) || 0).toLocaleString('en-US')}/s)`,
+      duel: false,
+    };
   }
 
   if (!brainrots || !brainrots.length) return null;
@@ -347,17 +351,11 @@ function startHttpPoller(src) {
 
       if (src.name === 'vanishnotifier') {
         if (!data.findings || !Array.isArray(data.findings)) return;
-        const jobs = {};
         for (const item of data.findings) {
-          const jid = item.job_id;
-          if (!jid) continue;
-          if (!jobs[jid]) jobs[jid] = [];
-          jobs[jid].push({ name: item.name, value: Number(item.value) || 0, duel: item.duel || 0 });
-        }
-        for (const [jobId, brainrots] of Object.entries(jobs)) {
-          if (shared.seenJobs.has(jobId)) continue;
-          shared.seenJobs.add(jobId);
-          broadcastFormatted(src.name, { jobId, brainrots });
+          if (!item.id) continue;
+          if (shared.seenJobs.has(item.id)) continue;
+          shared.seenJobs.add(item.id);
+          broadcastFormatted(src.name, item);
         }
         return;
       }
