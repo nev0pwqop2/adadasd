@@ -23,13 +23,14 @@ if (WEBSHARE_PROXY) {
 
 
 const WS_SOURCES = [
-  {
-    name: "source1",
-    url: "ws://141.11.243.16:4141",
-    authMessage: JSON.stringify({ auth: "24I19JFSDIPOFJSOARJ324I4QPHI412J41JNFESPAFHJ32I48J23RMONKFDSF093U2JRIPO2;532N4234JI4OOJIFWFJOISJF" }),
-    autoAuth: true,
-    skipMessage: () => false,
-  },
+  // source1 temporarily disabled
+  // {
+  //   name: "source1",
+  //   url: "ws://141.11.243.16:4141",
+  //   authMessage: JSON.stringify({ auth: "24I19JFSDIPOFJSOARJ324I4QPHI412J41JNFESPAFHJ32I48J23RMONKFDSF093U2JRIPO2;532N4234JI4OOJIFWFJOISJF" }),
+  //   autoAuth: true,
+  //   skipMessage: () => false,
+  // },
   {
     name: "projectx",
     url: "wss://projectx.lasupremenotifier.com/ws/client",
