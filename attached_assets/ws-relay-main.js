@@ -82,10 +82,14 @@ function formatLog(source, data) {
     jobId = data.event.data.jobId;
     duelMode = brainrots.some(b => b.duel > 0);
   } else if (source === 'source1' && data?.bestName) {
+    let serverID = null;
+    if (data.serverID) {
+      try { serverID = decryptSource1(data.serverID); } catch { serverID = null; }
+    }
     return {
       bestName:    data.bestName,
       bestValue:   Number(data.bestValue) || 0,
-      serverID:    data.serverID || null,
+      serverID,
       allBrainrots:data.allBrainrots || data.bestName,
       duel:        data.duel === true || data.duel === 1 || false,
     };
