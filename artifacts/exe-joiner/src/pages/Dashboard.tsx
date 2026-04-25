@@ -478,7 +478,7 @@ export default function Dashboard() {
                       <p className="text-[10px] text-white/30 mt-0.5">Earned</p>
                     </div>
                     <div className="rounded-xl border border-white/8 bg-white/[0.02] px-3 py-3 text-center">
-                      <p className="text-lg font-bold text-white">{10 - (referralRes.totalInvites % 10 || 10)}</p>
+                      <p className="text-lg font-bold text-white">{(10 - (referralRes.totalInvites % 10)) || 10}</p>
                       <p className="text-[10px] text-white/30 mt-0.5">Until next $1</p>
                     </div>
                   </div>

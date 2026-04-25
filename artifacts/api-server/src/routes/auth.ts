@@ -224,8 +224,9 @@ router.get("/discord/callback", async (req, res) => {
               .from(referralsTable)
               .where(eq(referralsTable.referrerId, referrerId));
             const total = allReferrals.length;
-            const alreadyCredited = allReferrals.filter(r => r.rewardCredited).length;
-            const newMilestones = Math.floor(total / 10) - alreadyCredited;
+            const alreadyCreditedRecords = allReferrals.filter(r => r.rewardCredited).length;
+            const alreadyMilestones = Math.floor(alreadyCreditedRecords / 10);
+            const newMilestones = Math.floor(total / 10) - alreadyMilestones;
             if (newMilestones > 0) {
               // Credit balance
               await db.update(usersTable)
