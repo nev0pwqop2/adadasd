@@ -2,37 +2,65 @@ export default {
   async fetch(request) {
     const url = new URL(request.url);
 
-    const targets = {
-      '/railway1': 'https://087uy1728987anghuaga.up.railway.app/get_job',
-      '/railway2': 'https://worker-production-dc68.up.railway.app/get_job',
-      '/vanish':   'https://ws.vanishnotifier.org/recent',
-    };
+    if (url.pathname === '/railway1') {
+      const dest = new URL('https://087uy1728987anghuaga.up.railway.app/get_job');
+      dest.searchParams.set('client_id', '2519904148');
+      dest.searchParams.set('_t', 'TqH9XdfzYQ459v1tdfsFiCQKAY9C8PAm');
+      for (const [k, v] of url.searchParams) dest.searchParams.set(k, v);
 
-    const target = targets[url.pathname];
-    if (!target) {
-      return new Response('not found', { status: 404 });
+      const res = await fetch(dest.toString(), {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'Accept': 'application/json, text/plain, */*',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Origin': 'https://blox-fruits.fandom.com',
+          'Referer': 'https://blox-fruits.fandom.com/',
+        },
+      });
+      return new Response(await res.text(), {
+        status: res.status,
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+      });
     }
 
-    const dest = new URL(target);
-    dest.search = url.search;
+    if (url.pathname === '/railway2') {
+      const dest = new URL('https://worker-production-dc68.up.railway.app/get_job');
+      for (const [k, v] of url.searchParams) dest.searchParams.set(k, v);
 
-    const res = await fetch(dest.toString(), {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        'Accept': 'application/json, text/plain, */*',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Origin': 'https://blox-fruits.fandom.com',
-        'Referer': 'https://blox-fruits.fandom.com/',
-      },
-    });
+      const res = await fetch(dest.toString(), {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'Accept': 'application/json, text/plain, */*',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Origin': 'https://blox-fruits.fandom.com',
+          'Referer': 'https://blox-fruits.fandom.com/',
+        },
+      });
+      return new Response(await res.text(), {
+        status: res.status,
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+      });
+    }
 
-    const body = await res.text();
-    return new Response(body, {
-      status: res.status,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
-    });
+    if (url.pathname === '/vanish') {
+      const dest = new URL('https://ws.vanishnotifier.org/recent');
+      for (const [k, v] of url.searchParams) dest.searchParams.set(k, v);
+
+      const res = await fetch(dest.toString(), {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'Accept': 'application/json, text/plain, */*',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Origin': 'https://blox-fruits.fandom.com',
+          'Referer': 'https://blox-fruits.fandom.com/',
+        },
+      });
+      return new Response(await res.text(), {
+        status: res.status,
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+      });
+    }
+
+    return new Response('not found', { status: 404 });
   },
 };
