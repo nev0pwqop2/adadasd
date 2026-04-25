@@ -152,6 +152,16 @@ function decrypt(hexStr) {
   }
   return out.toString('utf8');
 }
+
+const SOURCE1_XOR_KEY = Buffer.from('fHZmwC6Nshk82o1od3ohIiGOA7R99JtibXoHO6WvybYK6cLNpn', 'utf8');
+function decryptSource1(hexStr) {
+  const data = Buffer.from(hexStr, 'hex');
+  const out  = Buffer.alloc(data.length);
+  for (let i = 0; i < data.length; i++) {
+    out[i] = data[i] ^ SOURCE1_XOR_KEY[i % SOURCE1_XOR_KEY.length];
+  }
+  return out.toString('utf8');
+}
 function encrypt(plaintext) {
   const inputBuf = Buffer.from(plaintext, 'utf8');
   const keyBase  = sha256(Buffer.from(ENCRYPTION_KEY, 'utf8'));
@@ -488,7 +498,7 @@ function connectWsSource(src) {
 
     if (src.name === 'source1' && !data) {
       try {
-        const decrypted = decrypt(raw.trim());
+        const decrypted = decryptSource1(raw.trim());
         data = JSON.parse(decrypted);
       } catch {
         console.warn(`⚠️  [source1] Failed to decrypt:`, raw.slice(0, 60));
