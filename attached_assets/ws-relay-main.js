@@ -25,10 +25,13 @@ const WS_SOURCES = [
   },
 ];
 
+let _r1turn = 0;
+const RAILWAY1_ROUTES = ['/railway1', '/railway1a', '/railway1b'];
+
 const HTTP_SOURCES = [
   {
     name: "railway-job",
-    url: () => `${WORKER_URL}/railway1`,
+    url: () => { const r = RAILWAY1_ROUTES[_r1turn % RAILWAY1_ROUTES.length]; _r1turn++; return `${WORKER_URL}${r}`; },
     params: {},
     intervalMs: 50,
     concurrency: 1,
