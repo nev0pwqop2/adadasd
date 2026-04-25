@@ -25,15 +25,12 @@ const WS_SOURCES = [
   },
 ];
 
-let _r1turn = 0;
-const RAILWAY1_ROUTES = ['/railway1', '/railway1a', '/railway1b'];
-
 const HTTP_SOURCES = [
   {
     name: "railway-job",
-    url: () => { const r = RAILWAY1_ROUTES[_r1turn % RAILWAY1_ROUTES.length]; _r1turn++; return `${WORKER_URL}${r}`; },
+    url: () => `${WORKER_URL}/railway1`,
     params: {},
-    intervalMs: 50,
+    intervalMs: 200,
     concurrency: 1,
   },
   {
@@ -383,7 +380,7 @@ function startHttpPoller(src) {
       if (!res.ok) {
         shared.failCount++;
         if (res.status === 429) {
-          const retryAfter = parseInt(res.headers.get('retry-after') || '1', 10);
+          const retryAfter = Math.max(parseInt(res.headers.get('retry-after') || '3', 10), 3);
           if (shared.failCount === 1 || shared.failCount % 20 === 0)
             console.warn(`⚠️  [${src.name}] 429 rate limit (hit #${shared.failCount}) — backing off ${retryAfter}s`);
           await new Promise(r => setTimeout(r, retryAfter * 1000));
