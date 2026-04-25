@@ -320,15 +320,17 @@ function startHttpPoller(src) {
   const staggerMs   = Math.floor(src.intervalMs / concurrency);
 
   const shared = {
-    since:     Date.now() / 1000,
-    seenTimes: new Set(),
-    seenJobs:  new Set(),
-    failCount: 0,
+    since:      Date.now() / 1000,
+    seenTimes:  new Set(),
+    maxSeenId:  0,
+    failCount:  0,
   };
 
   async function poll() {
     try {
-      const qs = new URLSearchParams({ ...src.params, since: shared.since.toString() });
+      const qs = src.name === 'vanishnotifier'
+        ? new URLSearchParams(src.params)
+        : new URLSearchParams({ ...src.params, since: shared.since.toString() });
       const res = await fetch(`${src.url}?${qs}`, {
         headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json', 'Referer': src.url },
       });
@@ -350,15 +352,15 @@ function startHttpPoller(src) {
 
       if (src.name === 'vanishnotifier') {
         if (!data.findings || !Array.isArray(data.findings)) return;
-        let latestTs = shared.since;
-        for (const item of data.findings) {
-          if (!item.id) continue;
-          if (shared.seenJobs.has(item.id)) continue;
-          shared.seenJobs.add(item.id);
-          if (item.timestamp && item.timestamp > latestTs) latestTs = item.timestamp;
+        let newMax = shared.maxSeenId;
+        // sort ascending so we broadcast in chronological order
+        const sorted = [...data.findings].sort((a, b) => a.id - b.id);
+        for (const item of sorted) {
+          if (!item.id || item.id <= shared.maxSeenId) continue;
+          if (item.id > newMax) newMax = item.id;
           broadcastFormatted(src.name, item);
         }
-        if (latestTs > shared.since) shared.since = latestTs;
+        shared.maxSeenId = newMax;
         return;
       }
 
