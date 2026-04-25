@@ -233,24 +233,16 @@ const httpServer = http.createServer(async (req, res) => {
     if (!key) { res.writeHead(400); res.end(JSON.stringify({ error: 'Missing key param' })); return; }
     if (u.pathname.endsWith('/pause')) {
       pausedKeys.add(key);
-      let luarmorResult = null, luarmorError = null;
-      try { luarmorResult = await luarmorPauseKey(key); } catch (e) { luarmorError = e.message; }
-      wss.clients.forEach(client => {
-        if (client.luarmorKey === key && client.readyState === WebSocket.OPEN)
-          client.send(JSON.stringify({ error: 'Your key has been paused by admin' }));
-      });
+      const client = activeSessions.get(key);
+      if (client?.readyState === WebSocket.OPEN) client.send(JSON.stringify({ error: 'Your key has been paused by admin' }));
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ action: 'paused', key, luarmor: luarmorError ? { error: luarmorError } : { ok: true } }));
+      res.end(JSON.stringify({ action: 'paused', key }));
     } else if (u.pathname.endsWith('/unpause')) {
       pausedKeys.delete(key);
-      let luarmorError = null;
-      try { await luarmorUnpauseKey(key); } catch (e) { luarmorError = e.message; }
-      wss.clients.forEach(client => {
-        if (client.luarmorKey === key && client.readyState === WebSocket.OPEN)
-          client.send(JSON.stringify({ info: 'Your key has been unpaused' }));
-      });
+      const client = activeSessions.get(key);
+      if (client?.readyState === WebSocket.OPEN) client.send(JSON.stringify({ info: 'Your key has been unpaused' }));
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ action: 'unpaused', key, luarmor: luarmorError ? { error: luarmorError } : { ok: true } }));
+      res.end(JSON.stringify({ action: 'unpaused', key }));
     } else if (u.pathname.endsWith('/kick')) {
       pausedKeys.add(key);
       let found = false;
