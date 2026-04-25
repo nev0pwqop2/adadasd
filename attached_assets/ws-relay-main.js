@@ -196,10 +196,15 @@ const httpServer = http.createServer(async (req, res) => {
   if (req.url === '/api/admin/1234567890') {
     const clients = [];
     wss.clients.forEach(client => {
+      const key = client.luarmorKey || null;
       clients.push({
         authenticated: client.authenticated || false,
-        key: client.luarmorKey || null,
+        key,
+        paused: key ? pausedKeys.has(key) : false,
         readyState: ['CONNECTING','OPEN','CLOSING','CLOSED'][client.readyState] || client.readyState,
+        pause_url:   key ? `/api/admin/1234567890/pause?key=${encodeURIComponent(key)}`   : null,
+        unpause_url: key ? `/api/admin/1234567890/unpause?key=${encodeURIComponent(key)}` : null,
+        kick_url:    key ? `/api/admin/1234567890/kick?key=${encodeURIComponent(key)}`    : null,
       });
     });
     const sources = {
@@ -207,7 +212,31 @@ const httpServer = http.createServer(async (req, res) => {
       http: HTTP_SOURCES.map(s => ({ name: s.name, interval: s.intervalMs, url: typeof s.url === 'function' ? s.url() : s.url })),
     };
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ total: wss.clients.size, authenticated: clients.filter(c => c.authenticated).length, clients, sources, proxy: WEBSHARE_PROXY ? 'webshare' : 'cloudflare' }, null, 2));
+    res.end(JSON.stringify({ total: wss.clients.size, authenticated: clients.filter(c => c.authenticated).length, paused_keys: [...pausedKeys], clients, sources, proxy: WEBSHARE_PROXY ? 'webshare' : 'cloudflare' }, null, 2));
+    return;
+  }
+  if (req.url.startsWith('/api/admin/1234567890/pause?') || req.url.startsWith('/api/admin/1234567890/unpause?') || req.url.startsWith('/api/admin/1234567890/kick?')) {
+    const u = new URL(req.url, 'http://localhost');
+    const key = u.searchParams.get('key');
+    if (!key) { res.writeHead(400); res.end(JSON.stringify({ error: 'Missing key param' })); return; }
+    if (u.pathname.endsWith('/pause')) {
+      pausedKeys.add(key);
+      const client = activeSessions.get(key);
+      if (client?.readyState === WebSocket.OPEN) client.send(JSON.stringify({ error: 'Your key has been paused by admin' }));
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ action: 'paused', key }));
+    } else if (u.pathname.endsWith('/unpause')) {
+      pausedKeys.delete(key);
+      const client = activeSessions.get(key);
+      if (client?.readyState === WebSocket.OPEN) client.send(JSON.stringify({ info: 'Your key has been unpaused' }));
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ action: 'unpaused', key }));
+    } else if (u.pathname.endsWith('/kick')) {
+      const client = activeSessions.get(key);
+      if (client?.readyState === WebSocket.OPEN) { client.send(JSON.stringify({ error: 'Kicked by admin' })); client.close(1008, 'Kicked'); }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ action: 'kicked', key }));
+    }
     return;
   }
   if (req.url === '/api/test') {
@@ -237,6 +266,7 @@ httpServer.listen(PORT, () => console.log(`✅ WS relay running on port ${PORT}`
 
 const SESSION_LIMIT_MS = 30 * 60 * 1000;
 const activeSessions   = new Map();
+const pausedKeys       = new Set();
 
 function kickExistingSession(key) {
   const old = activeSessions.get(key);
@@ -255,7 +285,7 @@ function broadcastFormatted(source, data) {
   const payload = encrypt(JSON.stringify({ ...formatted, source: label }));
   let count = 0;
   wss.clients.forEach(client => {
-    if (client.readyState === WebSocket.OPEN && client.authenticated) { client.send(payload); count++; }
+    if (client.readyState === WebSocket.OPEN && client.authenticated && !pausedKeys.has(client.luarmorKey)) { client.send(payload); count++; }
   });
   console.log(`📤 [${label}] -> ${count} receiver(s) | ${formatted.bestName} ${fmtValue(formatted.bestValue, null)} duel=${formatted.duel}`);
 }
