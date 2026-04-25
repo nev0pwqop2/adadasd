@@ -1,0 +1,42 @@
+
+📤 [projectx] -> 1 receiver(s) | 1x Easter Easter Easter Sahur $10,000,000 duel=false
+✅ [projectx] Connected
+📤 [projectx] -> 1 receiver(s) | 1x Arcadopus $5,000,000 duel=false
+📤 [projectx] -> 0 receiver(s) | 1x Arcadopus $5,000,000 duel=false
+📤 [projectx] -> 0 receiver(s) | 1x Bunny Bunny Bunny Sahur $13,500,000 duel=false
+📤 [projectx] -> 1 receiver(s) | 1x Bunny Bunny Bunny Sahur $13,500,000 duel=false
+🔑 Client authenticated
+📤 [projectx] -> 0 receiver(s) | 1x Los Nooo My Hotspotsitos $49,500,000 duel=false
+📤 [projectx] -> 1 receiver(s) | 1x Los Nooo My Hotspotsitos $49,500,000 duel=false
+📤 [projectx] -> 0 receiver(s) | 1x Blackhole Goat $5,200,000 duel=false
+📤 [projectx] -> 1 receiver(s) | 1x Blackhole Goat $5,200,000 duel=false
+📤 [projectx] -> 0 receiver(s) | 1x Chicleteirina Bicicleteirina $16,000,000 duel=false
+📤 [projectx] -> 1 receiver(s) | 1x Chicleteirina Bicicleteirina $16,000,000 duel=false
+📤 [projectx] -> 0 receiver(s) | 1x Easter Easter Easter Sahur $5,000,000 duel=false
+📤 [projectx] -> 1 receiver(s) | 1x Easter Easter Easter Sahur $5,000,000 duel=false
+🔑 Client authenticated
+📤 [projectx] -> 0 receiver(s) | 1x Easter Easter Easter Sahur $7,500,000 duel=false
+📤 [projectx] -> 2 receiver(s) | 1x Easter Easter Easter Sahur $7,500,000 duel=false
+🔑 Client authenticated
+📤 [projectx] -> 0 receiver(s) | 1x Los Jobcitos $5,200,000 duel=false
+📤 [projectx] -> 2 receiver(s) | 1x Los Jobcitos $5,200,000 duel=false
+🔑 Client authenticated
+📤 [projectx] -> 0 receiver(s) | 1x Guerriro Digitale $6,000,000 duel=false
+📤 [projectx] -> 2 receiver(s) | 1x Guerriro Digitale $6,000,000 duel=false
+📤 [projectx] -> 2 receiver(s) | 1x Bunny Bunny Bunny Sahur $13,500,000 duel=false
+📤 [projectx] -> 0 receiver(s) | 1x Bunny Bunny Bunny Sahur $13,500,000 duel=false
+📤 [projectx] -> 0 receiver(s) | 1x Tacorillo Crocodillo $12,500,000 duel=false
+📤 [projectx] -> 2 receiver(s) | 1x Tacorillo Crocodillo $12,500,000 duel=false
+📤 [projectx] -> 0 receiver(s) | 1x Guerriro Digitale $6,000,000 duel=false
+📤 [projectx] -> 2 receiver(s) | 1x Guerriro Digitale $6,000,000 duel=false
+📤 [projectx] -> 2 receiver(s) | 1x Chicleteira Bicicleteira $5,200,000 duel=false
+📤 [projectx] -> 0 receiver(s) | 1x Chicleteira Bicicleteira $5,200,000 duel=false
+📤 [projectx] -> 0 receiver(s) | 1x Los Cucarachas $13,700,000 duel=false
+📤 [projectx] -> 2 receiver(s) | 1x Los Cucarachas $13,700,000 duel=false
+📤 [projectx] -> 2 receiver(s) | 1x Las Sis $175,000,000 duel=false
+📤 [projectx] -> 0 receiver(s) | 1x Las Sis $175,000,000 duel=false
+🔑 Client authenticated
+📤 [projectx] -> 0 receiver(s) | 1x Paradiso Axolottino $9,000,000 duel=false
+📤 [projectx] -> 2 receiver(s) | 1x Paradiso Axolottino $9,000,000 duel=false
+❌ [railway-job] HTTP 429 (fail #1)
+❌ [railway-job] HTTP 429 (fail #1)

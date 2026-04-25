@@ -29,15 +29,15 @@ const HTTP_SOURCES = [
     name: "railway-job",
     url: "https://087uy1728987anghuaga.up.railway.app/get_job",
     params: { client_id: "2519904148", _t: "TqH9XdfzYQ459v1tdfsFiCQKAY9C8PAm" },
-    intervalMs: 500,
-    concurrency: 5,
+    intervalMs: 2000,
+    concurrency: 1,
   },
   {
     name: "railway-job-2",
     url: "https://worker-production-dc68.up.railway.app/get_job",
     params: {},
-    intervalMs: 500,
-    concurrency: 5,
+    intervalMs: 2000,
+    concurrency: 1,
   },
   {
     name: "vanishnotifier",
@@ -331,7 +331,13 @@ function startHttpPoller(src) {
       });
       if (!res.ok) {
         shared.failCount++;
-        if (shared.failCount <= 3) console.error(`❌ [${src.name}] HTTP ${res.status} (fail #${shared.failCount})`);
+        if (res.status === 429) {
+          const retryAfter = parseInt(res.headers.get('retry-after') || '5', 10);
+          if (shared.failCount <= 2) console.warn(`⚠️  [${src.name}] Rate limited (429) — backing off ${retryAfter}s`);
+          await new Promise(r => setTimeout(r, retryAfter * 1000));
+        } else {
+          if (shared.failCount <= 3) console.error(`❌ [${src.name}] HTTP ${res.status} (fail #${shared.failCount})`);
+        }
         return;
       }
       shared.failCount = 0;
