@@ -22,6 +22,23 @@ if (WEBSHARE_PROXY) {
 }
 
 
+const WS_SOURCES = [
+  {
+    name: "source1",
+    url: "ws://141.11.243.16:4141",
+    authMessage: JSON.stringify({ auth: "24I19JFSDIPOFJSOARJ324I4QPHI412J41JNFESPAFHJ32I48J23RMONKFDSF093U2JRIPO2;532N4234JI4OOJIFWFJOISJF" }),
+    autoAuth: true,
+    skipMessage: () => false,
+  },
+  {
+    name: "projectx",
+    url: "wss://projectx.lasupremenotifier.com/ws/client",
+    authMessage: null,
+    isAuthed: () => true,
+    skipMessage: (data) => data && (data.type === 'ping' || data.type === 'init'),
+  },
+];
+
 const HTTP_SOURCES = [
   {
     name: "railway-job",
@@ -60,7 +77,15 @@ function formatLog(source, data) {
   let jobId = null;
   let duelMode = false;
 
-  if ((source === 'railway-job' || source === 'railway-job-2') && data?.pet_name) {
+  if (source === 'projectx' && data?.event?.data?.brainrots) {
+    brainrots = data.event.data.brainrots;
+    jobId = data.event.data.jobId;
+    duelMode = brainrots.some(b => b.duel > 0);
+  } else if (source === 'source1' && data?.brainrots) {
+    brainrots = data.brainrots;
+    jobId = data.jobId || data.server_id || null;
+    duelMode = brainrots.some(b => b.duel > 0);
+  } else if ((source === 'railway-job' || source === 'railway-job-2') && data?.pet_name) {
     const val = Number(data.pet_value) || 0;
     const fmt = fmtValue(val, data.pet_value_formatted);
     return {
@@ -114,6 +139,19 @@ async function validateLuarmorKey(userKey) {
 
 function sha256(buf) { return crypto.createHash('sha256').update(buf).digest(); }
 function uint32BE(n) { const b = Buffer.alloc(4); b.writeUInt32BE(n, 0); return b; }
+function decrypt(hexStr) {
+  const cipher  = Buffer.from(hexStr, 'hex');
+  const keyBase = sha256(Buffer.from(ENCRYPTION_KEY, 'utf8'));
+  const out     = Buffer.alloc(cipher.length);
+  let blockIndex = 0;
+  let block = sha256(Buffer.concat([keyBase, uint32BE(0)]));
+  for (let i = 0; i < cipher.length; i++) {
+    const pos = i % 32;
+    if (i > 0 && pos === 0) { blockIndex++; block = sha256(Buffer.concat([keyBase, uint32BE(blockIndex)])); }
+    out[i] = cipher[i] ^ block[pos];
+  }
+  return out.toString('utf8');
+}
 function encrypt(plaintext) {
   const inputBuf = Buffer.from(plaintext, 'utf8');
   const keyBase  = sha256(Buffer.from(ENCRYPTION_KEY, 'utf8'));
@@ -153,6 +191,7 @@ const httpServer = http.createServer(async (req, res) => {
       });
     });
     const sources = {
+      ws: WS_SOURCES.map(s => s.name),
       http: HTTP_SOURCES.map(s => ({ name: s.name, interval: s.intervalMs, url: typeof s.url === 'function' ? s.url() : s.url })),
     };
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -421,4 +460,67 @@ function startHttpPoller(src) {
   console.log(`✅ HTTP poller started: ${src.name} → ${typeof src.url === 'function' ? src.url() : src.url} (${concurrency}x workers, ~${effectiveMs}ms effective interval)`);
 }
 
+function connectWsSource(src) {
+  let authed = false;
+  let retryCount = 0;
+  const ws = new WebSocket(src.url);
+
+  ws.on('open', () => {
+    retryCount = 0;
+    console.log(`✅ [${src.name}] Connected`);
+    if (src.authMessage) {
+      ws.send(src.authMessage);
+      if (src.autoAuth) { authed = true; console.log(`🔑 [${src.name}] Auth sent — auto-authenticated`); }
+    } else {
+      authed = true;
+    }
+  });
+
+  ws.on('message', (msg) => {
+    const raw = msg.toString();
+    let data; try { data = JSON.parse(raw); } catch {}
+    if (!authed) {
+      if (src.isAuthed && src.isAuthed(data)) { authed = true; console.log(`🔑 [${src.name}] Authenticated`); }
+      else console.warn(`⚠️  [${src.name}] Unexpected auth response:`, raw.slice(0, 100));
+      return;
+    }
+    if (src.skipMessage && src.skipMessage(data)) return;
+
+    if (src.name === 'source1' && !data) {
+      try {
+        const decrypted = decrypt(raw.trim());
+        data = JSON.parse(decrypted);
+      } catch {
+        console.warn(`⚠️  [source1] Failed to decrypt:`, raw.slice(0, 60));
+        return;
+      }
+    }
+
+    broadcastFormatted(src.name, data);
+  });
+
+  ws.on('close', (code, reason) => {
+    authed = false;
+    retryCount++;
+    const r = reason?.toString() || 'unknown';
+    console.error(`❌ [${src.name}] Disconnected code=${code} reason=${r} (attempt #${retryCount})`);
+    if (code === 1008) console.error(`   ↳ Policy violation — bad auth key`);
+    if (code === 1006) console.error(`   ↳ Abnormal closure — server may be down`);
+    const delay = Math.min(5000 * retryCount, 30000);
+    console.log(`⏳ [${src.name}] Reconnecting in ${delay / 1000}s...`);
+    setTimeout(() => connectWsSource(src), delay);
+  });
+
+  ws.on('error', (err) => {
+    authed = false;
+    const msg = err.message || String(err);
+    console.error(`❌ [${src.name}] Error: ${msg}`);
+    if (msg.includes('ECONNREFUSED'))   console.error(`   ↳ Connection refused — is the server running at ${src.url}?`);
+    else if (msg.includes('ENOTFOUND')) console.error(`   ↳ Hostname not found — check the URL: ${src.url}`);
+    else if (msg.includes('ETIMEDOUT')) console.error(`   ↳ Connection timed out — server unreachable`);
+    else if (msg.includes('SSL'))       console.error(`   ↳ SSL/TLS error — check wss:// vs ws://`);
+  });
+}
+
+for (const src of WS_SOURCES) connectWsSource(src);
 for (const src of HTTP_SOURCES) startHttpPoller(src);
