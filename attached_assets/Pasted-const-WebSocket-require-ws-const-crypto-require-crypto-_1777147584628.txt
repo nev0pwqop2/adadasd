@@ -224,25 +224,26 @@ const httpServer = http.createServer(async (req, res) => {
     if (!key) { res.writeHead(400); res.end(JSON.stringify({ error: 'Missing key param' })); return; }
     if (u.pathname.endsWith('/pause')) {
       pausedKeys.add(key);
-      wss.clients.forEach(c => { if (c._id === key && c.readyState === WebSocket.OPEN) c.send(JSON.stringify({ info: 'You have been paused by admin' })); });
+      wss.clients.forEach(c => { if (c.luarmorKey === key && c.readyState === WebSocket.OPEN) c.send(JSON.stringify({ error: 'Your key has been paused by admin' })); });
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ action: 'paused', id: key }));
+      res.end(JSON.stringify({ action: 'paused', key }));
     } else if (u.pathname.endsWith('/unpause')) {
       pausedKeys.delete(key);
-      wss.clients.forEach(c => { if (c._id === key && c.readyState === WebSocket.OPEN) c.send(JSON.stringify({ info: 'You have been unpaused' })); });
+      wss.clients.forEach(c => { if (c.luarmorKey === key && c.readyState === WebSocket.OPEN) c.send(JSON.stringify({ info: 'Your key has been unpaused' })); });
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ action: 'unpaused', id: key }));
+      res.end(JSON.stringify({ action: 'unpaused', key }));
     } else if (u.pathname.endsWith('/kick')) {
+      pausedKeys.add(key);
       let found = false;
       wss.clients.forEach(client => {
-        if (client._id === key && client.readyState === WebSocket.OPEN) {
+        if (client.luarmorKey === key && client.readyState === WebSocket.OPEN) {
           client.send(JSON.stringify({ error: 'Kicked by admin' }));
           client.close(1008, 'Kicked');
           found = true;
         }
       });
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ action: 'kicked', id: key, was_connected: found }));
+      res.end(JSON.stringify({ action: 'kicked', key, was_connected: found, note: 'key also paused — use /unpause to restore' }));
     }
     return;
   }
