@@ -332,11 +332,21 @@ function startHttpPoller(src) {
 
   async function poll() {
     try {
-      const qs = src.name === 'vanishnotifier'
-        ? new URLSearchParams(src.params)
-        : new URLSearchParams({ ...src.params, since: shared.since.toString() });
+      const qs = new URLSearchParams(src.params);
+      if (src.name !== 'vanishnotifier' && src.name !== 'railway-job' && src.name !== 'railway-job-2') {
+        qs.set('since', shared.since.toString());
+      }
       const res = await fetch(`${src.url}?${qs}`, {
-        headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json', 'Referer': src.url },
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'Accept': 'application/json, text/plain, */*',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Origin': 'https://blox-fruits.fandom.com',
+          'Referer': 'https://blox-fruits.fandom.com/',
+          'sec-fetch-dest': 'empty',
+          'sec-fetch-mode': 'cors',
+          'sec-fetch-site': 'cross-site',
+        },
       });
       if (!res.ok) {
         shared.failCount++;
