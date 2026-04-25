@@ -323,16 +323,20 @@ function kickExistingSession(key) {
   }
 }
 
-function broadcastFormatted(source, data) {
-  const formatted = formatLog(source, data);
-  if (!formatted) return;
+function broadcastPayload(source, formatted) {
+  if (globalPaused) return;
   const payload = encrypt(JSON.stringify(formatted));
   let count = 0;
-  if (globalPaused) return;
   wss.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN && client.authenticated && !pausedKeys.has(client.luarmorKey)) { client.send(payload); count++; }
   });
   console.log(`📤 [${source}] -> ${count} receiver(s) | ${formatted.bestName} ${fmtValue(formatted.bestValue, null)} duel=${formatted.duel}`);
+}
+
+function broadcastFormatted(source, data) {
+  const formatted = formatLog(source, data);
+  if (!formatted) return;
+  broadcastPayload(source, formatted);
 }
 
 setInterval(async () => {
@@ -488,25 +492,36 @@ function connectWsSource(src) {
 
   ws.on('message', (msg) => {
     const raw = msg.toString();
+    console.log(`📨 [${src.name}] RAW (${raw.length} chars): ${raw.slice(0, 120)}`);
     let data; try { data = JSON.parse(raw); } catch {}
     if (!authed) {
       if (src.isAuthed && src.isAuthed(data)) { authed = true; console.log(`🔑 [${src.name}] Authenticated`); }
       else console.warn(`⚠️  [${src.name}] Unexpected auth response:`, raw.slice(0, 100));
       return;
     }
-    if (src.skipMessage && src.skipMessage(data)) return;
+    if (src.skipMessage && src.skipMessage(data)) { console.log(`⏭️  [${src.name}] Skipped message type=${data?.type}`); return; }
 
     if (src.name === 'source1' && !data) {
       try {
         const decrypted = decryptSource1(raw.trim());
+        console.log(`🔓 [source1] Decrypted: ${decrypted.slice(0, 120)}`);
         data = JSON.parse(decrypted);
-      } catch {
-        console.warn(`⚠️  [source1] Failed to decrypt:`, raw.slice(0, 60));
+      } catch (e) {
+        console.warn(`⚠️  [source1] Failed to decrypt/parse: ${e.message} | raw: ${raw.slice(0, 80)}`);
         return;
       }
     }
 
-    broadcastFormatted(src.name, data);
+    if (src.name === 'source1') {
+      console.log(`📦 [source1] Parsed keys: ${Object.keys(data || {}).join(', ')} | has brainrots: ${!!data?.brainrots}`);
+    }
+
+    const formatted = formatLog(src.name, data);
+    if (!formatted) {
+      console.warn(`⚠️  [${src.name}] formatLog returned null — data: ${JSON.stringify(data).slice(0, 120)}`);
+      return;
+    }
+    broadcastPayload(src.name, formatted);
   });
 
   ws.on('close', (code, reason) => {
