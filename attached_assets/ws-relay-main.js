@@ -1,4 +1,4 @@
-const WebSocket = require('ws');
+canconst WebSocket = require('ws');
 const crypto = require('crypto');
 const http = require('http');
 
@@ -43,8 +43,8 @@ const HTTP_SOURCES = [
     name: "vanishnotifier",
     url: "https://ws.vanishnotifier.org/recent",
     params: {},
-    intervalMs: 1000,
-    concurrency: 1,
+    intervalMs: 500,
+    concurrency: 2,
   },
 ];
 
@@ -351,12 +351,15 @@ function startHttpPoller(src) {
 
       if (src.name === 'vanishnotifier') {
         if (!data.findings || !Array.isArray(data.findings)) return;
+        let latestTs = shared.since;
         for (const item of data.findings) {
           if (!item.id) continue;
           if (shared.seenJobs.has(item.id)) continue;
           shared.seenJobs.add(item.id);
+          if (item.timestamp && item.timestamp > latestTs) latestTs = item.timestamp;
           broadcastFormatted(src.name, item);
         }
+        if (latestTs > shared.since) shared.since = latestTs;
         return;
       }
 
