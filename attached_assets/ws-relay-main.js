@@ -135,20 +135,6 @@ function formatLog(source, data) {
   };
 }
 
-async function validateLuarmorKey(userKey) {
-  const res = await fetch(
-    `https://api.luarmor.net/v3/projects/${LUARMOR_PROJECT_ID}/users?user_key=${encodeURIComponent(userKey)}`,
-    { headers: { Authorization: LUARMOR_API_KEY } }
-  );
-  if (!res.ok) return { valid: false, reason: `Luarmor API error: ${res.status}` };
-  const data = await res.json();
-  const user = data.users?.[0];
-  if (!user) return { valid: false, reason: "Key not found" };
-  if (user.banned) return { valid: false, reason: "Key is banned" };
-  if (user.auth_expire !== -1 && user.auth_expire < Math.floor(Date.now() / 1000))
-    return { valid: false, reason: "Key has expired" };
-  return { valid: true, auth_expire: user.auth_expire };
-}
 
 function sha256(buf) { return crypto.createHash('sha256').update(buf).digest(); }
 function uint32BE(n) { const b = Buffer.alloc(4); b.writeUInt32BE(n, 0); return b; }
@@ -202,15 +188,14 @@ const httpServer = http.createServer(async (req, res) => {
   if (req.url === '/api/admin/1234567890') {
     const clients = [];
     wss.clients.forEach(client => {
-      const key = client.luarmorKey || null;
+      const id = client._id || null;
       clients.push({
-        authenticated: client.authenticated || false,
-        key,
-        paused: key ? pausedKeys.has(key) : false,
+        id,
+        paused: id ? pausedKeys.has(id) : false,
         readyState: ['CONNECTING','OPEN','CLOSING','CLOSED'][client.readyState] || client.readyState,
-        pause_url:   key ? `/api/admin/1234567890/pause?key=${encodeURIComponent(key)}`   : null,
-        unpause_url: key ? `/api/admin/1234567890/unpause?key=${encodeURIComponent(key)}` : null,
-        kick_url:    key ? `/api/admin/1234567890/kick?key=${encodeURIComponent(key)}`    : null,
+        pause_url:   id ? `/api/admin/1234567890/pause?key=${encodeURIComponent(id)}`   : null,
+        unpause_url: id ? `/api/admin/1234567890/unpause?key=${encodeURIComponent(id)}` : null,
+        kick_url:    id ? `/api/admin/1234567890/kick?key=${encodeURIComponent(id)}`    : null,
       });
     });
     const sources = {
@@ -218,7 +203,7 @@ const httpServer = http.createServer(async (req, res) => {
       http: HTTP_SOURCES.map(s => ({ name: s.name, interval: s.intervalMs, url: typeof s.url === 'function' ? s.url() : s.url })),
     };
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ total: wss.clients.size, authenticated: clients.filter(c => c.authenticated).length, paused_keys: [...pausedKeys], clients, sources, proxy: WEBSHARE_PROXY ? 'webshare' : 'cloudflare' }, null, 2));
+    res.end(JSON.stringify({ total: wss.clients.size, paused_ids: [...pausedKeys], clients, sources, proxy: WEBSHARE_PROXY ? 'webshare' : 'cloudflare' }, null, 2));
     return;
   }
   if (req.url === '/api/admin/1234567890/pauseall') {
@@ -287,43 +272,8 @@ const httpServer = http.createServer(async (req, res) => {
 const wss = new WebSocket.Server({ server: httpServer });
 httpServer.listen(PORT, () => console.log(`✅ WS relay running on port ${PORT}`));
 
-const SESSION_LIMIT_MS = 30 * 60 * 1000;
-const pausedKeys        = new Set();
-const luarmorOrigExpiry = new Map();
-let globalPaused        = false;
-
-async function luarmorPatchUser(userKey, body) {
-  const res = await fetch(`https://api.luarmor.net/v3/projects/${LUARMOR_PROJECT_ID}/users`, {
-    method: 'PATCH',
-    headers: { Authorization: LUARMOR_API_KEY, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ user_key: userKey, ...body }),
-  });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(`Luarmor PATCH ${res.status}: ${JSON.stringify(json)}`);
-  return json;
-}
-
-async function luarmorGetUser(userKey) {
-  const res = await fetch(
-    `https://api.luarmor.net/v3/projects/${LUARMOR_PROJECT_ID}/users?user_key=${encodeURIComponent(userKey)}`,
-    { headers: { Authorization: LUARMOR_API_KEY } }
-  );
-  if (!res.ok) throw new Error(`Luarmor GET ${res.status}`);
-  return res.json();
-}
-
-async function luarmorPauseKey(userKey) {
-  const data = await luarmorGetUser(userKey);
-  const original = data.auth_expire ?? -1;
-  luarmorOrigExpiry.set(userKey, original);
-  await luarmorPatchUser(userKey, { auth_expire: Math.floor(Date.now() / 1000) - 1 });
-}
-
-async function luarmorUnpauseKey(userKey) {
-  const original = luarmorOrigExpiry.has(userKey) ? luarmorOrigExpiry.get(userKey) : -1;
-  await luarmorPatchUser(userKey, { auth_expire: original });
-  luarmorOrigExpiry.delete(userKey);
-}
+const pausedKeys = new Set();
+let globalPaused = false;
 
 
 function broadcastPayload(source, formatted) {
@@ -333,7 +283,7 @@ function broadcastPayload(source, formatted) {
   const payload = JSON.stringify(out);
   let count = 0;
   wss.clients.forEach(client => {
-    if (client.readyState === WebSocket.OPEN && client.authenticated && !pausedKeys.has(client.luarmorKey)) { client.send(payload); count++; }
+    if (client.readyState === WebSocket.OPEN && !pausedKeys.has(client._id)) { client.send(payload); count++; }
   });
   console.log(`📤 [${source}] -> ${count} receiver(s) | ${formatted.bestName} ${fmtValue(formatted.bestValue, null)} duel=${formatted.duel}`);
 }
@@ -344,66 +294,15 @@ function broadcastFormatted(source, data) {
   broadcastPayload(source, formatted);
 }
 
-setInterval(async () => {
-  for (const client of wss.clients) {
-    if (!client.authenticated || !client.luarmorKey) continue;
-    try {
-      const result = await validateLuarmorKey(client.luarmorKey);
-      if (!result.valid) {
-        console.log(`⏰ Kicking client — ${result.reason}`);
-        client.send(JSON.stringify({ error: result.reason }));
-        client.close(1008, result.reason);
-      }
-    } catch { }
-  }
-}, 5000);
+let _clientCounter = 0;
 
 wss.on('connection', (ws) => {
-  ws.authenticated = false;
-  ws.luarmorKey = null;
-  ws.expireTimer = null;
-  ws.sessionTimer = null;
-  ws.send(JSON.stringify({ info: 'Send {"key":"YOUR_LUARMOR_KEY"} to authenticate' }));
-
-  ws.on('message', async (msg) => {
-    if (ws.authenticated) return;
-    let data;
-    try { data = JSON.parse(msg.toString()); } catch {
-      ws.send(JSON.stringify({ error: "Invalid JSON" })); ws.close(1008); return;
-    }
-    if (!data.key) { ws.send(JSON.stringify({ error: "No key provided" })); ws.close(1008); return; }
-
-    try {
-      const result = await validateLuarmorKey(data.key);
-      if (!result.valid) { ws.send(JSON.stringify({ error: result.reason })); ws.close(1008, result.reason); return; }
-
-      ws.authenticated = true;
-      ws.luarmorKey = data.key;
-      ws.send(JSON.stringify({ success: "Authenticated — receiving logs" }));
-      console.log(`🔑 Client authenticated`);
-
-      ws.sessionTimer = setTimeout(() => {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ error: "30-minute session limit reached — reconnect to continue" }));
-          ws.close(1008, "Session limit");
-          console.log(`⏰ Session limit — disconnected client`);
-        }
-      }, SESSION_LIMIT_MS);
-
-      if (result.auth_expire !== -1) {
-        const ms = (result.auth_expire * 1000) - Date.now();
-        if (ms > 0) {
-          ws.expireTimer = setTimeout(() => {
-            if (ws.readyState === WebSocket.OPEN) { ws.send(JSON.stringify({ error: "Key expired" })); ws.close(1008); }
-          }, ms);
-        } else { ws.send(JSON.stringify({ error: "Key has expired" })); ws.close(1008); }
-      }
-    } catch { ws.send(JSON.stringify({ error: "Validation failed" })); ws.close(1011); }
-  });
+  ws._id = String(++_clientCounter);
+  console.log(`🔗 Client connected (id=${ws._id}, total=${wss.clients.size})`);
+  ws.send(JSON.stringify({ success: "Connected — receiving logs" }));
 
   ws.on('close', () => {
-    if (ws.expireTimer) clearTimeout(ws.expireTimer);
-    if (ws.sessionTimer) clearTimeout(ws.sessionTimer);
+    console.log(`🔌 Client disconnected (id=${ws._id}, total=${wss.clients.size})`);
   });
 });
 
