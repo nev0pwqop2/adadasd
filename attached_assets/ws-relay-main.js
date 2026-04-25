@@ -18,7 +18,7 @@ if (WEBSHARE_PROXY) {
     console.log(`🌐 Rotating proxy enabled → ${WEBSHARE_PROXY.replace(/:([^@]+)@/, ':***@')}`);
   } catch (e) {
     console.warn('⚠️  undici not available, falling back to Cloudflare proxy');
-  }
+  }ac
 }
 
 
@@ -239,14 +239,12 @@ const httpServer = http.createServer(async (req, res) => {
     if (!key) { res.writeHead(400); res.end(JSON.stringify({ error: 'Missing key param' })); return; }
     if (u.pathname.endsWith('/pause')) {
       pausedKeys.add(key);
-      const client = activeSessions.get(key);
-      if (client?.readyState === WebSocket.OPEN) client.send(JSON.stringify({ error: 'Your key has been paused by admin' }));
+      wss.clients.forEach(c => { if (c.luarmorKey === key && c.readyState === WebSocket.OPEN) c.send(JSON.stringify({ error: 'Your key has been paused by admin' })); });
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ action: 'paused', key }));
     } else if (u.pathname.endsWith('/unpause')) {
       pausedKeys.delete(key);
-      const client = activeSessions.get(key);
-      if (client?.readyState === WebSocket.OPEN) client.send(JSON.stringify({ info: 'Your key has been unpaused' }));
+      wss.clients.forEach(c => { if (c.luarmorKey === key && c.readyState === WebSocket.OPEN) c.send(JSON.stringify({ info: 'Your key has been unpaused' })); });
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ action: 'unpaused', key }));
     } else if (u.pathname.endsWith('/kick')) {
@@ -290,7 +288,6 @@ const wss = new WebSocket.Server({ server: httpServer });
 httpServer.listen(PORT, () => console.log(`✅ WS relay running on port ${PORT}`));
 
 const SESSION_LIMIT_MS = 30 * 60 * 1000;
-const activeSessions   = new Map();
 const pausedKeys        = new Set();
 const luarmorOrigExpiry = new Map();
 let globalPaused        = false;
@@ -328,13 +325,6 @@ async function luarmorUnpauseKey(userKey) {
   luarmorOrigExpiry.delete(userKey);
 }
 
-function kickExistingSession(key) {
-  const old = activeSessions.get(key);
-  if (old && old.readyState === WebSocket.OPEN) {
-    old.send(JSON.stringify({ error: "Your key connected from another location — disconnecting this session" }));
-    old.close(1008, "Replaced by new session");
-  }
-}
 
 function broadcastPayload(source, formatted) {
   if (globalPaused) return;
@@ -387,9 +377,6 @@ wss.on('connection', (ws) => {
       const result = await validateLuarmorKey(data.key);
       if (!result.valid) { ws.send(JSON.stringify({ error: result.reason })); ws.close(1008, result.reason); return; }
 
-      kickExistingSession(data.key);
-      activeSessions.set(data.key, ws);
-
       ws.authenticated = true;
       ws.luarmorKey = data.key;
       ws.send(JSON.stringify({ success: "Authenticated — receiving logs" }));
@@ -417,7 +404,6 @@ wss.on('connection', (ws) => {
   ws.on('close', () => {
     if (ws.expireTimer) clearTimeout(ws.expireTimer);
     if (ws.sessionTimer) clearTimeout(ws.sessionTimer);
-    if (ws.luarmorKey && activeSessions.get(ws.luarmorKey) === ws) activeSessions.delete(ws.luarmorKey);
   });
 });
 
