@@ -1,0 +1,66 @@
+        tls_in_tls=tls_in_tls,
+    )
+  File "/Users/bozhidarahalvadzhieva/Library/Python/3.14/lib/python/site-packages/urllib3/util/ssl_.py", line 458, in ssl_wrap_socket
+    context.load_verify_locations(ca_certs, ca_cert_dir, ca_cert_data)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt
+
+bozhidarahalvadzhieva@Bozhidaras-MacBook-Air test-bot % python3 test3211.py
+Testing all proxy endpoints...
+
+[railway1] 200 — {"__sig":"shadow_valid_v2","has_job":false}
+
+[vanish] 200 — {"ok":true,"findings":[{"id":79393,"name":"Lava Noo my Eggs","base_name":"Noo my Eggs","value":42000000,"mutation":"Lava
+
+--- Spamming railway1 at 0.1s for 5 seconds ---
+[13:37:45] 200 | {"__sig":"shadow_valid_v2","has_job":false}
+
+[13:37:45] 200 | {"__sig":"shadow_valid_v2","has_job":false}
+
+[13:37:45] 200 | {"__sig":"shadow_valid_v2","has_job":false}
+
+[13:37:46] 200 | {"__sig":"shadow_valid_v2","has_job":false}
+
+[13:37:46] 200 | {"__sig":"shadow_valid_v2","has_job":false}
+
+[13:37:46] 200 | {"__sig":"shadow_valid_v2","has_job":false}
+
+[13:37:46] 200 | {"__sig":"shadow_valid_v2","has_job":false}
+
+[13:37:47] 200 | {"__sig":"shadow_valid_v2","has_job":false}
+
+[13:37:47] 200 | {"__sig":"shadow_valid_v2","has_job":false}
+
+[13:37:47] 200 | {"__sig":"shadow_valid_v2","has_job":false}
+
+[13:37:48] 200 | {"__sig":"shadow_valid_v2","has_job":false}
+
+[13:37:48] 200 | {"__sig":"shadow_valid_v2","has_job":false}
+
+[13:37:48] 200 | {"__sig":"shadow_valid_v2","has_job":false}
+
+[13:37:48] 200 | {"__sig":"shadow_valid_v2","has_job":false}
+
+^CTraceback (most recent call last):
+  File "/Users/bozhidarahalvadzhieva/test-bot/test3211.py", line 27, in <module>
+    time.sleep(0.1)
+    ~~~~~~~~~~^^^^^
+KeyboardInterrupt
+
+bozhidarahalvadzhieva@Bozhidaras-MacBook-Air test-bot % python3 test3211.py
+Testing all proxy endpoints...
+
+[railway1] 200 — {"__sig":"shadow_valid_v2","has_job":false}
+
+[vanish] 200 — {"ok":true,"findings":[{"id":79393,"name":"Lava Noo my Eggs","base_name":"Noo my Eggs","value":42000000,"mutation":"Lava
+
+--- Spamming railway1 at 0.1s for 5 seconds ---
+[13:37:55] 200 | {"__sig":"shadow_valid_v2","has_job":false}
+
+[13:37:55] 200 | {"__sig":"shadow_valid_v2","has_job":false}
+
+[13:37:55] 200 | {"__sig":"shadow_valid_v2","has_job":false}
+
+[13:37:55] 200 | {"__sig":"shadow_valid_v2","has_job":false}
+
+[13:37:56] 200 | {"__sig":"shadow_valid_v2","has_job":false}
