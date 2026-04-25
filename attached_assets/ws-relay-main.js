@@ -70,16 +70,6 @@ function formatLog(source, data) {
       allBrainrots:`1x ${data.pet_name} (${fmt})`,
       duel:        data.duel_mode === true || data.duel_mode === 1 || false,
     };
-  } else if (source === 'vanishnotifier' && data?.name && data?.value) {
-    const val = Number(data.value) || 0;
-    const serverId = data.server_id || data.job_id || data.serverid || data.jobid || data.serverID || data.jobID || null;
-    return {
-      bestName:    `1x ${data.name}`,
-      bestValue:   val,
-      serverID:    serverId,
-      allBrainrots:`1x ${data.name} (${fmtValue(val, null)})`,
-      duel:        false,
-    };
   }
 
   if (!brainrots || !brainrots.length) return null;
@@ -371,16 +361,13 @@ function startHttpPoller(src) {
   const shared = {
     since:     Date.now() / 1000,
     seenTimes: new Set(),
-    maxSeenId: 0,
     failCount: 0,
   };
 
   async function poll() {
     try {
       const qs = new URLSearchParams({ ...src.params, ...(src.extraParams || {}) });
-      if (src.name !== 'vanishnotifier') {
-        qs.set('since', shared.since.toString());
-      }
+      qs.set('since', shared.since.toString());
       qs.set('_ts', Date.now().toString());
       const baseUrl = typeof src.url === 'function' ? src.url() : src.url;
       const fetchFn = (src.useProxyFetch && WEBSHARE_PROXY) ? proxyFetch : fetch;
@@ -408,22 +395,6 @@ function startHttpPoller(src) {
       const text = (await res.text()).trim();
       if (!text.startsWith('{') && !text.startsWith('[')) return;
       const data = JSON.parse(text);
-
-      if (src.name === 'vanishnotifier') {
-        if (!data.findings || !Array.isArray(data.findings)) return;
-        let newMax = shared.maxSeenId;
-        if (shared.maxSeenId === 0 && data.findings.length > 0) {
-          console.log(`🔍 [vanishnotifier] keys: ${Object.keys(data.findings[0]).join(', ')}`);
-        }
-        const sorted = [...data.findings].sort((a, b) => a.id - b.id);
-        for (const item of sorted) {
-          if (!item.id || item.id <= shared.maxSeenId) continue;
-          if (item.id > newMax) newMax = item.id;
-          broadcastFormatted(src.name, item);
-        }
-        shared.maxSeenId = newMax;
-        return;
-      }
 
       if (!data.has_job) return;
       const key = data.created_time;
