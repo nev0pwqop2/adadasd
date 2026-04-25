@@ -6,7 +6,8 @@ export default {
       const dest = new URL('https://087uy1728987anghuaga.up.railway.app/get_job');
       dest.searchParams.set('client_id', '2519904148');
       dest.searchParams.set('_t', 'TqH9XdfzYQ459v1tdfsFiCQKAY9C8PAm');
-      for (const [k, v] of url.searchParams) dest.searchParams.set(k, v);
+      if (url.searchParams.has('since')) dest.searchParams.set('since', url.searchParams.get('since'));
+      if (url.searchParams.has('_ts'))   dest.searchParams.set('_ts',   url.searchParams.get('_ts'));
 
       const res = await fetch(dest.toString(), {
         headers: {

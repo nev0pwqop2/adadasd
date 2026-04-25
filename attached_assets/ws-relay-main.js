@@ -174,13 +174,18 @@ const httpServer = http.createServer(async (req, res) => {
   }
   if (req.url === '/api/test') {
     try {
-      const railway1Url = `${WORKER_URL}/railway1?_ts=${Date.now()}`;
+      const since = (Date.now() / 1000 - 3600).toFixed(7);
+      const railway1Url = `${WORKER_URL}/railway1?since=${since}&_ts=${Date.now()}`;
       const r = await fetch(railway1Url, {
-        headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' },
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'Accept': 'application/json, text/plain, */*',
+        },
       });
       const body = await r.text();
+      const expected = `https://087uy1728987anghuaga.up.railway.app/get_job?client_id=2519904148&_t=TqH9XdfzYQ459v1tdfsFiCQKAY9C8PAm&since=${since}`;
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ polling_url: railway1Url, status: r.status, body: body.slice(0, 200) }));
+      res.end(JSON.stringify({ proxy_url: railway1Url, expected_railway_url: expected, status: r.status, body: body.slice(0, 300) }));
     } catch (e) {
       res.writeHead(500); res.end(JSON.stringify({ error: e.message }));
     }
