@@ -30,7 +30,7 @@ const HTTP_SOURCES = [
     name: "railway-job",
     url: () => `${WORKER_URL}/railway1`,
     params: { client_id: "2519904148", _t: "TqH9XdfzYQ459v1tdfsFiCQKAY9C8PAm" },
-    intervalMs: 100,
+    intervalMs: 1000,
     concurrency: 1,
   },
   {
