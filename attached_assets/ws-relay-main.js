@@ -1,4 +1,4 @@
-canconst WebSocket = require('ws');
+const WebSocket = require('ws');
 const crypto = require('crypto');
 const http = require('http');
 
@@ -165,7 +165,7 @@ const wss = new WebSocket.Server({ server: httpServer });
 httpServer.listen(PORT, () => console.log(`✅ WS relay running on port ${PORT}`));
 
 const SESSION_LIMIT_MS = 30 * 60 * 1000;
-const activeSessions   = new Map(); // key -> ws
+const activeSessions   = new Map();
 
 function kickExistingSession(key) {
   const old = activeSessions.get(key);
@@ -319,12 +319,11 @@ function startHttpPoller(src) {
   const concurrency = src.concurrency || 1;
   const staggerMs   = Math.floor(src.intervalMs / concurrency);
 
-  // shared state across all workers for this source
   const shared = {
-    since:       Date.now() / 1000,
-    seenTimes:   new Set(),
-    seenJobs:    new Set(),
-    failCount:   0,
+    since:     Date.now() / 1000,
+    seenTimes: new Set(),
+    seenJobs:  new Set(),
+    failCount: 0,
   };
 
   async function poll() {
