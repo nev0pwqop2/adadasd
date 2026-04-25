@@ -18,7 +18,7 @@ import {
   AlertTriangle, Crown, Server, ChevronDown, ChevronUp, Search,
   Copy, FlaskConical, Check, Key, CreditCard, Bitcoin, TrendingUp,
   Ban, Tag, Gavel, Plus, Trash2, ToggleLeft, ToggleRight, Pause,
-  Play, Layers, CheckCircle,
+  Play, Layers, CheckCircle, Star, Eye, EyeOff,
 } from "lucide-react";
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
@@ -34,7 +34,7 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json();
 }
 
-type Tab = "settings" | "users" | "slots" | "payments" | "bids" | "coupons" | "tools";
+type Tab = "settings" | "users" | "slots" | "payments" | "bids" | "coupons" | "tools" | "reviews";
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "settings", label: "Settings", icon: <Settings className="w-4 h-4" /> },
@@ -44,6 +44,7 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "bids",     label: "Bids",     icon: <Gavel className="w-4 h-4" /> },
   { id: "coupons",  label: "Coupons",  icon: <Tag className="w-4 h-4" /> },
   { id: "tools",    label: "Tools",    icon: <FlaskConical className="w-4 h-4" /> },
+  { id: "reviews",  label: "Reviews",  icon: <Star className="w-4 h-4" /> },
 ];
 
 export default function Admin() {
@@ -105,6 +106,14 @@ export default function Admin() {
     queryFn: () => apiFetch<{ servers: ServerEntry[] }>("api/admin/servers"),
     enabled: !!user?.isAdmin,
   });
+
+  type AdminReview = { id: number; rating: number; body: string; isVisible: boolean; createdAt: string; username: string; avatar: string | null; discordId: string };
+  const { data: adminReviewsData, isLoading: isReviewsLoading, refetch: refetchReviews } = useQuery({
+    queryKey: ["admin-reviews"],
+    queryFn: () => apiFetch<{ reviews: AdminReview[] }>("api/admin/reviews"),
+    enabled: !!user?.isAdmin && activeTab === "reviews",
+  });
+  const [togglingReview, setTogglingReview] = useState<number | null>(null);
 
   // ── Settings state ────────────────────────────────────────────────────────
   const [slotCount, setSlotCount] = useState("");
@@ -1230,6 +1239,71 @@ export default function Admin() {
                   )}
                 </div>
               </div>
+            </Card>
+          </div>
+        )}
+
+        {/* ── REVIEWS ─────────────────────────────────────────────────────────── */}
+        {activeTab === "reviews" && (
+          <div className="space-y-4">
+            <Card>
+              <div className="p-5 border-b border-white/6 flex items-center justify-between">
+                <div>
+                  <h2 className="font-semibold text-sm">User Reviews</h2>
+                  <p className="text-xs text-muted-foreground mt-0.5">Toggle visibility to show/hide reviews on the landing page</p>
+                </div>
+                <button onClick={() => refetchReviews()} className="text-xs text-muted-foreground hover:text-white transition-colors">Refresh</button>
+              </div>
+              {isReviewsLoading ? (
+                <div className="p-5 flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="w-4 h-4 animate-spin" />Loading reviews…
+                </div>
+              ) : !adminReviewsData?.reviews.length ? (
+                <div className="p-5 text-sm text-muted-foreground">No reviews yet.</div>
+              ) : (
+                <div className="divide-y divide-white/5">
+                  {adminReviewsData.reviews.map(r => (
+                    <div key={r.id} className="p-4 flex items-start gap-4">
+                      <div className="flex-shrink-0">
+                        {r.avatar ? (
+                          <img src={`https://cdn.discordapp.com/avatars/${r.discordId}/${r.avatar}.png`} alt="" className="w-8 h-8 rounded-full" />
+                        ) : (
+                          <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-xs font-bold text-white/50">{r.username[0]?.toUpperCase()}</div>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-xs font-semibold text-white">{r.username}</span>
+                          <div className="flex gap-0.5">
+                            {[1,2,3,4,5].map(i => (
+                              <Star key={i} className={`w-3 h-3 ${i <= r.rating ? 'fill-amber-400 text-amber-400' : 'text-white/15'}`} />
+                            ))}
+                          </div>
+                          <span className={`ml-auto text-[10px] px-1.5 py-0.5 rounded-full font-medium ${r.isVisible ? 'bg-green-500/15 text-green-400' : 'bg-white/8 text-white/30'}`}>
+                            {r.isVisible ? 'Visible' : 'Hidden'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-white/55 leading-relaxed">{r.body}</p>
+                        <p className="text-[10px] text-white/20 mt-1">{new Date(r.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                      </div>
+                      <button
+                        disabled={togglingReview === r.id}
+                        onClick={async () => {
+                          setTogglingReview(r.id);
+                          try {
+                            await apiFetch(`api/admin/reviews/${r.id}/toggle`, { method: "PATCH" });
+                            refetchReviews();
+                          } finally { setTogglingReview(null); }
+                        }}
+                        className={`flex-shrink-0 flex items-center gap-1.5 px-3 h-7 rounded-lg text-xs font-medium transition-colors ${r.isVisible ? 'bg-white/8 text-white/50 hover:bg-white/12' : 'bg-green-500/15 text-green-400 hover:bg-green-500/25'}`}
+                      >
+                        {togglingReview === r.id ? <Loader2 className="w-3 h-3 animate-spin" /> : r.isVisible ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                        {r.isVisible ? 'Hide' : 'Show'}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </Card>
           </div>
         )}

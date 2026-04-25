@@ -8,6 +8,8 @@ import bidsRouter from "./bids.js";
 import preordersRouter from "./preorders.js";
 import balanceRouter from "./balance.js";
 import couponsRouter from "./coupons.js";
+import reviewsRouter from "./reviews.js";
+import referralsRouter from "./referrals.js";
 
 const router: IRouter = Router();
 
@@ -20,5 +22,7 @@ router.use("/bids", bidsRouter);
 router.use("/preorders", preordersRouter);
 router.use("/balance", balanceRouter);
 router.use("/coupons", couponsRouter);
+router.use("/reviews", reviewsRouter);
+router.use("/referral", referralsRouter);
 
 export default router;

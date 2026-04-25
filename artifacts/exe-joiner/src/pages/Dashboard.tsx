@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation } from 'wouter';
 import Navbar from '@/components/Navbar';
-import { Gavel, Plus, Crown, TrendingUp, X, Wallet, Clock, ArrowDownLeft } from 'lucide-react';
+import { Gavel, Plus, Crown, TrendingUp, X, Wallet, Clock, ArrowDownLeft, Star, Copy, Check } from 'lucide-react';
 import { useGetMe, useLogout } from '@workspace/api-client-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { SlotCard, type PublicSlot } from '@/components/SlotCard';
@@ -29,6 +29,10 @@ export default function Dashboard() {
   const [showPreorderModal, setShowPreorderModal] = useState(false);
   const [showDepositModal, setShowDepositModal] = useState(false);
   const [slotTakenBanner, setSlotTakenBanner] = useState<string | null>(null);
+  const [referralCopied, setReferralCopied] = useState(false);
+  const [reviewRating, setReviewRating] = useState(0);
+  const [reviewBody, setReviewBody] = useState('');
+  const [reviewHover, setReviewHover] = useState(0);
   const queryClient = useQueryClient();
 
   const { data: user, isError: isUserError, isLoading: isUserLoading } = useGetMe({ query: { retry: false } as any });
@@ -101,6 +105,43 @@ export default function Dashboard() {
     queryKey: ['history'],
     queryFn: () => apiFetch<{ payments: { id: string; slotNumber: number; method: string; currency: string | null; amount: string | null; status: string; createdAt: string }[] }>('api/slots/history'),
     enabled: !!user,
+  });
+
+  const { data: referralRes } = useQuery({
+    queryKey: ['referral'],
+    queryFn: () => apiFetch<{ referralCode: string; totalInvites: number; dollarsEarned: number }>('api/referral'),
+    enabled: !!user,
+    staleTime: 30000,
+  });
+
+  const { data: myReviewRes } = useQuery({
+    queryKey: ['my-review'],
+    queryFn: async () => {
+      const res = await fetch(`${import.meta.env.BASE_URL}api/reviews/mine`, { credentials: 'include' });
+      if (!res.ok) throw new Error('Failed');
+      return res.json() as Promise<{ review: { id: number; rating: number; body: string; isVisible: boolean } | null }>;
+    },
+    enabled: !!user,
+    staleTime: 60000,
+  });
+
+  const { mutate: submitReview, isPending: isSubmittingReview } = useMutation({
+    mutationFn: async ({ rating, body }: { rating: number; body: string }) => {
+      const res = await fetch(`${import.meta.env.BASE_URL}api/reviews`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rating, body }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.message || 'Failed');
+      return d;
+    },
+    onSuccess: (d) => {
+      toast({ title: 'Review submitted!', description: d.message });
+      setReviewRating(0); setReviewBody('');
+      queryClient.invalidateQueries({ queryKey: ['my-review'] });
+    },
+    onError: (e: any) => toast({ title: 'Error', description: e.message, variant: 'destructive' }),
   });
 
   useEffect(() => {
@@ -400,6 +441,119 @@ export default function Dashboard() {
             </div>
           </div>
         </motion.div>
+
+        {/* ── Referral Card ── */}
+        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }} className="mb-6">
+          <div className="rounded-2xl border border-white/8 bg-[#13110a] overflow-hidden">
+            <div className="px-5 py-4 border-b border-white/6">
+              <h3 className="font-bold text-white text-sm uppercase tracking-wide">Refer Friends</h3>
+              <p className="text-xs text-white/30 mt-0.5">Earn $1 balance credit for every 10 users you refer</p>
+            </div>
+            <div className="p-5">
+              {referralRes ? (
+                <>
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="flex-1 font-mono text-sm text-white/70 bg-white/5 rounded-lg px-3 py-2 border border-white/8 select-all">
+                      {`${window.location.origin}${import.meta.env.BASE_URL}?ref=${referralRes.referralCode}`}
+                    </div>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(`${window.location.origin}${import.meta.env.BASE_URL}?ref=${referralRes.referralCode}`);
+                        setReferralCopied(true);
+                        setTimeout(() => setReferralCopied(false), 2000);
+                      }}
+                      className="flex items-center gap-1.5 px-3 h-9 rounded-lg bg-[#f5a623]/15 border border-[#f5a623]/25 text-[#f5a623] text-xs font-medium hover:bg-[#f5a623]/25 transition-colors flex-shrink-0"
+                    >
+                      {referralCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                      {referralCopied ? 'Copied!' : 'Copy'}
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="rounded-xl border border-white/8 bg-white/[0.02] px-3 py-3 text-center">
+                      <p className="text-lg font-bold text-white">{referralRes.totalInvites}</p>
+                      <p className="text-[10px] text-white/30 mt-0.5">Total referrals</p>
+                    </div>
+                    <div className="rounded-xl border border-white/8 bg-white/[0.02] px-3 py-3 text-center">
+                      <p className="text-lg font-bold text-[#f5a623]">${referralRes.dollarsEarned.toFixed(2)}</p>
+                      <p className="text-[10px] text-white/30 mt-0.5">Earned</p>
+                    </div>
+                    <div className="rounded-xl border border-white/8 bg-white/[0.02] px-3 py-3 text-center">
+                      <p className="text-lg font-bold text-white">{10 - (referralRes.totalInvites % 10 || 10)}</p>
+                      <p className="text-[10px] text-white/30 mt-0.5">Until next $1</p>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm text-white/30">Loading referral info…</p>
+              )}
+            </div>
+          </div>
+        </motion.div>
+
+        {/* ── Leave a Review ── */}
+        {completedPayments.length > 0 && (
+          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="mb-6">
+            <div className="rounded-2xl border border-white/8 bg-[#13110a] overflow-hidden">
+              <div className="px-5 py-4 border-b border-white/6">
+                <h3 className="font-bold text-white text-sm uppercase tracking-wide">Leave a Review</h3>
+                <p className="text-xs text-white/30 mt-0.5">Share your experience — reviews are shown once approved</p>
+              </div>
+              <div className="p-5">
+                {myReviewRes?.review ? (
+                  <div className="flex items-start gap-3 rounded-xl border border-green-500/20 bg-green-500/5 p-4">
+                    <div className="flex gap-0.5 mt-0.5">
+                      {[1,2,3,4,5].map(i => (
+                        <Star key={i} className={`w-4 h-4 ${i <= (myReviewRes.review!.rating) ? 'fill-amber-400 text-amber-400' : 'text-white/15'}`} />
+                      ))}
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-green-400">{myReviewRes.review.isVisible ? 'Review approved and visible' : 'Review submitted — pending approval'}</p>
+                      <p className="text-xs text-white/50 mt-1 leading-relaxed">{myReviewRes.review.body}</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-xs text-white/50 mb-2">Rating</p>
+                      <div className="flex gap-1">
+                        {[1,2,3,4,5].map(i => (
+                          <button
+                            key={i}
+                            onMouseEnter={() => setReviewHover(i)}
+                            onMouseLeave={() => setReviewHover(0)}
+                            onClick={() => setReviewRating(i)}
+                            className="transition-transform hover:scale-110"
+                          >
+                            <Star className={`w-7 h-7 transition-colors ${i <= (reviewHover || reviewRating) ? 'fill-amber-400 text-amber-400' : 'text-white/20'}`} />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-xs text-white/50 mb-2">Your review</p>
+                      <textarea
+                        value={reviewBody}
+                        onChange={e => setReviewBody(e.target.value)}
+                        maxLength={500}
+                        rows={3}
+                        placeholder="Tell others about your experience…"
+                        className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm text-white placeholder:text-white/25 resize-none focus:outline-none focus:ring-1 focus:ring-[#f5a623]/40"
+                      />
+                      <p className="text-[10px] text-white/20 mt-1 text-right">{reviewBody.length}/500</p>
+                    </div>
+                    <button
+                      disabled={!reviewRating || reviewBody.trim().length < 5 || isSubmittingReview}
+                      onClick={() => submitReview({ rating: reviewRating, body: reviewBody })}
+                      className="px-5 h-9 rounded-lg bg-[#f5a623] text-black font-bold text-sm hover:bg-[#e8961a] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {isSubmittingReview ? 'Submitting…' : 'Submit Review'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        )}
 
       </main>
 

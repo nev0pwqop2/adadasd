@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useGetMe } from '@workspace/api-client-react';
 import Navbar from '@/components/Navbar';
+import { useQuery } from '@tanstack/react-query';
 
 const DiscordIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -25,15 +26,57 @@ const STATS = [
   { value: '100%', label: 'Uptime' },
 ];
 
+type ReviewEntry = {
+  id: number;
+  rating: number;
+  body: string;
+  createdAt: string;
+  username: string;
+  avatar: string | null;
+  discordId: string;
+};
+
+function StarRow({ rating }: { rating: number }) {
+  return (
+    <div className="flex gap-0.5">
+      {[1,2,3,4,5].map(i => (
+        <svg key={i} width="12" height="12" viewBox="0 0 24 24" fill={i <= rating ? '#f5a623' : 'none'} stroke={i <= rating ? '#f5a623' : '#ffffff25'} strokeWidth="1.5">
+          <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/>
+        </svg>
+      ))}
+    </div>
+  );
+}
+
 export default function Landing() {
   const { data: user } = useGetMe({ query: { retry: false, staleTime: 30000 } as any });
 
   const params = new URLSearchParams(window.location.search);
   const errorCode = params.get('error');
 
+  // Store referral code from ?ref= query param in sessionStorage
+  useEffect(() => {
+    const ref = params.get('ref');
+    if (ref) sessionStorage.setItem('ref_code', ref);
+  }, []);
+
   const handleLogin = () => {
-    window.location.href = `${import.meta.env.BASE_URL}api/auth/discord`;
+    const ref = sessionStorage.getItem('ref_code');
+    const refParam = ref ? `?ref=${encodeURIComponent(ref)}` : '';
+    window.location.href = `${import.meta.env.BASE_URL}api/auth/discord${refParam}`;
   };
+
+  const { data: reviewsData } = useQuery<{ reviews: ReviewEntry[] }>({
+    queryKey: ['public-reviews'],
+    queryFn: async () => {
+      const res = await fetch(`${import.meta.env.BASE_URL}api/reviews`);
+      if (!res.ok) throw new Error('Failed');
+      return res.json();
+    },
+    staleTime: 60000,
+  });
+
+  const reviews = reviewsData?.reviews ?? [];
 
   return (
     <div className="min-h-screen bg-[#0f0b07] text-white flex flex-col items-center overflow-x-hidden">
@@ -43,7 +86,7 @@ export default function Landing() {
       <Navbar current="home" />
 
       {/* ── Hero ── */}
-      <main className="relative z-10 flex flex-col items-center justify-center flex-1 px-5 pt-16 pb-10 text-center">
+      <main className="relative z-10 flex flex-col items-center justify-center flex-1 px-5 pt-16 pb-10 text-center w-full max-w-4xl">
         {/* Floating logo — no box, just the image */}
         <img
           src={`${import.meta.env.BASE_URL}exe-logo.gif`}
@@ -117,6 +160,41 @@ export default function Landing() {
             </div>
           ))}
         </div>
+
+        {/* ── Reviews ── */}
+        {reviews.length > 0 && (
+          <div className="mt-20 w-full">
+            <h2 className="text-xl font-bold text-white mb-1">What our users say</h2>
+            <p className="text-xs text-white/35 mb-8">Real reviews from verified buyers</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {reviews.map(r => (
+                <div key={r.id} className="flex flex-col gap-3 p-4 rounded-2xl border border-white/8 bg-white/[0.03] text-left">
+                  <div className="flex items-center gap-2.5">
+                    {r.avatar ? (
+                      <img
+                        src={`https://cdn.discordapp.com/avatars/${r.discordId}/${r.avatar}.png`}
+                        alt=""
+                        className="w-8 h-8 rounded-full flex-shrink-0"
+                      />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-white/10 flex-shrink-0 flex items-center justify-center text-xs font-bold text-white/50">
+                        {r.username?.[0]?.toUpperCase()}
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-white truncate">{r.username}</p>
+                      <StarRow rating={r.rating} />
+                    </div>
+                  </div>
+                  <p className="text-xs text-white/55 leading-relaxed">{r.body}</p>
+                  <p className="text-[10px] text-white/20 mt-auto">
+                    {new Date(r.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );

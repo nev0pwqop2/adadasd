@@ -190,6 +190,28 @@ async function runMigrations() {
     CREATE INDEX IF NOT EXISTS idx_session_expire ON user_sessions (expire)
   `);
 
+  await step("users.referral_code", sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_code VARCHAR(16) UNIQUE`);
+  await step("oauth_states.ref_code", sql`ALTER TABLE oauth_states ADD COLUMN IF NOT EXISTS ref_code TEXT`);
+  await step("create reviews", sql`
+    CREATE TABLE IF NOT EXISTS reviews (
+      id SERIAL PRIMARY KEY,
+      user_id VARCHAR(36) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      rating INTEGER NOT NULL,
+      body TEXT NOT NULL,
+      is_visible BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMP DEFAULT NOW() NOT NULL
+    )
+  `);
+  await step("create referrals", sql`
+    CREATE TABLE IF NOT EXISTS referrals (
+      id SERIAL PRIMARY KEY,
+      referrer_id VARCHAR(36) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      referred_id VARCHAR(36) NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+      reward_credited BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMP DEFAULT NOW() NOT NULL
+    )
+  `);
+
   logger.info("DB migrations complete");
 }
 

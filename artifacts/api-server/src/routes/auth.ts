@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { db, usersTable, oauthStatesTable } from "@workspace/db";
-import { eq, lt } from "drizzle-orm";
+import { db, usersTable, oauthStatesTable, referralsTable } from "@workspace/db";
+import { eq, lt, sql as drizzleSql } from "drizzle-orm";
 import crypto from "crypto";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { isAdminDiscordId, isSuperAdmin } from "../middlewares/requireAdmin.js";
@@ -23,14 +23,22 @@ function getRedirectUri(): string {
   return "http://localhost:80/api/auth/discord/callback";
 }
 
+function generateReferralCode(): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let code = "";
+  for (let i = 0; i < 8; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  return code;
+}
+
 router.get("/discord", async (req, res) => {
   try {
     const state = crypto.randomBytes(16).toString("hex");
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+    const refCode = typeof req.query.ref === "string" ? req.query.ref.trim() : null;
 
     // Clean up expired states and store new one in DB
     await db.delete(oauthStatesTable).where(lt(oauthStatesTable.expiresAt, new Date()));
-    await db.insert(oauthStatesTable).values({ state, expiresAt });
+    await db.insert(oauthStatesTable).values({ state, expiresAt, refCode } as any);
 
     const params = new URLSearchParams({
       client_id: DISCORD_CLIENT_ID,
@@ -158,7 +166,10 @@ router.get("/discord/callback", async (req, res) => {
 
     const tokenExpiresAt = new Date(Date.now() + (tokenData.expires_in ?? 604800) * 1000);
 
+    const refCode = storedStates[0].refCode ?? null;
+
     let userId: string;
+    let isNewUser = false;
     if (existingUsers.length > 0) {
       userId = existingUsers[0].id;
       const updateData: Record<string, unknown> = {
@@ -172,8 +183,13 @@ router.get("/discord/callback", async (req, res) => {
         updatedAt: new Date(),
       };
       if (seedAdmin && !existingUsers[0].isAdmin) updateData.isAdmin = true;
+      // Ensure existing users have a referral code
+      if (!existingUsers[0].referralCode) {
+        updateData.referralCode = generateReferralCode();
+      }
       await db.update(usersTable).set(updateData as any).where(eq(usersTable.discordId, discordUser.id));
     } else {
+      isNewUser = true;
       userId = crypto.randomUUID();
       await db.insert(usersTable).values({
         id: userId,
@@ -183,10 +199,56 @@ router.get("/discord/callback", async (req, res) => {
         email: discordUser.email,
         isAdmin: seedAdmin,
         guilds,
+        referralCode: generateReferralCode(),
         discordAccessToken: tokenData.access_token,
         discordRefreshToken: tokenData.refresh_token ?? null,
         discordTokenExpiresAt: tokenExpiresAt,
       } as any);
+    }
+
+    // Process referral for brand-new users
+    if (isNewUser && refCode) {
+      try {
+        const referrerRows = await db
+          .select({ id: usersTable.id })
+          .from(usersTable)
+          .where(eq(usersTable.referralCode as any, refCode))
+          .limit(1);
+        if (referrerRows.length > 0) {
+          const referrerId = referrerRows[0].id;
+          if (referrerId !== userId) {
+            await db.insert(referralsTable).values({ referrerId, referredId: userId } as any).onConflictDoNothing();
+            // Credit $1 for every 10 referrals
+            const allReferrals = await db
+              .select({ rewardCredited: referralsTable.rewardCredited })
+              .from(referralsTable)
+              .where(eq(referralsTable.referrerId, referrerId));
+            const total = allReferrals.length;
+            const alreadyCredited = allReferrals.filter(r => r.rewardCredited).length;
+            const newMilestones = Math.floor(total / 10) - alreadyCredited;
+            if (newMilestones > 0) {
+              // Credit balance
+              await db.update(usersTable)
+                .set({ balance: drizzleSql`${usersTable.balance} + ${newMilestones}::numeric` } as any)
+                .where(eq(usersTable.id, referrerId));
+              // Mark referrals as credited (oldest first)
+              await db.execute(drizzleSql`
+                UPDATE referrals SET reward_credited = TRUE
+                WHERE referrer_id = ${referrerId}
+                  AND reward_credited = FALSE
+                  AND id IN (
+                    SELECT id FROM referrals
+                    WHERE referrer_id = ${referrerId}
+                    ORDER BY created_at
+                    LIMIT ${newMilestones * 10}
+                  )
+              `);
+            }
+          }
+        }
+      } catch (refErr) {
+        req.log.warn({ refErr }, "Referral processing failed — continuing");
+      }
     }
 
     // Auto-join the Discord server (best-effort — never blocks login)

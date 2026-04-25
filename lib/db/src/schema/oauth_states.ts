@@ -2,6 +2,7 @@ import { pgTable, text, timestamp } from "drizzle-orm/pg-core";
 
 export const oauthStatesTable = pgTable("oauth_states", {
   state: text("state").primaryKey(),
+  refCode: text("ref_code"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   expiresAt: timestamp("expires_at").notNull(),
 });

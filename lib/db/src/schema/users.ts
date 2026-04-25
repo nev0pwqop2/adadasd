@@ -16,6 +16,7 @@ export const usersTable = pgTable("users", {
   discordAccessToken: text("discord_access_token"),
   discordRefreshToken: text("discord_refresh_token"),
   discordTokenExpiresAt: timestamp("discord_token_expires_at"),
+  referralCode: varchar("referral_code", { length: 16 }).unique(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

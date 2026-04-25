@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, slotsTable, usersTable, paymentsTable, couponsTable, bidsTable } from "@workspace/db";
+import { db, slotsTable, usersTable, paymentsTable, couponsTable, bidsTable, reviewsTable } from "@workspace/db";
 import { eq, sql, inArray, and, lte, desc, ne } from "drizzle-orm";
 import { requireAdmin, isSuperAdmin } from "../middlewares/requireAdmin.js";
 import { invalidateBanCache } from "../middlewares/requireAuth.js";
@@ -1410,6 +1410,43 @@ router.post("/payments/force-complete", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Admin force-complete failed");
     res.status(500).json({ error: "server_error", message: String(err) });
+  }
+});
+
+// ── Reviews admin ──────────────────────────────────────────────────────────
+router.get("/reviews", requireAdmin, async (req, res) => {
+  try {
+    const rows = await db
+      .select({
+        id: reviewsTable.id,
+        rating: reviewsTable.rating,
+        body: reviewsTable.body,
+        isVisible: reviewsTable.isVisible,
+        createdAt: reviewsTable.createdAt,
+        username: usersTable.username,
+        avatar: usersTable.avatar,
+        discordId: usersTable.discordId,
+      })
+      .from(reviewsTable)
+      .innerJoin(usersTable, eq(reviewsTable.userId, usersTable.id))
+      .orderBy(desc(reviewsTable.createdAt));
+    res.json({ reviews: rows });
+  } catch (err) {
+    res.status(500).json({ error: "server_error" });
+  }
+});
+
+router.patch("/reviews/:id/toggle", requireAdmin, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) { res.status(400).json({ error: "bad_id" }); return; }
+    const [existing] = await db.select({ isVisible: reviewsTable.isVisible }).from(reviewsTable).where(eq(reviewsTable.id, id)).limit(1);
+    if (!existing) { res.status(404).json({ error: "not_found" }); return; }
+    const next = !existing.isVisible;
+    await db.update(reviewsTable).set({ isVisible: next }).where(eq(reviewsTable.id, id));
+    res.json({ success: true, isVisible: next });
+  } catch (err) {
+    res.status(500).json({ error: "server_error" });
   }
 });
 
