@@ -7,6 +7,12 @@ import {
   SlashCommandBuilder,
   ChatInputCommandInteraction,
   Events,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
 } from "discord.js";
 import pg from "pg";
 
@@ -809,45 +815,42 @@ const DISCORD_REST_PROXY = process.env.DISCORD_REST_PROXY;
 
 const REVIEW_WEBHOOK = "https://discord.com/api/webhooks/1485003373932449924/PtxZcUAA-mFsqK4mqaSHY-zpegH0somwQKk_bRjmFiD-BinTAq-71iUfQyxOf52RZFNx";
 
-interface ReviewState {
-  step: "rating" | "reason" | "buy_again";
-  rating?: number;
-  reason?: string;
-}
-const pendingReviews = new Map<string, ReviewState>();
-
-async function sendDm(discordId: string, payload: object): Promise<boolean> {
+async function sendReviewRequest(discordId: string) {
   try {
     const chRes = await fetch("https://discord.com/api/v10/users/@me/channels", {
       method: "POST",
       headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}`, "Content-Type": "application/json" },
       body: JSON.stringify({ recipient_id: discordId }),
     });
-    if (!chRes.ok) return false;
+    if (!chRes.ok) return;
     const ch = await chRes.json() as { id: string };
+
     const msgRes = await fetch(`https://discord.com/api/v10/channels/${ch.id}/messages`, {
       method: "POST",
       headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}`, "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        embeds: [{
+          title: "🎉 Thank you for buying!",
+          description: "Your slot has just expired. We hope you enjoyed it!\n\nLeaving a review really helps us improve and grow. It only takes **10 seconds** — click the button below!",
+          color: 0xFFFF00,
+          footer: { text: "Exe Notifier • We appreciate your support" },
+        }],
+        components: [{
+          type: 1,
+          components: [{
+            type: 2,
+            style: 1,
+            label: "⭐ Leave a Review",
+            custom_id: "review_open_modal",
+          }],
+        }],
+      }),
     });
-    return msgRes.ok;
-  } catch { return false; }
-}
 
-async function sendReviewRequest(discordId: string) {
-  const sent = await sendDm(discordId, {
-    embeds: [{
-      title: "⭐ How was your experience?",
-      description: "Your slot has just expired. We'd love your feedback!\n\n**Rate your experience from 1 to 5:**\n`1` — Very bad\n`2` — Bad\n`3` — Okay\n`4` — Good\n`5` — Excellent",
-      color: 0xFFFF00,
-      footer: { text: "Exe Notifier" },
-    }],
-  });
-  if (sent) {
-    pendingReviews.set(discordId, { step: "rating" });
-    console.log(`[REVIEW] Review DM sent to ${discordId}`);
-  } else {
-    console.warn(`[REVIEW] Failed to DM ${discordId} for review`);
+    if (msgRes.ok) console.log(`[REVIEW] Review DM sent to ${discordId}`);
+    else console.warn(`[REVIEW] Failed to DM ${discordId}: ${msgRes.status}`);
+  } catch (e) {
+    console.warn(`[REVIEW] Error sending DM to ${discordId}:`, e);
   }
 }
 
@@ -920,64 +923,80 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 });
 
-client.on(Events.MessageCreate, async (message) => {
-  if (message.author.bot) return;
-  if (message.guild) return; // only handle DMs
+client.on(Events.InteractionCreate, async (interaction) => {
+  // Button: open the review modal
+  if (interaction.isButton() && interaction.customId === "review_open_modal") {
+    const modal = new ModalBuilder()
+      .setCustomId("review_modal")
+      .setTitle("Leave a Review");
 
-  const discordId = message.author.id;
-  const state = pendingReviews.get(discordId);
-  if (!state) return;
+    const ratingInput = new TextInputBuilder()
+      .setCustomId("review_rating")
+      .setLabel("Rating (1–5)")
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder("Enter a number from 1 to 5")
+      .setMinLength(1)
+      .setMaxLength(1)
+      .setRequired(true);
 
-  const content = message.content.trim();
+    const reasonInput = new TextInputBuilder()
+      .setCustomId("review_reason")
+      .setLabel("What's the main reason for your rating?")
+      .setStyle(TextInputStyle.Paragraph)
+      .setPlaceholder("Tell us what you liked or didn't like...")
+      .setMaxLength(500)
+      .setRequired(true);
 
-  if (state.step === "rating") {
-    const rating = parseInt(content);
+    const buyAgainInput = new TextInputBuilder()
+      .setCustomId("review_buy_again")
+      .setLabel("Would you buy again? Why?")
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder("Yes / No — and feel free to add why")
+      .setMaxLength(200)
+      .setRequired(true);
+
+    modal.addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(ratingInput),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(reasonInput),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(buyAgainInput),
+    );
+
+    await interaction.showModal(modal);
+    return;
+  }
+
+  // Modal submit: collect answers and post to webhook
+  if (interaction.isModalSubmit() && interaction.customId === "review_modal") {
+    const ratingRaw = interaction.fields.getTextInputValue("review_rating").trim();
+    const reason    = interaction.fields.getTextInputValue("review_reason").trim();
+    const buyAgain  = interaction.fields.getTextInputValue("review_buy_again").trim();
+    const rating    = parseInt(ratingRaw);
+
     if (isNaN(rating) || rating < 1 || rating > 5) {
-      await message.reply("Please reply with a number between **1** and **5**.");
+      await interaction.reply({
+        content: "❌ Rating must be a number between 1 and 5. Please click the button again to re-submit.",
+        ephemeral: true,
+      });
       return;
     }
-    state.rating = rating;
-    state.step = "reason";
-    pendingReviews.set(discordId, state);
-    await message.reply({
-      embeds: [{
-        description: `Got it — **${rating}/5**!\n\nWhat's the main reason for your rating?`,
-        color: 0xFFFF00,
-        footer: { text: "Exe Notifier" },
-      }],
-    });
 
-  } else if (state.step === "reason") {
-    state.reason = content;
-    state.step = "buy_again";
-    pendingReviews.set(discordId, state);
-    await message.reply({
+    await interaction.reply({
       embeds: [{
-        description: "Last question — **would you buy again?**\nReply with **yes** or **no**, and feel free to add why!",
-        color: 0xFFFF00,
-        footer: { text: "Exe Notifier" },
-      }],
-    });
-
-  } else if (state.step === "buy_again") {
-    const buyAgain = content;
-    pendingReviews.delete(discordId);
-
-    await message.reply({
-      embeds: [{
-        title: "✅ Thanks for your feedback!",
-        description: "We really appreciate you taking the time. Your review helps us improve!",
+        title: "✅ Thanks for your review!",
+        description: "We really appreciate your feedback — it helps us keep improving. 🙏",
         color: 0x00CC44,
         footer: { text: "Exe Notifier" },
       }],
+      ephemeral: true,
     });
 
     try {
-      await postReviewToWebhook(discordId, state.rating!, state.reason!, buyAgain);
-      console.log(`[REVIEW] Review recorded for ${discordId}: ${state.rating}/5`);
+      await postReviewToWebhook(interaction.user.id, rating, reason, buyAgain);
+      console.log(`[REVIEW] Review submitted by ${interaction.user.id}: ${rating}/5`);
     } catch (err) {
       console.error("[REVIEW] Failed to post review to webhook:", err);
     }
+    return;
   }
 });
 
