@@ -333,9 +333,10 @@ function startHttpPoller(src) {
   async function poll() {
     try {
       const qs = new URLSearchParams(src.params);
-      if (src.name !== 'vanishnotifier' && src.name !== 'railway-job' && src.name !== 'railway-job-2') {
+      if (src.name !== 'vanishnotifier') {
         qs.set('since', shared.since.toString());
       }
+      qs.set('_ts', Date.now().toString());
       const res = await fetch(`${src.url}?${qs}`, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -351,7 +352,7 @@ function startHttpPoller(src) {
       if (!res.ok) {
         shared.failCount++;
         if (res.status === 429) {
-          const retryAfter = parseInt(res.headers.get('retry-after') || '5', 10);
+          const retryAfter = parseInt(res.headers.get('retry-after') || '1', 10);
           if (shared.failCount <= 2) console.warn(`⚠️  [${src.name}] Rate limited (429) — backing off ${retryAfter}s`);
           await new Promise(r => setTimeout(r, retryAfter * 1000));
         } else {
