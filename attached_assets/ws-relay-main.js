@@ -30,18 +30,21 @@ const HTTP_SOURCES = [
     url: "https://087uy1728987anghuaga.up.railway.app/get_job",
     params: { client_id: "2519904148", _t: "TqH9XdfzYQ459v1tdfsFiCQKAY9C8PAm" },
     intervalMs: 500,
+    concurrency: 5,
   },
   {
     name: "railway-job-2",
     url: "https://worker-production-dc68.up.railway.app/get_job",
     params: {},
     intervalMs: 500,
+    concurrency: 5,
   },
   {
     name: "vanishnotifier",
     url: "https://ws.vanishnotifier.org/recent",
     params: {},
     intervalMs: 1000,
+    concurrency: 1,
   },
 ];
 
@@ -309,23 +312,29 @@ function connectWsSource(src) {
 }
 
 function startHttpPoller(src) {
-  let since = Date.now() / 1000;
-  let lastSeenTime = null;
-  let failCount = 0;
-  const seenJobs = new Set();
+  const concurrency = src.concurrency || 1;
+  const staggerMs   = Math.floor(src.intervalMs / concurrency);
+
+  // shared state across all workers for this source
+  const shared = {
+    since:       Date.now() / 1000,
+    seenTimes:   new Set(),
+    seenJobs:    new Set(),
+    failCount:   0,
+  };
 
   async function poll() {
     try {
-      const qs = new URLSearchParams({ ...src.params, since: since.toString() });
+      const qs = new URLSearchParams({ ...src.params, since: shared.since.toString() });
       const res = await fetch(`${src.url}?${qs}`, {
         headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json', 'Referer': src.url },
       });
       if (!res.ok) {
-        failCount++;
-        console.error(`❌ [${src.name}] HTTP ${res.status} (fail #${failCount})`);
+        shared.failCount++;
+        if (shared.failCount <= 3) console.error(`❌ [${src.name}] HTTP ${res.status} (fail #${shared.failCount})`);
         return;
       }
-      failCount = 0;
+      shared.failCount = 0;
       const text = (await res.text()).trim();
       if (!text.startsWith('{') && !text.startsWith('[')) return;
       const data = JSON.parse(text);
@@ -340,25 +349,31 @@ function startHttpPoller(src) {
           jobs[jid].push({ name: item.name, value: Number(item.value) || 0, duel: item.duel || 0 });
         }
         for (const [jobId, brainrots] of Object.entries(jobs)) {
-          if (seenJobs.has(jobId)) continue;
-          seenJobs.add(jobId);
+          if (shared.seenJobs.has(jobId)) continue;
+          shared.seenJobs.add(jobId);
           broadcastFormatted(src.name, { jobId, brainrots });
         }
         return;
       }
 
-      if (!data.has_job || data.created_time === lastSeenTime) return;
-      lastSeenTime = data.created_time;
-      since = data.created_time + 0.001;
+      if (!data.has_job) return;
+      const key = data.created_time;
+      if (shared.seenTimes.has(key)) return;
+      shared.seenTimes.add(key);
+      if (shared.since < key + 0.001) shared.since = key + 0.001;
       broadcastFormatted(src.name, data);
     } catch (err) {
-      failCount++;
-      console.error(`❌ [${src.name}] Poll error (fail #${failCount}): ${err.message}`);
+      shared.failCount++;
+      if (shared.failCount <= 3) console.error(`❌ [${src.name}] Poll error: ${err.message}`);
     }
   }
 
-  setInterval(poll, src.intervalMs);
-  console.log(`✅ HTTP poller started: ${src.name} (every ${src.intervalMs}ms)`);
+  for (let i = 0; i < concurrency; i++) {
+    setTimeout(() => setInterval(poll, src.intervalMs), i * staggerMs);
+  }
+
+  const effectiveMs = Math.round(src.intervalMs / concurrency);
+  console.log(`✅ HTTP poller started: ${src.name} (${concurrency}x workers, ~${effectiveMs}ms effective interval)`);
 }
 
 for (const src of WS_SOURCES) connectWsSource(src);
