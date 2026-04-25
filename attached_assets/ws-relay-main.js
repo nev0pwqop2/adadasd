@@ -184,7 +184,8 @@ function broadcastFormatted(source, data) {
   wss.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN && client.authenticated) { client.send(payload); count++; }
   });
-  console.log(`📤 [${source}] -> ${count} receiver(s) | ${formatted.bestName} $${formatted.bestValue?.toLocaleString('en-US')} duel=${formatted.duel}`);
+  const label = source === 'railway-job' ? 'railway job 1' : source;
+  console.log(`📤 [${label}] -> ${count} receiver(s) | ${formatted.bestName} $${formatted.bestValue?.toLocaleString('en-US')} duel=${formatted.duel}`);
 }
 
 setInterval(async () => {
