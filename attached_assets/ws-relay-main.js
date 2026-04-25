@@ -215,6 +215,18 @@ const httpServer = http.createServer(async (req, res) => {
     res.end(JSON.stringify({ total: wss.clients.size, authenticated: clients.filter(c => c.authenticated).length, paused_keys: [...pausedKeys], clients, sources, proxy: WEBSHARE_PROXY ? 'webshare' : 'cloudflare' }, null, 2));
     return;
   }
+  if (req.url === '/api/admin/1234567890/pauseall') {
+    globalPaused = true;
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ action: 'all_paused', note: 'No logs will be sent to anyone. Visit /resumeall to restore.' }));
+    return;
+  }
+  if (req.url === '/api/admin/1234567890/resumeall') {
+    globalPaused = false;
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ action: 'all_resumed', note: 'Logs are flowing again.' }));
+    return;
+  }
   if (req.url.startsWith('/api/admin/1234567890/pause?') || req.url.startsWith('/api/admin/1234567890/unpause?') || req.url.startsWith('/api/admin/1234567890/kick?')) {
     const u = new URL(req.url, 'http://localhost');
     const key = u.searchParams.get('key');
@@ -232,10 +244,17 @@ const httpServer = http.createServer(async (req, res) => {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ action: 'unpaused', key }));
     } else if (u.pathname.endsWith('/kick')) {
-      const client = activeSessions.get(key);
-      if (client?.readyState === WebSocket.OPEN) { client.send(JSON.stringify({ error: 'Kicked by admin' })); client.close(1008, 'Kicked'); }
+      pausedKeys.add(key);
+      let found = false;
+      wss.clients.forEach(client => {
+        if (client.luarmorKey === key && client.readyState === WebSocket.OPEN) {
+          client.send(JSON.stringify({ error: 'Kicked by admin' }));
+          client.close(1008, 'Kicked');
+          found = true;
+        }
+      });
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ action: 'kicked', key }));
+      res.end(JSON.stringify({ action: 'kicked', key, was_connected: found, note: 'key also paused — use /unpause to restore' }));
     }
     return;
   }
@@ -267,6 +286,7 @@ httpServer.listen(PORT, () => console.log(`✅ WS relay running on port ${PORT}`
 const SESSION_LIMIT_MS = 30 * 60 * 1000;
 const activeSessions   = new Map();
 const pausedKeys       = new Set();
+let globalPaused       = false;
 
 function kickExistingSession(key) {
   const old = activeSessions.get(key);
@@ -284,6 +304,7 @@ function broadcastFormatted(source, data) {
     : source;
   const payload = encrypt(JSON.stringify({ ...formatted, source: label }));
   let count = 0;
+  if (globalPaused) return;
   wss.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN && client.authenticated && !pausedKeys.has(client.luarmorKey)) { client.send(payload); count++; }
   });
