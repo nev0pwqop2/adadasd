@@ -1,11 +1,12 @@
-rconst WebSocket = require('ws');
+const WebSocket = require('ws');
 const crypto = require('crypto');
 const http = require('http');
 
 const ENCRYPTION_KEY     = "12345678901234567890123456789012";
 const LUARMOR_API_KEY    = process.env.LUARMOR_API_KEY;
 const LUARMOR_PROJECT_ID = process.env.LUARMOR_PROJECT_ID;
-const PORT = process.env.PORT || 8080;
+const PORT               = process.env.PORT || 8080;
+const WORKER_URL         = process.env.WORKER_URL || "https://YOUR_WORKER.YOUR_NAME.workers.dev";
 
 const WS_SOURCES = [
   {
@@ -27,21 +28,21 @@ const WS_SOURCES = [
 const HTTP_SOURCES = [
   {
     name: "railway-job",
-    url: "https://087uy1728987anghuaga.up.railway.app/get_job",
+    url: () => `${WORKER_URL}/railway1`,
     params: { client_id: "2519904148", _t: "TqH9XdfzYQ459v1tdfsFiCQKAY9C8PAm" },
     intervalMs: 100,
     concurrency: 1,
   },
   {
     name: "railway-job-2",
-    url: "https://worker-production-dc68.up.railway.app/get_job",
+    url: () => `${WORKER_URL}/railway2`,
     params: {},
     intervalMs: 2000,
     concurrency: 1,
   },
   {
     name: "vanishnotifier",
-    url: "https://ws.vanishnotifier.org/recent",
+    url: () => `${WORKER_URL}/vanish`,
     params: {},
     intervalMs: 500,
     concurrency: 2,
@@ -337,16 +338,12 @@ function startHttpPoller(src) {
         qs.set('since', shared.since.toString());
       }
       qs.set('_ts', Date.now().toString());
-      const res = await fetch(`${src.url}?${qs}`, {
+      const baseUrl = typeof src.url === 'function' ? src.url() : src.url;
+      const res = await fetch(`${baseUrl}?${qs}`, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
           'Accept': 'application/json, text/plain, */*',
           'Accept-Language': 'en-US,en;q=0.9',
-          'Origin': 'https://blox-fruits.fandom.com',
-          'Referer': 'https://blox-fruits.fandom.com/',
-          'sec-fetch-dest': 'empty',
-          'sec-fetch-mode': 'cors',
-          'sec-fetch-site': 'cross-site',
         },
       });
       if (!res.ok) {
@@ -368,11 +365,9 @@ function startHttpPoller(src) {
       if (src.name === 'vanishnotifier') {
         if (!data.findings || !Array.isArray(data.findings)) return;
         let newMax = shared.maxSeenId;
-        // log field names on first ever finding so we can confirm server ID key
         if (shared.maxSeenId === 0 && data.findings.length > 0) {
           console.log(`🔍 [vanishnotifier] finding keys: ${Object.keys(data.findings[0]).join(', ')}`);
         }
-        // sort ascending so we broadcast in chronological order
         const sorted = [...data.findings].sort((a, b) => a.id - b.id);
         for (const item of sorted) {
           if (!item.id || item.id <= shared.maxSeenId) continue;
@@ -405,7 +400,7 @@ function startHttpPoller(src) {
   }
 
   const effectiveMs = Math.round(src.intervalMs / concurrency);
-  console.log(`✅ HTTP poller started: ${src.name} (${concurrency}x workers, ~${effectiveMs}ms effective interval)`);
+  console.log(`✅ HTTP poller started: ${src.name} → ${typeof src.url === 'function' ? src.url() : src.url} (${concurrency}x workers, ~${effectiveMs}ms effective interval)`);
 }
 
 for (const src of WS_SOURCES) connectWsSource(src);

@@ -5,6 +5,7 @@ export default {
     const targets = {
       '/railway1': 'https://087uy1728987anghuaga.up.railway.app/get_job',
       '/railway2': 'https://worker-production-dc68.up.railway.app/get_job',
+      '/vanish':   'https://ws.vanishnotifier.org/recent',
     };
 
     const target = targets[url.pathname];
