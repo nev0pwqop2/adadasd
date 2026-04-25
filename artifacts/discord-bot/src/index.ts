@@ -1,6 +1,7 @@
 import {
   Client,
   GatewayIntentBits,
+  Partials,
   REST,
   Routes,
   SlashCommandBuilder,
@@ -786,6 +787,11 @@ async function cleanupExpiredSlots() {
         [slot.user_id, slot.slot_number]
       );
       console.log(`[CLEANUP] Slot #${slot.slot_number} deactivated for user ${slot.user_id}`);
+
+      // DM the user asking for a review
+      const userRes = await db.query(`SELECT discord_id FROM users WHERE id = $1 LIMIT 1`, [slot.user_id]);
+      const discordId: string | undefined = userRes.rows[0]?.discord_id;
+      if (discordId) await sendReviewRequest(discordId);
     }
 
     // Immediately trigger fulfillment on the API server so queued users get slots right away
@@ -801,8 +807,80 @@ async function cleanupExpiredSlots() {
 
 const DISCORD_REST_PROXY = process.env.DISCORD_REST_PROXY;
 
+const REVIEW_WEBHOOK = "https://discord.com/api/webhooks/1485003373932449924/PtxZcUAA-mFsqK4mqaSHY-zpegH0somwQKk_bRjmFiD-BinTAq-71iUfQyxOf52RZFNx";
+
+interface ReviewState {
+  step: "rating" | "reason" | "buy_again";
+  rating?: number;
+  reason?: string;
+}
+const pendingReviews = new Map<string, ReviewState>();
+
+async function sendDm(discordId: string, payload: object): Promise<boolean> {
+  try {
+    const chRes = await fetch("https://discord.com/api/v10/users/@me/channels", {
+      method: "POST",
+      headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ recipient_id: discordId }),
+    });
+    if (!chRes.ok) return false;
+    const ch = await chRes.json() as { id: string };
+    const msgRes = await fetch(`https://discord.com/api/v10/channels/${ch.id}/messages`, {
+      method: "POST",
+      headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}`, "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    return msgRes.ok;
+  } catch { return false; }
+}
+
+async function sendReviewRequest(discordId: string) {
+  const sent = await sendDm(discordId, {
+    embeds: [{
+      title: "⭐ How was your experience?",
+      description: "Your slot has just expired. We'd love your feedback!\n\n**Rate your experience from 1 to 5:**\n`1` — Very bad\n`2` — Bad\n`3` — Okay\n`4` — Good\n`5` — Excellent",
+      color: 0xFFFF00,
+      footer: { text: "Exe Notifier" },
+    }],
+  });
+  if (sent) {
+    pendingReviews.set(discordId, { step: "rating" });
+    console.log(`[REVIEW] Review DM sent to ${discordId}`);
+  } else {
+    console.warn(`[REVIEW] Failed to DM ${discordId} for review`);
+  }
+}
+
+async function postReviewToWebhook(discordId: string, rating: number, reason: string, buyAgain: string) {
+  const stars = "⭐".repeat(rating) + "☆".repeat(5 - rating);
+  await fetch(REVIEW_WEBHOOK, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      username: "Exe Notifier Reviews",
+      embeds: [{
+        title: "New Review",
+        color: 0xFFFF00,
+        fields: [
+          { name: "User", value: `<@${discordId}>`, inline: true },
+          { name: "Rating", value: `${stars} **(${rating}/5)**`, inline: true },
+          { name: "Reason", value: reason, inline: false },
+          { name: "Would buy again?", value: buyAgain, inline: false },
+        ],
+        footer: { text: "Exe Notifier" },
+        timestamp: new Date().toISOString(),
+      }],
+    }),
+  });
+}
+
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds],
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.DirectMessages,
+    GatewayIntentBits.MessageContent,
+  ],
+  partials: [Partials.Channel, Partials.Message],
   ...(DISCORD_REST_PROXY
     ? { rest: { api: DISCORD_REST_PROXY.replace(/\/$/, "") } }
     : {}),
@@ -838,6 +916,67 @@ client.on(Events.InteractionCreate, async (interaction) => {
       } else {
         await interaction.reply({ content: msg, ephemeral: true }).catch(() => {});
       }
+    }
+  }
+});
+
+client.on(Events.MessageCreate, async (message) => {
+  if (message.author.bot) return;
+  if (message.guild) return; // only handle DMs
+
+  const discordId = message.author.id;
+  const state = pendingReviews.get(discordId);
+  if (!state) return;
+
+  const content = message.content.trim();
+
+  if (state.step === "rating") {
+    const rating = parseInt(content);
+    if (isNaN(rating) || rating < 1 || rating > 5) {
+      await message.reply("Please reply with a number between **1** and **5**.");
+      return;
+    }
+    state.rating = rating;
+    state.step = "reason";
+    pendingReviews.set(discordId, state);
+    await message.reply({
+      embeds: [{
+        description: `Got it — **${rating}/5**!\n\nWhat's the main reason for your rating?`,
+        color: 0xFFFF00,
+        footer: { text: "Exe Notifier" },
+      }],
+    });
+
+  } else if (state.step === "reason") {
+    state.reason = content;
+    state.step = "buy_again";
+    pendingReviews.set(discordId, state);
+    await message.reply({
+      embeds: [{
+        description: "Last question — **would you buy again?**\nReply with **yes** or **no**, and feel free to add why!",
+        color: 0xFFFF00,
+        footer: { text: "Exe Notifier" },
+      }],
+    });
+
+  } else if (state.step === "buy_again") {
+    const buyAgain = content;
+    pendingReviews.delete(discordId);
+
+    await message.reply({
+      embeds: [{
+        title: "✅ Thanks for your feedback!",
+        description: "We really appreciate you taking the time. Your review helps us improve!",
+        color: 0x00CC44,
+        footer: { text: "Exe Notifier" },
+      }],
+    });
+
+    try {
+      await postReviewToWebhook(discordId, state.rating!, state.reason!, buyAgain);
+      console.log(`[REVIEW] Review recorded for ${discordId}: ${state.rating}/5`);
+    } catch (err) {
+      console.error("[REVIEW] Failed to post review to webhook:", err);
     }
   }
 });
