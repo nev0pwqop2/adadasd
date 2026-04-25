@@ -86,6 +86,55 @@ export async function sendDiscordDM(discordId: string, content: string): Promise
   }
 }
 
+export async function sendReviewDM(discordId: string): Promise<void> {
+  const botToken = process.env.DISCORD_BOT_TOKEN;
+  if (!botToken) {
+    logger.warn({ discordId }, "[review dm] DISCORD_BOT_TOKEN not set — skipping");
+    return;
+  }
+  try {
+    const chRes = await fetch("https://discord.com/api/v10/users/@me/channels", {
+      method: "POST",
+      headers: { Authorization: `Bot ${botToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ recipient_id: discordId }),
+    });
+    if (!chRes.ok) {
+      logger.warn({ discordId, status: chRes.status }, "[review dm] failed to open DM channel");
+      return;
+    }
+    const channel = (await chRes.json()) as { id: string };
+    const msgRes = await fetch(`https://discord.com/api/v10/channels/${channel.id}/messages`, {
+      method: "POST",
+      headers: { Authorization: `Bot ${botToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        embeds: [{
+          title: "🎉 Thank you for buying!",
+          description: "We hope you enjoyed your slot!\n\nLeaving a review really helps us improve and grow. It only takes **10 seconds** — click the button below!",
+          color: 0xFFFF00,
+          footer: { text: "Exe Notifier • We appreciate your support" },
+        }],
+        components: [{
+          type: 1,
+          components: [{
+            type: 2,
+            style: 1,
+            label: "⭐ Leave a Review",
+            custom_id: "review_open_modal",
+          }],
+        }],
+      }),
+    });
+    if (!msgRes.ok) {
+      const text = await msgRes.text().catch(() => "");
+      logger.warn({ discordId, status: msgRes.status, body: text }, "[review dm] failed to send");
+    } else {
+      logger.info({ discordId }, "[review dm] sent successfully");
+    }
+  } catch (err) {
+    logger.warn({ err, discordId }, "[review dm] fetch error");
+  }
+}
+
 export async function sendPaymentWebhook(data: {
   username: string;
   discordId: string;

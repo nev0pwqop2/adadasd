@@ -7,7 +7,7 @@ import { generateSlotToken, verifySlotToken } from "../lib/slotToken.js";
 import { getSettings, setSetting } from "../lib/settings.js";
 import { runAutoFulfillment } from "../lib/fulfillment.js";
 import { isLuarmorConfigured, createLuarmorUser, deleteLuarmorUser, getLuarmorUsers, pauseLuarmorUser, unpauseLuarmorUser } from "../lib/luarmor.js";
-import { sendPaymentWebhook, sendDiscordDM, addGuildRole } from "../lib/discord.js";
+import { sendPaymentWebhook, sendDiscordDM, addGuildRole, sendReviewDM } from "../lib/discord.js";
 import { activateSlotShared } from "../lib/slotActivation.js";
 import { runPaymentPoller } from "../lib/paymentPoller.js";
 
@@ -492,6 +492,21 @@ router.post("/test-dm", async (req, res) => {
   const discordId = adminUser[0].discordId;
   await sendDiscordDM(discordId, "✅ Test DM from Exe Joiner bot — DMs are working!");
   res.json({ success: true, discordId });
+});
+
+router.post("/send-review-dm", async (req, res) => {
+  try {
+    const { discordId } = req.body as { discordId?: string };
+    if (!discordId || typeof discordId !== "string") {
+      res.status(400).json({ error: "discordId is required" });
+      return;
+    }
+    await sendReviewDM(discordId);
+    res.json({ success: true, discordId });
+  } catch (err) {
+    req.log.error({ err }, "Admin: send-review-dm failed");
+    res.status(500).json({ error: "internal_error" });
+  }
 });
 
 router.post("/test-script", async (req, res) => {

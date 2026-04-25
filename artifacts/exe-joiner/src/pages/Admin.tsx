@@ -141,6 +141,8 @@ export default function Admin() {
   const [testKeyCopied, setTestKeyCopied] = useState(false);
   const [testScriptCopied, setTestScriptCopied] = useState(false);
   const [testDmStatus, setTestDmStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [reviewDmDiscordId, setReviewDmDiscordId] = useState("905033435817586749");
+  const [reviewDmStatus, setReviewDmStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [pollerStatus, setPollerStatus] = useState<"idle" | "running" | "done" | "error">("idle");
   const [forcePaymentId, setForcePaymentId] = useState("");
   const [forceCompleteStatus, setForceCompleteStatus] = useState<"idle" | "running" | "done" | "error">("idle");
@@ -1111,6 +1113,41 @@ export default function Admin() {
                     {testDmStatus === "sending" ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <FlaskConical className="w-4 h-4 mr-2" />}
                     {testDmStatus === "sent" ? "Sent!" : testDmStatus === "error" ? "Failed" : "Send Test DM"}
                   </Button>
+                </div>
+
+                {/* Send Review DM */}
+                <div className="p-5 space-y-3">
+                  <div>
+                    <p className="font-mono text-sm font-bold text-foreground">Send Review DM</p>
+                    <p className="text-xs text-muted-foreground font-mono mt-0.5">Sends a review request DM (with button popup) to any Discord user ID.</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Discord User ID"
+                      value={reviewDmDiscordId}
+                      onChange={e => setReviewDmDiscordId(e.target.value)}
+                      className="flex-1 bg-background border border-white/10 text-foreground font-mono text-xs px-3 py-2 focus:outline-none focus:border-yellow-500/50"
+                    />
+                    <Button size="sm" variant="outline"
+                      className={`border-yellow-500/30 shrink-0 ${reviewDmStatus === "sent" ? "text-green-400" : reviewDmStatus === "error" ? "text-red-400" : "text-yellow-400"}`}
+                      disabled={reviewDmStatus === "sending" || !reviewDmDiscordId.trim()}
+                      onClick={async () => {
+                        setReviewDmStatus("sending");
+                        try {
+                          const res = await fetch(`${import.meta.env.BASE_URL}api/admin/send-review-dm`, {
+                            method: "POST", credentials: "include",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ discordId: reviewDmDiscordId.trim() }),
+                          });
+                          setReviewDmStatus(res.ok ? "sent" : "error");
+                        } catch { setReviewDmStatus("error"); }
+                        setTimeout(() => setReviewDmStatus("idle"), 4000);
+                      }}>
+                      {reviewDmStatus === "sending" ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <FlaskConical className="w-4 h-4 mr-2" />}
+                      {reviewDmStatus === "sent" ? "Sent!" : reviewDmStatus === "error" ? "Failed" : "Send Review DM"}
+                    </Button>
+                  </div>
                 </div>
               </div>
             </Card>
