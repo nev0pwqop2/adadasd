@@ -7,6 +7,19 @@ const LUARMOR_API_KEY    = process.env.LUARMOR_API_KEY;
 const LUARMOR_PROJECT_ID = process.env.LUARMOR_PROJECT_ID;
 const PORT               = process.env.PORT || 8080;
 const WORKER_URL         = process.env.WORKER_URL || "https://calm-night-4622.yohalvata.workers.dev";
+const WEBSHARE_PROXY     = process.env.WEBSHARE_PROXY || null;
+
+let proxyFetch = fetch;
+if (WEBSHARE_PROXY) {
+  try {
+    const { ProxyAgent } = require('undici');
+    const agent = new ProxyAgent(WEBSHARE_PROXY);
+    proxyFetch = (url, opts = {}) => fetch(url, { ...opts, dispatcher: agent });
+    console.log(`🌐 Rotating proxy enabled → ${WEBSHARE_PROXY.replace(/:([^@]+)@/, ':***@')}`);
+  } catch (e) {
+    console.warn('⚠️  undici not available, falling back to Cloudflare proxy');
+  }
+}
 
 const WS_SOURCES = [
   {
@@ -28,17 +41,24 @@ const WS_SOURCES = [
 const HTTP_SOURCES = [
   {
     name: "railway-job",
-    url: () => `${WORKER_URL}/railway1`,
+    url: () => WEBSHARE_PROXY
+      ? 'https://087uy1728987anghuaga.up.railway.app/get_job'
+      : `${WORKER_URL}/railway1`,
+    extraParams: WEBSHARE_PROXY ? { client_id: '2519904148', _t: 'TqH9XdfzYQ459v1tdfsFiCQKAY9C8PAm' } : {},
     params: {},
-    intervalMs: 200,
+    intervalMs: 100,
     concurrency: 1,
+    useProxyFetch: true,
   },
   {
     name: "railway-job-2",
-    url: () => `${WORKER_URL}/railway2`,
+    url: () => WEBSHARE_PROXY
+      ? 'https://worker-production-dc68.up.railway.app/get_job'
+      : `${WORKER_URL}/railway2`,
     params: {},
     intervalMs: 2000,
     concurrency: 1,
+    useProxyFetch: true,
   },
   {
     name: "vanishnotifier",
@@ -46,6 +66,7 @@ const HTTP_SOURCES = [
     params: {},
     intervalMs: 500,
     concurrency: 2,
+    useProxyFetch: false,
   },
 ];
 
@@ -364,13 +385,14 @@ function startHttpPoller(src) {
 
   async function poll() {
     try {
-      const qs = new URLSearchParams(src.params);
+      const qs = new URLSearchParams({ ...src.params, ...(src.extraParams || {}) });
       if (src.name !== 'vanishnotifier') {
         qs.set('since', shared.since.toString());
       }
       qs.set('_ts', Date.now().toString());
       const baseUrl = typeof src.url === 'function' ? src.url() : src.url;
-      const res = await fetch(`${baseUrl}?${qs}`, {
+      const fetchFn = (src.useProxyFetch && WEBSHARE_PROXY) ? proxyFetch : fetch;
+      const res = await fetchFn(`${baseUrl}?${qs}`, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
           'Accept': 'application/json, text/plain, */*',
