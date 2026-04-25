@@ -183,7 +183,7 @@ const httpServer = http.createServer(async (req, res) => {
         },
       });
       const body = await r.text();
-      const expected = `https://087uy1728987anghuaga.up.railway.app/get_job?client_id=2519904148&_t=TqH9XdfzYQ459v1tdfsFiCQKAY9C8PAm&since=${since}`;
+      const expected = `https://087uy1728987anghuaga.up.railway.app/get_job?client_id=1&_t=TqH9XdfzYQ459v1tdfsFiCQKAY9C8PAm&since=${since}`;
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ proxy_url: railway1Url, expected_railway_url: expected, status: r.status, body: body.slice(0, 1000) }));
     } catch (e) {
