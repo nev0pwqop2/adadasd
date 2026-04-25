@@ -193,6 +193,23 @@ const httpServer = http.createServer(async (req, res) => {
     } catch { res.writeHead(500); res.end(JSON.stringify({ error: 'Failed to fetch IP' })); }
     return;
   }
+  if (req.url === '/api/admin/1234567890') {
+    const clients = [];
+    wss.clients.forEach(client => {
+      clients.push({
+        authenticated: client.authenticated || false,
+        key: client.luarmorKey || null,
+        readyState: ['CONNECTING','OPEN','CLOSING','CLOSED'][client.readyState] || client.readyState,
+      });
+    });
+    const sources = {
+      ws: WS_SOURCES.map(s => s.name),
+      http: HTTP_SOURCES.map(s => ({ name: s.name, interval: s.intervalMs, url: typeof s.url === 'function' ? s.url() : s.url })),
+    };
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ total: wss.clients.size, authenticated: clients.filter(c => c.authenticated).length, clients, sources, proxy: WEBSHARE_PROXY ? 'webshare' : 'cloudflare' }, null, 2));
+    return;
+  }
   if (req.url === '/api/test') {
     try {
       const since = (Date.now() / 1000 - 3600).toFixed(7);
