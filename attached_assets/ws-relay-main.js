@@ -17,8 +17,8 @@ if (WEBSHARE_PROXY) {
     proxyFetch = (url, opts = {}) => fetch(url, { ...opts, dispatcher: agent });
     console.log(`🌐 Rotating proxy enabled → ${WEBSHARE_PROXY.replace(/:([^@]+)@/, ':***@')}`);
   } catch (e) {
-    console.warn('⚠️  undici not available, falling back to Cloudflare proxy');
-  }ac
+    console.warn('⚠️  undici not aavailable, falling back to Cloudflare proxy');
+  }
 }
 
 
