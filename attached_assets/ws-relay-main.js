@@ -338,7 +338,9 @@ function kickExistingSession(key) {
 
 function broadcastPayload(source, formatted) {
   if (globalPaused) return;
-  const payload = encrypt(JSON.stringify(formatted));
+  const out = { ...formatted };
+  if (out.serverID) out.serverID = encrypt(out.serverID);
+  const payload = JSON.stringify(out);
   let count = 0;
   wss.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN && client.authenticated && !pausedKeys.has(client.luarmorKey)) { client.send(payload); count++; }
