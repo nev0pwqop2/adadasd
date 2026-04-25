@@ -81,6 +81,14 @@ function formatLog(source, data) {
     brainrots = data.event.data.brainrots;
     jobId = data.event.data.jobId;
     duelMode = brainrots.some(b => b.duel > 0);
+  } else if (source === 'source1' && data?.bestName) {
+    return {
+      bestName:    data.bestName,
+      bestValue:   Number(data.bestValue) || 0,
+      serverID:    data.serverID || null,
+      allBrainrots:data.allBrainrots || data.bestName,
+      duel:        data.duel === true || data.duel === 1 || false,
+    };
   } else if (source === 'source1' && data?.brainrots) {
     brainrots = data.brainrots;
     jobId = data.jobId || data.server_id || null;
@@ -492,35 +500,26 @@ function connectWsSource(src) {
 
   ws.on('message', (msg) => {
     const raw = msg.toString();
-    console.log(`📨 [${src.name}] RAW (${raw.length} chars): ${raw.slice(0, 120)}`);
     let data; try { data = JSON.parse(raw); } catch {}
     if (!authed) {
       if (src.isAuthed && src.isAuthed(data)) { authed = true; console.log(`🔑 [${src.name}] Authenticated`); }
       else console.warn(`⚠️  [${src.name}] Unexpected auth response:`, raw.slice(0, 100));
       return;
     }
-    if (src.skipMessage && src.skipMessage(data)) { console.log(`⏭️  [${src.name}] Skipped message type=${data?.type}`); return; }
+    if (src.skipMessage && src.skipMessage(data)) return;
 
     if (src.name === 'source1' && !data) {
       try {
         const decrypted = decryptSource1(raw.trim());
-        console.log(`🔓 [source1] Decrypted: ${decrypted.slice(0, 120)}`);
         data = JSON.parse(decrypted);
       } catch (e) {
-        console.warn(`⚠️  [source1] Failed to decrypt/parse: ${e.message} | raw: ${raw.slice(0, 80)}`);
+        console.warn(`⚠️  [source1] Failed to decrypt/parse: ${e.message}`);
         return;
       }
     }
 
-    if (src.name === 'source1') {
-      console.log(`📦 [source1] Parsed keys: ${Object.keys(data || {}).join(', ')} | has brainrots: ${!!data?.brainrots}`);
-    }
-
     const formatted = formatLog(src.name, data);
-    if (!formatted) {
-      console.warn(`⚠️  [${src.name}] formatLog returned null — data: ${JSON.stringify(data).slice(0, 120)}`);
-      return;
-    }
+    if (!formatted) return;
     broadcastPayload(src.name, formatted);
   });
 

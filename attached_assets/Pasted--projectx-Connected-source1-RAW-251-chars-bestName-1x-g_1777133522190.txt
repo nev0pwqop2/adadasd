@@ -1,0 +1,40 @@
+✅ [projectx] Connected
+📨 [source1] RAW (251 chars): {"bestName": "1x gold dj panda", "bestValue": 74400000, "serverID": "557d685e4f20577c5e5d5a0b0442055a5607420a7e0f7162775
+📦 [source1] Parsed keys: bestName, bestValue, serverID, allBrainrots, playersCount, ownerName | has brainrots: false
+⚠️  [source1] formatLog returned null — data: {"bestName":"1x gold dj panda","bestValue":74400000,"serverID":"557d685e4f20577c5e5d5a0b0442055a5607420a7e0f71627753605d
+📨 [source1] RAW (263 chars): {"bestName": "1x cyber to to to sahur", "bestValue": 51800000, "serverID": "05783e0c4477572f5e5f5c0c054205575d5242092c5a
+📦 [source1] Parsed keys: bestName, bestValue, serverID, allBrainrots, playersCount, ownerName | has brainrots: false
+⚠️  [source1] formatLog returned null — data: {"bestName":"1x cyber to to to sahur","bestValue":51800000,"serverID":"05783e0c4477572f5e5f5c0c054205575d5242092c5a7f622
+📨 [projectx] RAW (116945 chars): {"type":"init","lastEventId":1777131616929,"servers":[{"jobId":"c800d2fb-0e90-4398-9d2e-b057a71628b6","brainrots":[{"nam
+⏭️  [projectx] Skipped message type=init
+📨 [projectx] RAW (302 chars): {"type":"event","event":{"id":1777131616930,"type":"server_scan","data":{"jobId":"64373d93-9e26-4854-b440-59849ebfc9d6",
+📤 [projectx] -> 0 receiver(s) | 1x Giftini Spyderini $5.90M/s duel=false
+📨 [projectx] RAW (296 chars): {"type":"event","event":{"id":1777131616931,"type":"server_scan","data":{"jobId":"b27612af-71cf-4612-b438-7137dff257b3",
+📤 [projectx] -> 0 receiver(s) | 1x Fishboard $9.00M/s duel=false
+📨 [projectx] RAW (486 chars): {"type":"event","event":{"id":1777131616932,"type":"server_scan","data":{"jobId":"c90cd29f-abf7-4a31-ba06-3784c934ff5b",
+📤 [projectx] -> 0 receiver(s) | 1x Bunny Bunny Bunny Sahur $12.30M/s duel=false
+📨 [projectx] RAW (306 chars): {"type":"event","event":{"id":1777131616933,"type":"server_scan","data":{"jobId":"a0221960-ccbc-4a0f-a791-0b8ae6794f9d",
+📤 [projectx] -> 0 receiver(s) | 1x Los Cucarachas $7.80M/s duel=false
+📨 [source1] RAW (334 chars): {"bestName": "1x cigno fulgoro", "bestValue": 430000000, "serverID": "522a6b5c15770f2a5e585e0a0042055a5c0242517a5c716271
+📦 [source1] Parsed keys: bestName, bestValue, serverID, allBrainrots, playersCount, ownerName, duel | has brainrots: false
+⚠️  [source1] formatLog returned null — data: {"bestName":"1x cigno fulgoro","bestValue":430000000,"serverID":"522a6b5c15770f2a5e585e0a0042055a5c0242517a5c716271076a5
+📨 [projectx] RAW (388 chars): {"type":"event","event":{"id":1777131616934,"type":"server_scan","data":{"jobId":"f14a3547-fd86-401b-81de-b3a3e4345e7a",
+📤 [projectx] -> 0 receiver(s) | 1x Los Quesadillas $56.20M/s duel=false
+==> Your service is live 🎉
+⚠️  [source1] formatLog returned null — data: {"bestName":"1x lava buntteo","bestValue":5100000,"serverID":"00796e0c447602795e0e0f000442055f55514250780d22622304330a5c
+📨 [source1] RAW (278 chars): {"bestName": "1x lava buntteo", "bestValue": 5100000, "serverID": "00796e0c447602795e0e0f000442055f55514250780d226223043
+📦 [source1] Parsed keys: bestName, bestValue, serverID, allBrainrots, playersCount, ownerName | has brainrots: false
+==> 
+==> ///////////////////////////////////////////////////////////
+==> 
+==> Available at your primary URL https://gigue.onrender.com
+==> 
+==> ///////////////////////////////////////////////////////////
+⚠️  [railway-job] 429 rate limit (hit #1) — backing off 3s
+📨 [projectx] RAW (944 chars): {"type":"event","event":{"id":1777131616935,"type":"server_scan","data":{"jobId":"ae465adf-d67c-47b5-abf6-af8fff9d3e37",
+📤 [projectx] -> 0 receiver(s) | 1x Popcuru and Fizzuru $1.50B/s duel=false
+📨 [source1] RAW (490 chars): {"bestName": "1x 67", "bestValue": 7500000, "serverID": "072d6e5b422252285e0c5d0f51420558060642092b0f716220516a5f5f2c4d0
+📦 [source1] Parsed keys: bestName, bestValue, serverID, allBrainrots, playersCount, ownerName | has brainrots: false
+⚠️  [source1] formatLog returned null — data: {"bestName":"1x 67","bestValue":7500000,"serverID":"072d6e5b422252285e0c5d0f51420558060642092b0f716220516a5f5f2c4d0d513d
+⚠️  [source1] formatLog returned null — data: {"bestName":"1x gold los burritos","bestValue":53100000,"serverID":"5f296e584272047a5e5e53080742050d5c0742502f5973627307
+📨 [source1] RAW (252 chars): {"bestName": "1x gold los burritos", "bestValue": 53100000, "serverID": "5f296e584272047a5e5e53080742050d5c0742502f59736

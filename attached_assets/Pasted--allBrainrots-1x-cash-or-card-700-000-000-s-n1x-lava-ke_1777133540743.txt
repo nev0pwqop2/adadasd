@@ -1,0 +1,38 @@
+ "allBrainrots": "1x cash or card ($700,000,000/s)\n1x lava ketchuru and musturu ($510,000,000/s)\n1x tictac sahur ($487,500,000/s)\n1x gold tictac sahur ($403,100,000/s)\n1x los primos ($403,000,000/s)\n1x garama and madundung ($400,000,000/s)\n1x rainbow ketupat kepat ($350,000,000/s)\n1x divine cigno fulgoro ($300,000,000/s)\n1x rainbow bacuru and egguru ($240,000,000/s)\n1x ketchuru and musturu ($233,800,000/s)\n1x gold garama and madundung ($212,500,000/s)\n1x ketchuru and musturu ($212,500,000/s)\n1x diamond garama and madundung ($175,000,000/s)\n1x galaxy bacuru and egguru ($168,000,000/s)\n1x mariachi corazoni ($162,500,000/s)\n1x garama and madundung ($150,000,000/s)\n1x garama and madundung ($150,000,000/s)\n1x divine la grande combinasion ($150,000,000/s)\n1x ketupat kepat ($140,000,000/s)\n1x la secret combinasion ($125,000,000/s)\n1x garama and madundung ($50,000,000/s)\n1x garama and madundung ($50,000,000/s)",
+  "playersCount": "7/8",
+  "ownerName": "Mihialqddd"
+}
+[source1] (plain) {
+  "bestName": "1x yin yang mieteteira bicicleteira",
+  "bestValue": 195000000,
+  "serverID": "532e620c1274017c5e5a085b57420509505542092d5c7f622306675c0f7b175a043e0d7e",
+  "allBrainrots": "1x yin yang mieteteira bicicleteira ($195,000,000/s)\n1x cyber la grande combinasion ($190,000,000/s)",
+  "playersCount": "6/8",
+  "ownerName": "Rafaelziho12"
+}
+[source1] (plain) {
+  "bestName": "1x bacuru and egguru",
+  "bestValue": 216000000,
+  "serverID": "50796d0f437a00285e0c0d090a420556550142517b5c75627400625f5a28410a5a3d577a",
+  "allBrainrots": "1x bacuru and egguru ($216,000,000/s)\n1x 67 ($97,500,000/s)\n1x spaghetti tualetti ($60,000,000/s)",
+  "playersCount": "8/8",
+  "ownerName": "Yannine71",
+  "duel": true
+}
+[source1] (plain) {
+  "bestName": "1x ventoliero pavonero",
+  "bestValue": 260000000,
+  "serverID": "0529385b4e71047f5e5d5d0e574205095056420a780b70627354640c0d7f4c0f013b5f29",
+  "allBrainrots": "1x ventoliero pavonero ($260,000,000/s)",
+  "playersCount": "6/8",
+  "ownerName": "Its_daniel627",
+  "duel": true
+}
+[source1] (plain) {
+  "bestName": "1x gold fishboard",
+  "bestValue": 5900000,
+  "serverID": "5e7a6e091674522b5e5c58090a42055a52554251280a7f627351670c0f7a425b063e0e7a",
+  "allBrainrots": "1x gold fishboard ($5,900,000/s)\n1x rocco disco ($5,200,000/s)",
+  "playersCount": "6/8",
+  "ownerName": "Xxm00nlitxX"
+}
