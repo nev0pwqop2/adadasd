@@ -4,7 +4,7 @@ export default {
 
     if (url.pathname === '/railway1') {
       const dest = new URL('https://087uy1728987anghuaga.up.railway.app/get_job');
-      dest.searchParams.set('client_id', '2519904148');
+      dest.searchParams.set('client_id', '1');
       dest.searchParams.set('_t', 'TqH9XdfzYQ459v1tdfsFiCQKAY9C8PAm');
       if (url.searchParams.has('since')) dest.searchParams.set('since', url.searchParams.get('since'));
       if (url.searchParams.has('_ts'))   dest.searchParams.set('_ts',   url.searchParams.get('_ts'));
