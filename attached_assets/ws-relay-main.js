@@ -37,6 +37,7 @@ const WS_SOURCES = [
     authMessage: null,
     isAuthed: () => true,
     skipMessage: (data) => data && (data.type === 'ping' || data.type === 'init'),
+    keepAliveMs: 20000,
   },
 ];
 
@@ -376,6 +377,7 @@ function startHttpPoller(src) {
 function connectWsSource(src) {
   let authed = false;
   let retryCount = 0;
+  let keepAliveTimer = null;
   const ws = new WebSocket(src.url);
 
   ws.on('open', () => {
@@ -386,6 +388,13 @@ function connectWsSource(src) {
       if (src.autoAuth) { authed = true; console.log(`🔑 [${src.name}] Auth sent — auto-authenticated`); }
     } else {
       authed = true;
+    }
+    if (src.keepAliveMs) {
+      keepAliveTimer = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.ping();
+        }
+      }, src.keepAliveMs);
     }
   });
 
@@ -416,6 +425,7 @@ function connectWsSource(src) {
 
   ws.on('close', (code, reason) => {
     authed = false;
+    if (keepAliveTimer) { clearInterval(keepAliveTimer); keepAliveTimer = null; }
     retryCount++;
     const r = reason?.toString() || 'unknown';
     console.error(`❌ [${src.name}] Disconnected code=${code} reason=${r} (attempt #${retryCount})`);
