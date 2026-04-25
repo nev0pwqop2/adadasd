@@ -60,14 +60,6 @@ const HTTP_SOURCES = [
     concurrency: 1,
     useProxyFetch: true,
   },
-  {
-    name: "vanishnotifier",
-    url: () => `${WORKER_URL}/vanish`,
-    params: {},
-    intervalMs: 500,
-    concurrency: 2,
-    useProxyFetch: false,
-  },
 ];
 
 function fmtValue(num, formatted) {
