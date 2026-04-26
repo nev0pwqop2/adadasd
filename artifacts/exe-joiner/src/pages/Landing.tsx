@@ -1,46 +1,128 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useGetMe } from '@workspace/api-client-react';
 import Navbar from '@/components/Navbar';
 import { useQuery } from '@tanstack/react-query';
 
-const DiscordIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-    <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057c.002.022.015.04.033.05a19.89 19.89 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/>
-  </svg>
-);
-
 const ERROR_MESSAGES: Record<string, string> = {
   token_exchange_failed: 'Login failed — Discord rejected the token exchange.',
-  rate_limited: 'Discord is rate limiting the server. Wait 1–2 minutes and try again.',
+  rate_limited: 'Discord is rate limiting. Wait 1–2 minutes and try again.',
   discord_denied: 'You cancelled the Discord login.',
-  invalid_state: 'Login session expired or was tampered with. Please try again.',
+  invalid_state: 'Login session expired. Please try again.',
   no_code: 'No authorisation code received from Discord.',
   user_fetch_failed: 'Could not retrieve your Discord profile.',
   server_error: 'An unexpected server error occurred.',
 };
 
-const STATS = [
-  { value: '500+', label: 'Total users' },
-  { value: '5',    label: 'Active slots' },
-  { value: '24h',  label: 'Max duration' },
-  { value: '100%', label: 'Uptime' },
-];
+type BrainrotEntry = { name: string; value: string };
+type FeedGroup = {
+  id: string;
+  time: Date;
+  entries: BrainrotEntry[];
+  category: 'PEAKLIGHTS' | 'HIGHLIGHTS' | 'MIDLIGHTS' | 'DUEL';
+  topValue: number;
+};
 
 type ReviewEntry = {
-  id: number;
-  rating: number;
-  body: string;
-  createdAt: string;
-  username: string;
-  avatar: string | null;
-  discordId: string;
+  id: number; rating: number; body: string; createdAt: string;
+  username: string; avatar: string | null; discordId: string;
 };
+
+function fmtVal(n: number): string {
+  if (n >= 1e9) return `$${(n / 1e9).toFixed(1)}B/s`;
+  if (n >= 1e6) return `$${(n / 1e6).toFixed(2)}M/s`;
+  if (n >= 1e3) return `$${(n / 1e3).toFixed(1)}K/s`;
+  return `$${n}/s`;
+}
+
+function getCategory(v: number, duel: boolean): FeedGroup['category'] {
+  if (duel) return 'DUEL';
+  if (v >= 250_000_000) return 'PEAKLIGHTS';
+  if (v >= 80_000_000) return 'HIGHLIGHTS';
+  return 'MIDLIGHTS';
+}
+
+function parseAllBrainrots(all: string, fallbackValue: number): BrainrotEntry[] {
+  if (!all) return [];
+  const parts = all.split(', ');
+  return parts.slice(0, 8).map(part => {
+    const m = part.match(/^([\d]+x\s)?(.+?)(?:\s\((\$[\d.]+[KMBs\/]+)\))?$/);
+    return {
+      name: m ? (m[1] || '') + (m[2] || part) : part,
+      value: m?.[3] ?? fmtVal(fallbackValue),
+    };
+  });
+}
+
+function useLiveFeed() {
+  const [groups, setGroups] = useState<FeedGroup[]>([]);
+  const [connected, setConnected] = useState(false);
+  const wsRef = useRef<WebSocket | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    function connect() {
+      try {
+        const ws = new WebSocket('wss://gigue.onrender.com');
+        wsRef.current = ws;
+        ws.onopen = () => setConnected(true);
+        ws.onmessage = (e) => {
+          try {
+            const data = JSON.parse(e.data);
+            if (!data.bestName || data.success || data.info) return;
+            const group: FeedGroup = {
+              id: `${Date.now()}-${Math.random()}`,
+              time: new Date(),
+              entries: parseAllBrainrots(data.allBrainrots || data.bestName, data.bestValue || 0),
+              category: getCategory(data.bestValue || 0, !!data.duel),
+              topValue: data.bestValue || 0,
+            };
+            setGroups(prev => [group, ...prev].slice(0, 25));
+          } catch {}
+        };
+        ws.onclose = () => {
+          setConnected(false);
+          timerRef.current = setTimeout(connect, 3000);
+        };
+        ws.onerror = () => ws.close();
+      } catch {}
+    }
+    connect();
+    return () => {
+      wsRef.current?.close();
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  return { groups, connected };
+}
+
+function timeStr(d: Date) {
+  return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+const CAT_STYLES: Record<string, string> = {
+  PEAKLIGHTS: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30',
+  HIGHLIGHTS: 'bg-orange-500/20 text-orange-300 border-orange-500/30',
+  MIDLIGHTS:  'bg-[#5a3a00]/60 text-[#c8831a] border-[#8a5500]/40',
+  DUEL:       'bg-red-500/15 text-red-300 border-red-500/25',
+};
+
+function CategoryBadge({ cat }: { cat: string }) {
+  return (
+    <span className={`text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded border ${CAT_STYLES[cat] ?? CAT_STYLES.MIDLIGHTS}`}>
+      {cat}
+    </span>
+  );
+}
 
 function StarRow({ rating }: { rating: number }) {
   return (
     <div className="flex gap-0.5">
       {[1,2,3,4,5].map(i => (
-        <svg key={i} width="12" height="12" viewBox="0 0 24 24" fill={i <= rating ? '#f5a623' : 'none'} stroke={i <= rating ? '#f5a623' : '#ffffff25'} strokeWidth="1.5">
+        <svg key={i} width="11" height="11" viewBox="0 0 24 24"
+          fill={i <= rating ? '#f5a623' : 'none'}
+          stroke={i <= rating ? '#f5a623' : '#ffffff20'}
+          strokeWidth="1.5">
           <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/>
         </svg>
       ))}
@@ -48,13 +130,20 @@ function StarRow({ rating }: { rating: number }) {
   );
 }
 
+async function apiFetch<T>(path: string): Promise<T> {
+  const res = await fetch(`${import.meta.env.BASE_URL}${path}`);
+  if (!res.ok) throw new Error('Failed');
+  return res.json();
+}
+
 export default function Landing() {
   const { data: user } = useGetMe({ query: { retry: false, staleTime: 30000 } as any });
+  const { groups, connected } = useLiveFeed();
+  const feedRef = useRef<HTMLDivElement>(null);
 
   const params = new URLSearchParams(window.location.search);
   const errorCode = params.get('error');
 
-  // Store referral code from ?ref= query param in sessionStorage
   useEffect(() => {
     const ref = params.get('ref');
     if (ref) sessionStorage.setItem('ref_code', ref);
@@ -65,6 +154,13 @@ export default function Landing() {
     const refParam = ref ? `?ref=${encodeURIComponent(ref)}` : '';
     window.location.href = `${import.meta.env.BASE_URL}api/auth/discord${refParam}`;
   };
+
+  const { data: slotsData } = useQuery({
+    queryKey: ['slots-public-landing'],
+    queryFn: () => apiFetch<{ slots: any[]; totalSlots: number; nextExpiresAt: string | null }>('api/slots'),
+    refetchInterval: 15000,
+    retry: false,
+  });
 
   const { data: reviewsData } = useQuery<{ reviews: ReviewEntry[] }>({
     queryKey: ['public-reviews'],
@@ -77,86 +173,147 @@ export default function Landing() {
   });
 
   const reviews = reviewsData?.reviews ?? [];
+  const activeSlots = slotsData?.slots?.filter((s: any) => s.isActive).length ?? 0;
+  const totalSlots = slotsData?.totalSlots ?? 5;
+  const base = import.meta.env.BASE_URL;
 
   return (
-    <div className="min-h-screen bg-[#0f0b07] text-white flex flex-col items-center overflow-x-hidden">
-      {/* Warm radial glow */}
-      <div className="pointer-events-none fixed inset-0 z-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_80%,hsla(30,70%,25%,0.35),transparent)]" />
+    <div className="min-h-screen bg-[#110d08] text-white flex flex-col overflow-x-hidden">
+      <div className="pointer-events-none fixed inset-0 z-0 bg-[radial-gradient(ellipse_90%_55%_at_50%_100%,hsla(30,70%,18%,0.55),transparent)]" />
 
       <Navbar current="home" />
 
-      {/* ── Hero ── */}
-      <main className="relative z-10 flex flex-col items-center justify-center flex-1 px-5 pt-16 pb-10 text-center w-full max-w-4xl">
-        {/* Floating logo — no box, just the image */}
-        <img
-          src={`${import.meta.env.BASE_URL}exe-logo.gif`}
-          alt="Exe Joiner"
-          className="w-24 h-24 object-contain mb-8 drop-shadow-[0_0_32px_rgba(245,166,35,0.4)]"
-        />
+      {/* ── Hero Section ── */}
+      <main className="relative z-10 w-full max-w-6xl mx-auto px-5 pt-12 pb-6">
 
-        {/* Headline */}
-        <h1 className="text-4xl sm:text-5xl font-extrabold leading-tight mb-1">
-          Rent a slot.
-        </h1>
-        <h1 className="text-4xl sm:text-5xl font-extrabold leading-tight text-[#f5a623] mb-5">
-          Join instantly.
-        </h1>
+        {/* Top ticker pill */}
+        <div className="mb-8">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-white/10 bg-white/[0.04] text-[10px] font-semibold text-white/40 tracking-widest uppercase">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            LIVE · PEAKLIGHTS · HIGHLIGHTS · MIDLIGHTS
+          </span>
+        </div>
 
-        {/* Subtitle */}
-        <p className="text-sm sm:text-base text-white/45 max-w-sm mb-8 leading-relaxed">
-          Secure a limited Exe Joiner slot and get your script key delivered the moment you pay.
-        </p>
+        {/* Split hero */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-start">
 
-        {/* Error */}
-        {errorCode && (
-          <div className="mb-5 px-4 py-2.5 rounded-xl border border-red-500/25 bg-red-500/8 text-xs text-red-400 max-w-xs">
-            {ERROR_MESSAGES[errorCode] ?? `Error: ${errorCode}`}
+          {/* Left — Hero copy */}
+          <div className="flex flex-col">
+            <img
+              src={`${base}exe-logo.gif`}
+              alt="Exe Notifier"
+              className="w-20 h-20 object-contain mb-8 drop-shadow-[0_0_40px_rgba(245,166,35,0.45)]"
+            />
+
+            <h1 className="text-4xl sm:text-5xl font-extrabold leading-[1.1] mb-1 text-white">
+              Real-time alerts.
+            </h1>
+            <h1 className="text-4xl sm:text-5xl font-extrabold leading-[1.1] text-[#f5a623] mb-6">
+              Zero delay.
+            </h1>
+
+            <p className="text-sm sm:text-base text-white/40 max-w-sm mb-8 leading-relaxed">
+              Get notified the moment it matters. Choose your plan and never miss high-gen logs again.
+            </p>
+
+            {errorCode && (
+              <div className="mb-5 px-4 py-2.5 rounded-xl border border-red-500/25 bg-red-500/8 text-xs text-red-400 max-w-xs">
+                {ERROR_MESSAGES[errorCode] ?? `Error: ${errorCode}`}
+              </div>
+            )}
+
+            {user ? (
+              <div className="flex flex-wrap items-center gap-3">
+                <a href={`${base}dashboard`} className="px-6 h-10 rounded-xl bg-[#f5a623] text-black font-bold text-sm hover:bg-[#e8961a] transition-colors shadow-[0_4px_20px_rgba(245,166,35,0.4)] flex items-center">
+                  Dashboard
+                </a>
+                <a href={`${base}plans`} className="px-6 h-10 rounded-xl border border-white/12 bg-white/[0.05] text-sm font-medium text-white/60 hover:text-white/90 hover:border-white/20 transition-colors flex items-center">
+                  View plans
+                </a>
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center gap-3">
+                <a href={`${base}plans`} className="px-6 h-10 rounded-xl bg-[#f5a623] text-black font-bold text-sm hover:bg-[#e8961a] transition-colors shadow-[0_4px_20px_rgba(245,166,35,0.4)] flex items-center">
+                  View plans
+                </a>
+                <button
+                  onClick={handleLogin}
+                  className="px-6 h-10 rounded-xl border border-white/12 bg-white/[0.05] text-sm font-medium text-white/60 hover:text-white/90 hover:border-white/20 transition-colors flex items-center gap-2"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057c.002.022.015.04.033.05a19.89 19.89 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994.076-.076.041-.106-.041-.106a13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z"/>
+                  </svg>
+                  Login with Discord
+                </button>
+              </div>
+            )}
           </div>
-        )}
 
-        {/* CTAs */}
-        {user ? (
-          <div className="flex items-center gap-3">
-            <a
-              href={`${import.meta.env.BASE_URL}dashboard`}
-              className="px-6 h-10 rounded-lg bg-[#f5a623] text-black font-bold text-sm hover:bg-[#e8961a] transition-colors shadow-[0_2px_20px_rgba(245,166,35,0.4)] flex items-center"
-            >
-              Go to Dashboard
-            </a>
-            <a
-              href={`${import.meta.env.BASE_URL}plans`}
-              className="flex items-center gap-2 px-6 h-10 rounded-lg border border-white/15 bg-white/5 text-sm font-medium text-white/70 hover:text-white hover:border-white/25 transition-colors"
-            >
-              View Plans
-            </a>
-          </div>
-        ) : (
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleLogin}
-              className="px-6 h-10 rounded-lg bg-[#f5a623] text-black font-bold text-sm hover:bg-[#e8961a] transition-colors shadow-[0_2px_20px_rgba(245,166,35,0.4)]"
-            >
-              Get a slot
-            </button>
-            <button
-              onClick={handleLogin}
-              className="flex items-center gap-2 px-6 h-10 rounded-lg border border-white/15 bg-white/5 text-sm font-medium text-white/70 hover:text-white hover:border-white/25 transition-colors"
-            >
-              <DiscordIcon />
-              Login with Discord
-            </button>
-          </div>
-        )}
+          {/* Right — Live feed */}
+          <div className="rounded-2xl border border-white/8 bg-[#15100a] overflow-hidden flex flex-col" style={{ maxHeight: 480 }}>
+            <div className="px-4 py-3 border-b border-white/8 flex items-center justify-between flex-shrink-0">
+              <div>
+                <span className="font-bold text-white text-sm">Live feed</span>
+                <p className="text-[10px] text-white/30 mt-0.5">Midlights · Highlights · Peaklights · streaming now</p>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${connected ? 'bg-emerald-400 animate-pulse' : 'bg-white/20'}`} />
+                <span className={`text-xs font-semibold ${connected ? 'text-emerald-400' : 'text-white/30'}`}>
+                  {connected ? 'Live' : 'Connecting…'}
+                </span>
+              </div>
+            </div>
 
-        {/* ── Stats row ── */}
-        <div className="mt-16 grid grid-cols-2 sm:grid-cols-4 gap-3 w-full max-w-lg">
-          {STATS.map(({ value, label }) => (
-            <div
-              key={label}
-              className="flex flex-col items-center justify-center py-4 px-3 rounded-xl border border-white/8 bg-white/3"
-            >
-              <span className="text-lg font-bold text-white">{value}</span>
-              <span className="text-xs text-white/35 mt-0.5">{label}</span>
+            <div ref={feedRef} className="overflow-y-auto flex-1 scrollbar-none p-3 space-y-2">
+              {groups.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 gap-3">
+                  <div className="w-5 h-5 border-2 border-[#f5a623]/25 border-t-[#f5a623] rounded-full animate-spin" />
+                  <p className="text-xs text-white/20">Waiting for events…</p>
+                </div>
+              ) : (
+                groups.map(group => (
+                  <div key={group.id} className="rounded-xl border border-white/6 bg-white/[0.025] p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[10px] text-white/25 font-mono">{timeStr(group.time)}</span>
+                      <CategoryBadge cat={group.category} />
+                    </div>
+                    <div className="space-y-2">
+                      {group.entries.map((e, i) => (
+                        <div key={i} className="flex items-center gap-2.5">
+                          <div className="w-6 h-6 rounded-md bg-white/8 flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium text-white/80 truncate">{e.name}</p>
+                          </div>
+                          <span className="text-xs font-mono font-semibold text-white/55 flex-shrink-0">{e.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                    {group.entries.length > 1 && (
+                      <p className="text-[10px] text-white/20 mt-1.5">{group.entries.length} brainrot(s) in this log</p>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="px-4 py-2.5 border-t border-white/6 flex items-center gap-4 flex-shrink-0">
+              <a href={`${base}leaderboard`} className="text-[11px] text-[#f5a623]/50 hover:text-[#f5a623] transition-colors">View leaderboard →</a>
+              <a href={`${base}renters`} className="text-[11px] text-[#f5a623]/50 hover:text-[#f5a623] transition-colors">Active renters →</a>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Stats Bar ── */}
+        <div className="mt-12 grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { value: '500+', label: 'Total users' },
+            { value: String(activeSlots > 0 ? activeSlots : totalSlots), label: 'Active slots' },
+            { value: '24h', label: 'Max duration' },
+            { value: '100%', label: 'Uptime' },
+          ].map(({ value, label }) => (
+            <div key={label} className="flex flex-col items-center justify-center py-4 px-3 rounded-2xl border border-white/8 bg-[#15100a]">
+              <span className="text-xl font-extrabold text-white">{value}</span>
+              <span className="text-[10px] uppercase tracking-widest text-white/30 mt-0.5">{label}</span>
             </div>
           ))}
         </div>
@@ -164,18 +321,16 @@ export default function Landing() {
         {/* ── Reviews ── */}
         {reviews.length > 0 && (
           <div className="mt-20 w-full">
-            <h2 className="text-xl font-bold text-white mb-1">What our users say</h2>
-            <p className="text-xs text-white/35 mb-8">Real reviews from verified buyers</p>
+            <div className="text-center mb-8">
+              <h2 className="text-2xl font-bold text-white mb-1">What our users say</h2>
+              <p className="text-xs text-white/30">Real reviews from verified buyers</p>
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {reviews.map(r => (
-                <div key={r.id} className="flex flex-col gap-3 p-4 rounded-2xl border border-white/8 bg-white/[0.03] text-left">
+                <div key={r.id} className="flex flex-col gap-3 p-4 rounded-2xl border border-white/8 bg-[#15100a] text-left">
                   <div className="flex items-center gap-2.5">
                     {r.avatar ? (
-                      <img
-                        src={`https://cdn.discordapp.com/avatars/${r.discordId}/${r.avatar}.png`}
-                        alt=""
-                        className="w-8 h-8 rounded-full flex-shrink-0"
-                      />
+                      <img src={`https://cdn.discordapp.com/avatars/${r.discordId}/${r.avatar}.png`} alt="" className="w-8 h-8 rounded-full flex-shrink-0" />
                     ) : (
                       <div className="w-8 h-8 rounded-full bg-white/10 flex-shrink-0 flex items-center justify-center text-xs font-bold text-white/50">
                         {r.username?.[0]?.toUpperCase()}
@@ -186,7 +341,7 @@ export default function Landing() {
                       <StarRow rating={r.rating} />
                     </div>
                   </div>
-                  <p className="text-xs text-white/55 leading-relaxed">{r.body}</p>
+                  <p className="text-xs text-white/50 leading-relaxed">{r.body}</p>
                   <p className="text-[10px] text-white/20 mt-auto">
                     {new Date(r.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                   </p>
@@ -195,6 +350,16 @@ export default function Landing() {
             </div>
           </div>
         )}
+
+        {/* Footer */}
+        <div className="mt-16 pt-6 border-t border-white/6 flex items-center justify-between flex-wrap gap-4">
+          <p className="text-xs text-white/20">© {new Date().getFullYear()} Exe Notifier. All rights reserved.</p>
+          <div className="flex items-center gap-4">
+            <a href={`${base}plans`} className="text-xs text-white/25 hover:text-white/50 transition-colors">Plans</a>
+            <a href={`${base}renters`} className="text-xs text-white/25 hover:text-white/50 transition-colors">Renters</a>
+            <a href={`${base}leaderboard`} className="text-xs text-white/25 hover:text-white/50 transition-colors">Leaderboard</a>
+          </div>
+        </div>
       </main>
     </div>
   );
