@@ -41,6 +41,13 @@ const WS_SOURCES = [
     isAuthed: () => true,
     skipMessage: (data) => data && (data.type === 'ping' || data.type === 'init'),
   },
+  {
+    name: "maruko",
+    url: "wss://whilelist.maruko.space/?Key=aq83y182qbn",
+    authMessage: null,
+    isAuthed: () => true,
+    skipMessage: (data) => !Array.isArray(data),
+  },
 ];
 
 const HTTP_SOURCES = [
@@ -101,6 +108,25 @@ function formatLog(source, data) {
     brainrots = data.brainrots;
     jobId = data.jobId || data.server_id || null;
     duelMode = brainrots.some(b => b.duel > 0);
+  } else if (source === 'maruko' && Array.isArray(data) && data.length) {
+    const best = data.reduce((a, b) => (b.G > a.G ? b : a));
+    const counts = {};
+    for (const b of data) counts[b.N] = (counts[b.N] || 0) + 1;
+    const seen = new Set();
+    const parts = [];
+    for (const b of data) {
+      if (!seen.has(b.N)) {
+        seen.add(b.N);
+        parts.push(`${counts[b.N]}x ${b.N} (${fmtValue(b.G, null)})`);
+      }
+    }
+    return {
+      bestName:    `${counts[best.N]}x ${best.N}`,
+      bestValue:   Number(best.G) || 0,
+      serverID:    best.S || null,
+      allBrainrots:parts.join(', '),
+      duel:        false,
+    };
   } else if ((source === 'railway-job' || source === 'railway-job-2') && data?.pet_name) {
     const val = Number(data.pet_value) || 0;
     const fmt = fmtValue(val, data.pet_value_formatted);
