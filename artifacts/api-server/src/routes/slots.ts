@@ -455,42 +455,53 @@ router.get("/public-settings", async (req, res) => {
 
 router.get("/leaderboard", async (req, res) => {
   try {
-    const { slotDurationHours, pricePerDay } = await getSettings();
+    const [users, completedPayments, allSteals] = await Promise.all([
+      db.select().from(usersTable),
+      db.select().from(paymentsTable).where(eq(paymentsTable.status, "completed")),
+      db.select().from(stealsTable).orderBy(desc(stealsTable.moneyPerSec)),
+    ]);
 
-    const completedPayments = await db
-      .select()
-      .from(paymentsTable)
-      .where(eq(paymentsTable.status, "completed"));
-
-    const users = await db.select().from(usersTable);
     const userMap = Object.fromEntries(users.map((u) => [u.id, u]));
+    const discordToUserId = Object.fromEntries(users.map((u) => [u.discordId, u.id]));
 
-    const totals: Record<string, { userId: string; totalSpent: number; totalHours: number }> = {};
+    // Sum deposited per userId
+    const depositedMap: Record<string, number> = {};
     for (const p of completedPayments) {
-      if (!totals[p.userId]) totals[p.userId] = { userId: p.userId, totalSpent: 0, totalHours: 0 };
       const amt = parseFloat(p.amount ?? "0");
-      const validAmt = isNaN(amt) ? 0 : amt;
-      totals[p.userId].totalSpent += validAmt;
-      const hoursForPayment = pricePerDay > 0
-        ? Math.round((validAmt / pricePerDay) * slotDurationHours)
-        : slotDurationHours;
-      totals[p.userId].totalHours += hoursForPayment;
+      if (!isNaN(amt)) depositedMap[p.userId] = (depositedMap[p.userId] ?? 0) + amt;
     }
 
-    const leaderboard = Object.values(totals)
-      .sort((a, b) => b.totalSpent - a.totalSpent)
-      .slice(0, 20)
-      .map((entry, idx) => {
-        const u = userMap[entry.userId];
-        return {
-          rank: idx + 1,
-          username: u?.username ?? "Unknown",
-          discordId: u?.discordId ?? "",
-          avatar: u?.avatar ?? null,
-          totalSpent: parseFloat(entry.totalSpent.toFixed(2)),
-          totalHours: entry.totalHours,
-        };
-      });
+    // Group steals by discordId (already sorted by moneyPerSec desc)
+    type StealRow = { brainrotName: string; moneyPerSec: string; imageUrl: string | null };
+    const stealsMap: Record<string, StealRow[]> = {};
+    for (const s of allSteals) {
+      if (!stealsMap[s.discordId]) stealsMap[s.discordId] = [];
+      stealsMap[s.discordId].push({ brainrotName: s.brainrotName, moneyPerSec: s.moneyPerSec, imageUrl: s.imageUrl ?? null });
+    }
+
+    // Collect all unique user IDs — from payments and steals
+    const allUserIds = new Set<string>([
+      ...Object.keys(depositedMap),
+      ...Object.keys(stealsMap).map(did => discordToUserId[did]).filter(Boolean),
+    ]);
+
+    const leaderboard = [...allUserIds].map(userId => {
+      const u = userMap[userId];
+      if (!u) return null;
+      const userSteals = stealsMap[u.discordId] ?? [];
+      const bestSteal = userSteals[0] ?? null;
+      return {
+        username: u.username ?? "Unknown",
+        discordId: u.discordId ?? "",
+        avatar: u.avatar ?? null,
+        stealCount: userSteals.length,
+        bestStealMoneyPerSec: bestSteal ? bestSteal.moneyPerSec : null,
+        bestStealName: bestSteal ? bestSteal.brainrotName : null,
+        bestStealImageUrl: bestSteal ? bestSteal.imageUrl : null,
+        topSteals: userSteals.slice(0, 5).map(s => ({ brainrotName: s.brainrotName, moneyPerSec: s.moneyPerSec, imageUrl: s.imageUrl })),
+        totalDeposited: parseFloat((depositedMap[userId] ?? 0).toFixed(2)),
+      };
+    }).filter(Boolean);
 
     res.json({ leaderboard });
   } catch (err) {
