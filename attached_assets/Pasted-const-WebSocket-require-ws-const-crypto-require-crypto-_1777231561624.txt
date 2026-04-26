@@ -92,6 +92,8 @@ const HTTP_SOURCES = [
       _r: String(Math.floor(Math.random() * 999999)),
     }),
     skipSinceParam: true,
+    jobIdKey: 'job_id',
+    jobIdTtlMs: 60000,
     intervalMs: 100,
     concurrency: 1,
     useProxyFetch: false,
@@ -482,9 +484,10 @@ function startHttpPoller(src) {
   const staggerMs   = Math.floor(src.intervalMs / concurrency);
 
   const shared = {
-    since:     Date.now() / 1000,
-    seenTimes: new Set(),
-    failCount: 0,
+    since:      Date.now() / 1000,
+    seenTimes:  new Set(),
+    seenJobIds: new Map(),
+    failCount:  0,
   };
 
   async function poll() {
