@@ -179,28 +179,27 @@ function encrypt(plaintext) {
 // ── Steal relay: forward Lua steal events to Discord webhook instantly ────────
 async function forwardStealToDiscord(payload) {
   if (!STEAL_WEBHOOK_URL) return;
-  const { brainrotName, moneyPerSec, imageUrl, discordId } = payload;
+  const { brainrotName, moneyPerSec, imageUrl, discordId, timestamp } = payload;
   if (!brainrotName || !moneyPerSec) return;
 
-  const ping = discordId ? `<@${discordId}>` : null;
-  const now = new Date();
-  const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
+  const ping = discordId && discordId !== 'unknown' ? `<@${discordId}>` : 'N/A';
+  const unixTs = timestamp ? Math.floor(new Date(timestamp).getTime() / 1000) : Math.floor(Date.now() / 1000);
 
   const embed = {
     title: 'Steal Successful',
     color: 0xffff00,
-    description: `**Player**\n${ping ?? 'unknown'}`,
+    description: `**Player**\n${ping}`,
     fields: [
       { name: 'Brainrot', value: String(brainrotName), inline: true },
       { name: 'Value',    value: String(moneyPerSec),  inline: true },
     ],
-    footer: { text: `Exe Notifier • Today at ${timeStr}` },
+    footer: { text: `Exe Notifier • <t:${unixTs}:f>` },
     ...(imageUrl ? { thumbnail: { url: imageUrl } } : {}),
   };
 
   const body = JSON.stringify({
     username: 'EXE Notifier',
-    ...(ping ? { content: ping } : {}),
+    ...(discordId && discordId !== 'unknown' ? { content: `<@${discordId}>` } : {}),
     embeds: [embed],
   });
 

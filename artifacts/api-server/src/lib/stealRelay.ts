@@ -16,9 +16,9 @@ async function forwardToDiscord(payload: {
     return;
   }
 
-  const { brainrotName, moneyPerSec, imageUrl, discordId } = payload;
-  const ping = discordId ? `<@${discordId}>` : "unknown";
-  const timeStr = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
+  const { brainrotName, moneyPerSec, imageUrl, discordId, timestamp } = payload;
+  const ping = discordId && discordId !== "unknown" ? `<@${discordId}>` : "N/A";
+  const unixTs = timestamp ? Math.floor(new Date(timestamp).getTime() / 1000) : Math.floor(Date.now() / 1000);
 
   const embed: Record<string, any> = {
     title: "Steal Successful",
@@ -28,14 +28,14 @@ async function forwardToDiscord(payload: {
       { name: "Brainrot", value: String(brainrotName), inline: true },
       { name: "Value",    value: String(moneyPerSec),  inline: true },
     ],
-    footer: { text: `Exe Notifier • Today at ${timeStr}` },
+    footer: { text: `Exe Notifier • <t:${unixTs}:f>` },
   };
 
   if (imageUrl) embed.thumbnail = { url: imageUrl };
 
   const body = JSON.stringify({
     username: "EXE Notifier",
-    content: discordId ? `<@${discordId}>` : undefined,
+    content: discordId && discordId !== "unknown" ? `<@${discordId}>` : undefined,
     embeds: [embed],
   });
 
