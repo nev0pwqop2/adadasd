@@ -31,7 +31,7 @@ router.get("/", requireAuth, async (req, res) => {
 
     const totalInvites = rows.length;
     const credited = rows.filter(r => r.rewardCredited).length;
-    const pendingCredits = Math.floor(totalInvites / 10) - Math.floor(credited / 1);
+    const pendingCredits = Math.floor(totalInvites / 10) - Math.floor(credited / 10);
 
     res.json({
       referralCode: user.referralCode,

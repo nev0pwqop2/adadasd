@@ -23,7 +23,11 @@ export default function Navbar({ current }: NavbarProps) {
 
   const base = import.meta.env.BASE_URL;
 
-  const handleLogin = () => { window.location.href = `${base}api/auth/discord`; };
+  const handleLogin = () => {
+    const ref = sessionStorage.getItem('ref_code');
+    const refParam = ref ? `?ref=${encodeURIComponent(ref)}` : '';
+    window.location.href = `${base}api/auth/discord${refParam}`;
+  };
   const handleLogout = () => {
     logoutMutate(undefined, {
       onSuccess: () => { queryClient.clear(); setLocation('/'); },

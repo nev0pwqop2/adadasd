@@ -114,9 +114,49 @@ function nameColor(name: string): string {
   return `hsl(${hue},60%,60%)`;
 }
 
+const brainrotImageCache = new Map<string, string | null>();
+
+async function fetchBrainrotImage(rawName: string): Promise<string | null> {
+  const name = rawName.replace(/^\d+x\s*/, '').trim();
+  if (brainrotImageCache.has(name)) return brainrotImageCache.get(name)!;
+  brainrotImageCache.set(name, null);
+  try {
+    const encoded = encodeURIComponent(name);
+    const url = `https://stealabrainrot.fandom.com/api.php?action=query&prop=pageimages&format=json&piprop=thumbnail&pithumbsize=120&titles=${encoded}&origin=*`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const pages = data?.query?.pages ?? {};
+    for (const page of Object.values(pages) as any[]) {
+      if (page?.thumbnail?.source) {
+        brainrotImageCache.set(name, page.thumbnail.source);
+        return page.thumbnail.source;
+      }
+    }
+  } catch {}
+  return null;
+}
+
 function BrainrotAvatar({ name }: { name: string }) {
   const color = nameColor(name);
   const initials = name.replace(/^\d+x\s*/, '').trim().slice(0, 2).toUpperCase();
+  const [imgSrc, setImgSrc] = useState<string | null>(null);
+  const [imgErr, setImgErr] = useState(false);
+
+  useEffect(() => {
+    const clean = name.replace(/^\d+x\s*/, '').trim();
+    const cached = brainrotImageCache.get(clean);
+    if (cached !== undefined) { setImgSrc(cached); return; }
+    fetchBrainrotImage(name).then(src => setImgSrc(src));
+  }, [name]);
+
+  if (imgSrc && !imgErr) {
+    return (
+      <img src={imgSrc} alt={name} onError={() => setImgErr(true)}
+        className="w-6 h-6 rounded-md flex-shrink-0 object-cover" />
+    );
+  }
+
   return (
     <div className="w-6 h-6 rounded-md flex-shrink-0 flex items-center justify-center text-[8px] font-bold"
       style={{ background: color + '22', border: `1px solid ${color}44`, color }}>
