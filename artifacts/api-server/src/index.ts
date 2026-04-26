@@ -5,6 +5,7 @@ import { sql, eq, and, gt, lte } from "drizzle-orm";
 import { sendDiscordDM, removeGuildRole } from "./lib/discord.js";
 import { runSlotCleanup, runAutoFulfillment } from "./lib/fulfillment.js";
 import { runPaymentPoller } from "./lib/paymentPoller.js";
+import { attachStealRelay } from "./lib/stealRelay.js";
 import { spawn } from "child_process";
 import { existsSync } from "fs";
 import path from "path";
@@ -388,6 +389,8 @@ app.post("/api/internal/trigger-fulfillment", (req, res) => {
 const server = app.listen(port, () => {
   logger.info({ port }, "Server listening");
 });
+
+attachStealRelay(server);
 
 server.requestTimeout = 30_000;
 server.headersTimeout = 35_000;
