@@ -239,7 +239,7 @@ async function forwardStealToDiscord(payload) {
       { name: 'Brainrot', value: String(brainrotName), inline: true },
       { name: 'Value',    value: String(moneyPerSec),  inline: true },
     ],
-    footer: { text: `Exe Notifier • discord.gg/exenotifier` },
+    footer: { text: `discord.gg/exenotifier` },
     ...(imageUrl ? { thumbnail: { url: imageUrl } } : {}),
   };
 
