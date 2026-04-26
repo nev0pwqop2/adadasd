@@ -131,25 +131,25 @@ function PodiumCard({ entry, rank, tab, isCenter }: { entry: LeaderEntry; rank: 
         </div>
       </div>
 
-      <div className="pt-10 px-4 pb-4 flex flex-col gap-3">
+      <div className="pt-10 px-4 pb-4 flex flex-col gap-3 min-w-0">
         {/* Name */}
-        <div className="text-center">
+        <div className="text-center overflow-hidden px-1">
           <p className={`font-bold text-base ${nameColor} truncate`}>{entry.username}</p>
-          <p className="text-[11px] text-white/30">@{entry.username.toLowerCase().replace(/\s+/g, '')}</p>
+          <p className="text-[11px] text-white/30 truncate">@{entry.username.toLowerCase().replace(/\s+/g, '')}</p>
         </div>
 
         {/* Stats row */}
-        <div className="flex items-start justify-between text-center gap-1">
-          <div className="flex-1">
-            <p className="text-lg font-extrabold text-[#4ade80]">{entry.stealCount}</p>
+        <div className="grid grid-cols-3 text-center gap-0.5">
+          <div className="min-w-0">
+            <p className="text-lg font-extrabold text-[#4ade80] leading-tight">{entry.stealCount}</p>
             <p className="text-[9px] uppercase tracking-widest text-white/30">Stolen</p>
           </div>
-          <div className="flex-1">
-            <p className="text-sm font-bold text-white truncate">{fmtMoney(entry.bestStealMoneyPerSec)}</p>
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-white truncate leading-tight">{fmtMoney(entry.bestStealMoneyPerSec)}</p>
             <p className="text-[9px] uppercase tracking-widest text-white/30">Best $/s</p>
           </div>
-          <div className="flex-1">
-            <p className="text-sm font-bold text-white">${entry.totalDeposited.toFixed(2)}</p>
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-white truncate leading-tight">${entry.totalDeposited.toFixed(2)}</p>
             <p className="text-[9px] uppercase tracking-widest text-white/30">Deposited</p>
           </div>
         </div>
@@ -158,28 +158,26 @@ function PodiumCard({ entry, rank, tab, isCenter }: { entry: LeaderEntry; rank: 
         <div className="border-t border-white/[0.05]" />
 
         {/* Top steals */}
-        <div>
+        <div className="min-w-0">
           <p className="text-[9px] uppercase tracking-widest text-white/25 mb-2">Top Steals</p>
           {entry.topSteals.length > 0 ? (
             <div className="flex flex-col gap-1.5">
               {/* Best steal — larger */}
-              <div className="flex items-center gap-2 bg-white/[0.025] rounded-xl px-2.5 py-2">
+              <div className="flex items-center gap-2 bg-white/[0.025] rounded-xl px-2.5 py-2 min-w-0">
                 <BrainrotImg imageUrl={entry.topSteals[0].imageUrl} name={entry.topSteals[0].brainrotName} />
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <p className="text-xs font-semibold text-white truncate">{entry.topSteals[0].brainrotName}</p>
                   <p className="text-[11px] text-[#f5a623]">{fmtMoney(entry.topSteals[0].moneyPerSec)}</p>
                 </div>
               </div>
               {/* Rest as small thumbnails */}
               {entry.topSteals.length > 1 && (
-                <div className="flex gap-1.5 flex-wrap">
-                  {entry.topSteals.slice(1).map((s, i) => (
-                    <div key={i} className="flex items-center gap-1.5 bg-white/[0.02] rounded-lg px-2 py-1.5 flex-1 min-w-0">
+                <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${Math.min(entry.topSteals.slice(1).length, 3)}, minmax(0, 1fr))` }}>
+                  {entry.topSteals.slice(1, 4).map((s, i) => (
+                    <div key={i} className="flex flex-col items-center gap-1 bg-white/[0.02] rounded-lg p-1.5 min-w-0 overflow-hidden">
                       <BrainrotImg imageUrl={s.imageUrl} name={s.brainrotName} small />
-                      <div className="min-w-0">
-                        <p className="text-[10px] text-white/70 truncate">{s.brainrotName.split(' ')[0]}…</p>
-                        <p className="text-[10px] text-[#f5a623]/80">{fmtMoney(s.moneyPerSec)}</p>
-                      </div>
+                      <p className="text-[9px] text-white/60 truncate w-full text-center">{s.brainrotName.split(' ')[0]}</p>
+                      <p className="text-[9px] text-[#f5a623]/80 truncate w-full text-center">{fmtMoney(s.moneyPerSec)}</p>
                     </div>
                   ))}
                 </div>
