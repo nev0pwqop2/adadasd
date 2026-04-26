@@ -206,18 +206,26 @@ router.get("/discord/callback", async (req, res) => {
       } as any);
     }
 
-    // Process referral for brand-new users
-    if (isNewUser && refCode) {
+    // Process referral — any user who hasn't been referred yet can redeem a code (once, forever)
+    if (refCode) {
       try {
-        const referrerRows = await db
-          .select({ id: usersTable.id })
-          .from(usersTable)
-          .where(eq(usersTable.referralCode as any, refCode))
+        // Check if this user has already been referred by anyone
+        const alreadyReferred = await db
+          .select({ id: referralsTable.referrerId })
+          .from(referralsTable)
+          .where(eq(referralsTable.referredId as any, userId))
           .limit(1);
-        if (referrerRows.length > 0) {
-          const referrerId = referrerRows[0].id;
-          if (referrerId !== userId) {
-            await db.insert(referralsTable).values({ referrerId, referredId: userId } as any).onConflictDoNothing();
+
+        if (alreadyReferred.length === 0) {
+          const referrerRows = await db
+            .select({ id: usersTable.id })
+            .from(usersTable)
+            .where(eq(usersTable.referralCode as any, refCode))
+            .limit(1);
+          if (referrerRows.length > 0) {
+            const referrerId = referrerRows[0].id;
+            if (referrerId !== userId) {
+              await db.insert(referralsTable).values({ referrerId, referredId: userId } as any).onConflictDoNothing();
             // Credit $1 for every 10 referrals
             const allReferrals = await db
               .select({ rewardCredited: referralsTable.rewardCredited })
@@ -245,8 +253,9 @@ router.get("/discord/callback", async (req, res) => {
                   )
               `);
             }
-          }
-        }
+            }  // end if (referrerId !== userId)
+          }    // end if (referrerRows.length > 0)
+        }      // end if (alreadyReferred.length === 0)
       } catch (refErr) {
         req.log.warn({ refErr }, "Referral processing failed — continuing");
       }
