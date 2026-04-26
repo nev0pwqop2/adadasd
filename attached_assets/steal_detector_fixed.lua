@@ -168,12 +168,15 @@ local function watchTemplateButtons(template)
         if brainrot then
             pendingStealName = brainrot
             pendingStealMoney = money
-            print("[Click] pending: " .. brainrot)
+            print("[Click] pending steal: " .. brainrot)
+            print("[Click] my job id (own server): " .. tostring(game.JobId))
             if not hookAvailable then
                 recordSteal(brainrot, money, tostring(game.JobId))
                 pendingStealName = nil
                 pendingStealMoney = nil
             end
+        else
+            print("[Click] no brainrot found in this frame: " .. template:GetFullName())
         end
     end
     for _, desc in ipairs(template:GetDescendants()) do
@@ -191,6 +194,7 @@ end
 local alreadyReported = {}
 
 local function watchBrainrotsContainer(container)
+    print("[Watcher] found Brainrots container at: " .. container:GetFullName())
     local function handleTemplate(child)
         task.spawn(watchTemplateButtons, child)
         if not hookAvailable then
@@ -218,33 +222,57 @@ local function watchBrainrotsContainer(container)
     container.ChildAdded:Connect(handleTemplate)
 end
 
+local function findBrainrotsContainer()
+    for _, desc in ipairs(PlayerGui:GetDescendants()) do
+        if desc.Name == "Brainrots" then
+            return desc
+        end
+    end
+    return nil
+end
+
 if hookAvailable then
     pcall(function()
         hookfunction(TeleportService.TeleportToPlaceInstance, function(self, placeId, jobId, ...)
             local realJobId = tostring(jobId)
-            print("[TeleportHook] job id = " .. realJobId)
+            print("[TeleportHook] intercepted job id = " .. realJobId)
+            print("[TeleportHook] own server job id  = " .. tostring(game.JobId))
             if pendingStealName then
-                print("[TeleportHook] sending: " .. pendingStealName)
+                print("[TeleportHook] sending steal: " .. pendingStealName .. " | job: " .. realJobId)
                 recordSteal(pendingStealName, pendingStealMoney, realJobId)
                 pendingStealName = nil
                 pendingStealMoney = nil
             end
         end)
-        print("[TeleportHook] hooked")
+        print("[TeleportHook] hooked successfully")
     end)
 else
-    print("[TeleportHook] hookfunction unavailable — using fallback mode")
+    print("[TeleportHook] hookfunction not available — fallback mode active")
 end
 
 task.spawn(function()
-    local ok1, gui = pcall(function() return PlayerGui:WaitForChild("CraftingMachine", 30) end)
-    if not ok1 or not gui then print("[Watcher] CraftingMachine not found") return end
-    local ok2, inner = pcall(function() return gui:WaitForChild("CraftingMachine", 10) end)
-    if not ok2 or not inner then print("[Watcher] inner CraftingMachine not found") return end
-    local ok3, content = pcall(function() return inner:WaitForChild("Content", 10) end)
-    if not ok3 or not content then print("[Watcher] Content not found") return end
-    local ok4, brainrots = pcall(function() return content:WaitForChild("Brainrots", 10) end)
-    if not ok4 or not brainrots then print("[Watcher] Brainrots not found") return end
-    print("[Watcher] watching — hook mode: " .. tostring(hookAvailable))
-    watchBrainrotsContainer(brainrots)
+    print("[Watcher] scanning PlayerGui for Brainrots container...")
+    local brainrots = findBrainrotsContainer()
+    if not brainrots then
+        print("[Watcher] not found yet — waiting for it to appear...")
+        local found = false
+        PlayerGui.DescendantAdded:Connect(function(desc)
+            if desc.Name == "Brainrots" and not found then
+                found = true
+                print("[Watcher] Brainrots appeared: " .. desc:GetFullName())
+                watchBrainrotsContainer(desc)
+            end
+        end)
+        task.delay(30, function()
+            if not found then
+                print("[Watcher] ERROR: Brainrots container never appeared after 30s")
+                print("[Watcher] Current PlayerGui children:")
+                for _, child in ipairs(PlayerGui:GetChildren()) do
+                    print("  - " .. child.Name)
+                end
+            end
+        end)
+    else
+        watchBrainrotsContainer(brainrots)
+    end
 end)
