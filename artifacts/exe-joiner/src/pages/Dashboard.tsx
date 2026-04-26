@@ -453,20 +453,26 @@ export default function Dashboard() {
               {referralRes ? (
                 <>
                   <div className="flex items-center gap-2 mb-4">
-                    <div className="flex-1 font-mono text-sm text-white/70 bg-white/5 rounded-lg px-3 py-2 border border-white/8 select-all">
-                      {`${window.location.origin}${import.meta.env.BASE_URL}?ref=${referralRes.referralCode}`}
-                    </div>
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(`${window.location.origin}${import.meta.env.BASE_URL}?ref=${referralRes.referralCode}`);
-                        setReferralCopied(true);
-                        setTimeout(() => setReferralCopied(false), 2000);
-                      }}
-                      className="flex items-center gap-1.5 px-3 h-9 rounded-lg bg-[#f5a623]/15 border border-[#f5a623]/25 text-[#f5a623] text-xs font-medium hover:bg-[#f5a623]/25 transition-colors flex-shrink-0"
-                    >
-                      {referralCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                      {referralCopied ? 'Copied!' : 'Copy'}
-                    </button>
+                    {referralRes.referralCode ? (
+                      <>
+                        <div className="flex-1 font-mono text-sm text-white/70 bg-white/5 rounded-lg px-3 py-2 border border-white/8 select-all">
+                          {`${window.location.origin}${import.meta.env.BASE_URL}?ref=${referralRes.referralCode}`}
+                        </div>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(`${window.location.origin}${import.meta.env.BASE_URL}?ref=${referralRes.referralCode}`);
+                            setReferralCopied(true);
+                            setTimeout(() => setReferralCopied(false), 2000);
+                          }}
+                          className="flex items-center gap-1.5 px-3 h-9 rounded-lg bg-[#f5a623]/15 border border-[#f5a623]/25 text-[#f5a623] text-xs font-medium hover:bg-[#f5a623]/25 transition-colors flex-shrink-0"
+                        >
+                          {referralCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                          {referralCopied ? 'Copied!' : 'Copy'}
+                        </button>
+                      </>
+                    ) : (
+                      <p className="text-sm text-white/40 italic">Generating your referral link…</p>
+                    )}
                   </div>
                   <div className="grid grid-cols-3 gap-3">
                     <div className="rounded-xl border border-white/8 bg-white/[0.02] px-3 py-3 text-center">
