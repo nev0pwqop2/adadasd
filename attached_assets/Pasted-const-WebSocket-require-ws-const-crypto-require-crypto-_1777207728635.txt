@@ -26,14 +26,6 @@ if (WEBSHARE_PROXY) {
 
 
 const WS_SOURCES = [
-  // source1 temporarily disabled
-  // {
-  //   name: "source1",
-  //   url: "ws://141.11.243.16:4141",
-  //   authMessage: JSON.stringify({ auth: "24I19JFSDIPOFJSOARJ324I4QPHI412J41JNFESPAFHJ32I48J23RMONKFDSF093U2JRIPO2;532N4234JI4OOJIFWFJOISJF" }),
-  //   autoAuth: true,
-  //   skipMessage: () => false,
-  // },
   {
     name: "projectx",
     url: "wss://projectx.lasupremenotifier.com/ws/client",
@@ -178,7 +170,6 @@ function encrypt(plaintext) {
   return out.toString('hex');
 }
 
-// ── Record steal to the exe-joiner API for the Renters page ──────────────────
 async function recordStealToApi(payload) {
   if (!EXE_API_URL || !STEAL_RECORD_SECRET) return;
   const { brainrotName, moneyPerSec, imageUrl, discordId } = payload;
@@ -196,7 +187,6 @@ async function recordStealToApi(payload) {
   }
 }
 
-// ── Steal relay: forward Lua steal events to Discord webhook instantly ────────
 async function forwardStealToDiscord(payload) {
   if (!STEAL_WEBHOOK_URL) return;
   const { brainrotName, moneyPerSec, imageUrl, discordId, timestamp } = payload;
@@ -213,7 +203,7 @@ async function forwardStealToDiscord(payload) {
       { name: 'Brainrot', value: String(brainrotName), inline: true },
       { name: 'Value',    value: String(moneyPerSec),  inline: true },
     ],
-    footer: { text: `Exe Notifier` },
+    footer: { text: `Exe Notifier • <t:${unixTs}:f>` },
     ...(imageUrl ? { thumbnail: { url: imageUrl } } : {}),
   };
 
@@ -234,7 +224,6 @@ async function forwardStealToDiscord(payload) {
     console.error(`❌ [steal-relay] webhook failed: ${err.message}`);
   }
 }
-// ─────────────────────────────────────────────────────────────────────────────
 
 const httpServer = http.createServer(async (req, res) => {
   if (req.url === '/api/ip') {
@@ -335,7 +324,6 @@ httpServer.listen(PORT, () => console.log(`✅ WS relay running on port ${PORT}`
 const pausedKeys = new Set();
 let globalPaused = false;
 
-
 function broadcastPayload(source, formatted) {
   if (globalPaused) return;
   const out = { ...formatted };
@@ -360,7 +348,6 @@ function broadcastFormatted(source, data) {
 let _clientCounter = 0;
 
 wss.on('connection', (ws, req) => {
-  // ── Steal relay connection (Lua script sends here) ──────────────────────────
   if (req && req.url === '/ws/steal') {
     ws._isStealRelay = true;
     console.log('🎯 [steal-relay] Lua client connected');
@@ -375,7 +362,6 @@ wss.on('connection', (ws, req) => {
     ws.on('close', () => console.log('🎯 [steal-relay] Lua client disconnected'));
     return;
   }
-  // ── Normal log receiver client ───────────────────────────────────────────────
   ws._id = String(++_clientCounter);
   console.log(`🔗 Client connected (id=${ws._id}, total=${wss.clients.size})`);
   ws.send(JSON.stringify({ success: "Connected — receiving logs" }));
@@ -384,7 +370,6 @@ wss.on('connection', (ws, req) => {
     console.log(`🔌 Client disconnected (id=${ws._id}, total=${wss.clients.size})`);
   });
 });
-
 
 function startHttpPoller(src) {
   const concurrency = src.concurrency || 1;
