@@ -324,7 +324,7 @@ export default function LeaderboardPage() {
               }`}
             >
               <p className={`text-sm font-semibold leading-tight ${tab === t.id ? 'text-[#f5a623]' : 'text-white/55'}`}>{t.label}</p>
-              <p className="text-[10px] text-white/25 mt-0.5 leading-snug hidden sm:block">{t.sub}</p>
+              <p className="text-[10px] text-white/25 mt-0.5 leading-snug hidden xl:block">{t.sub}</p>
             </button>
           ))}
         </motion.div>
@@ -338,25 +338,31 @@ export default function LeaderboardPage() {
               {top3.length > 0 && (
                 <div className="mb-6">
                   <p className="text-[10px] uppercase tracking-widest text-white/20 text-center mb-4">Top 3</p>
-                  <div className={`grid gap-3 items-end ${top3.length === 1 ? 'max-w-xs mx-auto' : top3.length === 2 ? 'grid-cols-2 max-w-lg mx-auto' : 'grid-cols-3'}`}>
-                    {top3.length >= 3 ? (
-                      <>
-                        {/* 2nd — left, shorter */}
-                        <div className="mt-6">
-                          <PodiumCard entry={top3[1]} rank={2} tab={tab} isCenter={false} />
-                        </div>
-                        {/* 1st — center, tallest */}
-                        <div>
-                          <PodiumCard entry={top3[0]} rank={1} tab={tab} isCenter={true} />
-                        </div>
-                        {/* 3rd — right, shorter */}
-                        <div className="mt-10">
-                          <PodiumCard entry={top3[2]} rank={3} tab={tab} isCenter={false} />
-                        </div>
-                      </>
-                    ) : top3.map((e, i) => (
-                      <PodiumCard key={e.discordId} entry={e} rank={i + 1} tab={tab} isCenter={i === 0} />
-                    ))}
+
+                  {/* Mobile layout: 1st on top, 2nd & 3rd below */}
+                  <div className="flex flex-col gap-3 md:hidden">
+                    <div className="max-w-sm mx-auto w-full">
+                      <PodiumCard entry={top3[0]} rank={1} tab={tab} isCenter={true} />
+                    </div>
+                    {top3.length > 1 && (
+                      <div className="grid grid-cols-2 gap-3">
+                        {top3[1] && <PodiumCard entry={top3[1]} rank={2} tab={tab} isCenter={false} />}
+                        {top3[2] && <PodiumCard entry={top3[2]} rank={3} tab={tab} isCenter={false} />}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Desktop layout: staggered 2nd-1st-3rd */}
+                  <div className="hidden md:grid md:grid-cols-3 gap-3 items-end">
+                    <div className="mt-6">
+                      {top3[1] && <PodiumCard entry={top3[1]} rank={2} tab={tab} isCenter={false} />}
+                    </div>
+                    <div>
+                      <PodiumCard entry={top3[0]} rank={1} tab={tab} isCenter={true} />
+                    </div>
+                    <div className="mt-10">
+                      {top3[2] && <PodiumCard entry={top3[2]} rank={3} tab={tab} isCenter={false} />}
+                    </div>
                   </div>
                 </div>
               )}
