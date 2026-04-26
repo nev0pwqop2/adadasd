@@ -6,25 +6,13 @@ local HttpService = game:GetService("HttpService")
 local player = Players.LocalPlayer
 local PlayerGui = player:WaitForChild("PlayerGui")
 
-print("🔍 GUI Hooker + Brainrot Detector loaded")
-
 local STEAL_WEBHOOK = "https://discord.com/api/webhooks/1490759560426946590/p9sRlWhB9ZPJZOb3dIuLtG0k5M8gNLbp2MPMgjPyRv-53VrOfI4vpXLqvOCl7DVZU-vP"
 
 local stealDetectorRequest = syn and syn.request or fluxus and fluxus.request or krnl and krnl.request or http and http.request or request or http_request or (HttpService and HttpService.PostAsync and function(url, body)
     return HttpService:PostAsync(url, body, Enum.HttpContentType.ApplicationJson)
 end)
 
-local function sendStealWebhook(brainrotName, generation, jobId)
-    local body = HttpService:JSONEncode({
-        embeds = {{
-            fields = {
-                {name = "brainrot", value = tostring(brainrotName), inline = true},
-                {name = "generation", value = tostring(generation or "N/A"), inline = true},
-                {name = "job id", value = tostring(jobId or "N/A"), inline = true}
-            }
-        }}
-    })
-
+local function sendWebhookBody(body)
     if stealDetectorRequest then
         pcall(function()
             if typeof(stealDetectorRequest) == "function" then
@@ -47,22 +35,54 @@ end
 
 local function formatMoney(amount)
     if not amount then return "N/A" end
-    if amount >= 1e12 then
-        return string.format("$%.1fT", amount / 1e12)
-    elseif amount >= 1e9 then
-        return string.format("$%.1fB", amount / 1e9)
-    elseif amount >= 1e6 then
-        return string.format("$%.1fM", amount / 1e6)
-    elseif amount >= 1e3 then
-        return string.format("$%.1fK", amount / 1e3)
-    else
-        return string.format("$%.0f", amount)
-    end
+    if amount >= 1e12 then return string.format("$%.1fT", amount / 1e12)
+    elseif amount >= 1e9 then return string.format("$%.1fB", amount / 1e9)
+    elseif amount >= 1e6 then return string.format("$%.1fM", amount / 1e6)
+    elseif amount >= 1e3 then return string.format("$%.1fK", amount / 1e3)
+    else return string.format("$%.0f", amount) end
 end
 
-local function sendToWebhook(name, money, jobId)
-    local generation = money and formatMoney(money) or "N/A"
-    sendStealWebhook(name, generation, jobId)
+local serverSteals = {}
+local flushScheduled = {}
+
+local function flushSteals(jobId)
+    local steals = serverSteals[jobId]
+    serverSteals[jobId] = nil
+    flushScheduled[jobId] = nil
+    if not steals or #steals == 0 then return end
+
+    local fields = {}
+    for _, steal in ipairs(steals) do
+        table.insert(fields, {name = steal.name, value = steal.money, inline = true})
+    end
+    table.insert(fields, {name = "job id", value = jobId, inline = false})
+
+    local body = HttpService:JSONEncode({
+        embeds = {{
+            title = #steals == 1 and "Steal Detected" or (#steals .. " Steals Detected"),
+            fields = fields
+        }}
+    })
+    sendWebhookBody(body)
+end
+
+local function recordSteal(name, money, jobId)
+    if not serverSteals[jobId] then
+        serverSteals[jobId] = {}
+    end
+    for _, s in ipairs(serverSteals[jobId]) do
+        if s.name == name then return end
+    end
+    table.insert(serverSteals[jobId], {
+        name = name,
+        money = money and formatMoney(money) or "N/A"
+    })
+    if not flushScheduled[jobId] then
+        flushScheduled[jobId] = true
+        task.delay(2, function()
+            flushSteals(jobId)
+        end)
+    end
 end
 
 local brainrotNames = {
@@ -145,41 +165,33 @@ end
 local function findMoneyNearby(gui)
     local parent = gui.Parent
     if not parent then return nil end
-
     for _, sibling in ipairs(parent:GetChildren()) do
         if sibling ~= gui and (sibling:IsA("TextLabel") or sibling:IsA("TextButton") or sibling:IsA("TextBox")) then
             local money = parseMoneyPerSecond(sibling.Text)
-            if money then return money, sibling.Text end
+            if money then return money end
         end
     end
-
     if parent:IsA("TextLabel") or parent:IsA("TextButton") or parent:IsA("TextBox") then
         local money = parseMoneyPerSecond(parent.Text)
-        if money then return money, parent.Text end
+        if money then return money end
     end
     return nil
 end
 
 local seenAtStartup = {}
-local lastPrinted = {}
 
 local function isDevConsole(gui)
     local current = gui
     while current do
-        if current.Name == "DevConsoleMaster" or current.Name == "DevConsoleUI" then
-            return true
-        end
+        if current.Name == "DevConsoleMaster" or current.Name == "DevConsoleUI" then return true end
         current = current.Parent
     end
     return false
 end
 
 local function getGuiText(gui)
-    if gui:IsA("TextLabel") or gui:IsA("TextButton") or gui:IsA("TextBox") then
-        return gui.Text
-    elseif gui:IsA("ImageLabel") or gui:IsA("ImageButton") then
-        return gui.Image
-    end
+    if gui:IsA("TextLabel") or gui:IsA("TextButton") or gui:IsA("TextBox") then return gui.Text
+    elseif gui:IsA("ImageLabel") or gui:IsA("ImageButton") then return gui.Image end
     return ""
 end
 
@@ -189,8 +201,8 @@ local function checkForBrainrot(gui, isInitialScan)
 
     local guiName = string.lower(gui.Name)
     local guiText = string.lower(getGuiText(gui))
-
     local matched = nil
+
     for brainrot in pairs(brainrotSet) do
         if guiName:find(brainrot, 1, true) or guiText:find(brainrot, 1, true) then
             matched = brainrot
@@ -207,20 +219,9 @@ local function checkForBrainrot(gui, isInitialScan)
         return
     end
 
-    if not lastPrinted[path] or true then
-        lastPrinted[path] = tick()
-
-        local money, rawText = findMoneyNearby(gui)
-
-        -- Always use the current server's job ID — no guessing needed
-        local jobId = tostring(game.JobId)
-
-        if money then
-            sendToWebhook(matched, money, jobId)
-        else
-            sendToWebhook(matched, nil, jobId)
-        end
-    end
+    local money = findMoneyNearby(gui)
+    local jobId = tostring(game.JobId)
+    recordSteal(matched, money, jobId)
 end
 
 local function monitorText(gui)
@@ -233,14 +234,12 @@ end
 
 local function applyMonitoring(container, isInitialScan)
     if isDevConsole(container) then return end
-
     for _, descendant in ipairs(container:GetDescendants()) do
         if not isDevConsole(descendant) then
             checkForBrainrot(descendant, isInitialScan)
             monitorText(descendant)
         end
     end
-
     container.DescendantAdded:Connect(function(descendant)
         if isDevConsole(descendant) then return end
         checkForBrainrot(descendant, false)
@@ -248,6 +247,5 @@ local function applyMonitoring(container, isInitialScan)
     end)
 end
 
-print("🔍 Scanning existing GUIs (no spam)...")
 applyMonitoring(CoreGui, true)
 applyMonitoring(PlayerGui, true)
