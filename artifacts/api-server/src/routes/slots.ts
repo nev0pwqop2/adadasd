@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, slotsTable, usersTable, paymentsTable, preordersTable, bidsTable, couponsTable, stealsTable } from "@workspace/db";
-import { eq, and, sql, inArray, lte, desc } from "drizzle-orm";
+import { eq, and, sql, inArray, lte, desc, count } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { getSettings } from "../lib/settings.js";
 import { isLuarmorConfigured, createLuarmorUser, deleteLuarmorUser, getLuarmorUsers, resetLuarmorHwid } from "../lib/luarmor.js";
@@ -387,11 +387,21 @@ router.get("/renters", async (req, res) => {
       db.select().from(usersTable).where(inArray(usersTable.id, userIds)),
       db.select().from(paymentsTable)
         .where(and(inArray(paymentsTable.userId, userIds), eq(paymentsTable.status, "completed"))),
-      // Get all steal rows for these users' discord IDs
+      // Get top 5 steals per user + count — window function avoids fetching all rows
       (async () => {
         const discordIds = (await db.select({ discordId: usersTable.discordId }).from(usersTable).where(inArray(usersTable.id, userIds))).map(u => u.discordId);
         if (!discordIds.length) return [];
-        return db.select().from(stealsTable).where(inArray(stealsTable.discordId, discordIds)).orderBy(desc(stealsTable.moneyPerSec));
+        const rows = await db.execute(sql`
+          SELECT discord_id, brainrot_name, money_per_sec, image_url, count_per_user
+          FROM (
+            SELECT discord_id, brainrot_name, money_per_sec, image_url,
+              COUNT(*) OVER (PARTITION BY discord_id) AS count_per_user,
+              ROW_NUMBER() OVER (PARTITION BY discord_id ORDER BY CAST(money_per_sec AS NUMERIC) DESC) AS rn
+            FROM steals
+            WHERE discord_id = ANY(${sql.raw(`ARRAY[${discordIds.map(id => `'${id.replace(/'/g, "''")}'`).join(',')}]`)})
+          ) t WHERE rn <= 5
+        `);
+        return rows.rows as Array<{ discord_id: string; brainrot_name: string; money_per_sec: string; image_url: string | null; count_per_user: string }>;
       })(),
     ]);
 
@@ -404,12 +414,15 @@ router.get("/renters", async (req, res) => {
       if (!isNaN(amt)) depositedMap[p.userId] = (depositedMap[p.userId] ?? 0) + amt;
     }
 
-    // Group steals by discordId
+    // Group steals by discordId — rows are already top-5 per user from the window query
     type StealRow = { brainrotName: string; moneyPerSec: string; imageUrl: string | null };
     const stealsMap: Record<string, StealRow[]> = {};
+    const stealCountMap: Record<string, number> = {};
     for (const s of allSteals) {
-      if (!stealsMap[s.discordId]) stealsMap[s.discordId] = [];
-      stealsMap[s.discordId].push({ brainrotName: s.brainrotName, moneyPerSec: s.moneyPerSec, imageUrl: s.imageUrl ?? null });
+      const did = s.discord_id as string;
+      if (!stealsMap[did]) stealsMap[did] = [];
+      stealsMap[did].push({ brainrotName: s.brainrot_name as string, moneyPerSec: s.money_per_sec as string, imageUrl: (s.image_url as string | null) ?? null });
+      stealCountMap[did] = parseInt(String(s.count_per_user), 10) || 0;
     }
 
     const renters = activeSlots.map(slot => {
@@ -428,7 +441,7 @@ router.get("/renters", async (req, res) => {
         expiresAt: slot.expiresAt,
         isPaused: slot.isPaused,
         pausedAt: slot.pausedAt ?? null,
-        stealCount: userSteals.length,
+        stealCount: stealCountMap[discordId] ?? userSteals.length,
         totalDeposited: parseFloat((depositedMap[slot.userId ?? ''] ?? 0).toFixed(2)),
         bestSteal,
         otherSteals,
@@ -455,11 +468,21 @@ router.get("/public-settings", async (req, res) => {
 
 router.get("/leaderboard", async (req, res) => {
   try {
-    const [users, completedPayments, allSteals] = await Promise.all([
+    const [users, completedPayments, allStealsRaw] = await Promise.all([
       db.select().from(usersTable),
       db.select().from(paymentsTable).where(eq(paymentsTable.status, "completed")),
-      db.select().from(stealsTable).orderBy(desc(stealsTable.moneyPerSec)),
+      // Top 5 per user + count — window function avoids fetching all rows
+      db.execute(sql`
+        SELECT discord_id, brainrot_name, money_per_sec, image_url, count_per_user
+        FROM (
+          SELECT discord_id, brainrot_name, money_per_sec, image_url,
+            COUNT(*) OVER (PARTITION BY discord_id) AS count_per_user,
+            ROW_NUMBER() OVER (PARTITION BY discord_id ORDER BY CAST(money_per_sec AS NUMERIC) DESC) AS rn
+          FROM steals
+        ) t WHERE rn <= 5
+      `),
     ]);
+    const allSteals = allStealsRaw.rows as Array<{ discord_id: string; brainrot_name: string; money_per_sec: string; image_url: string | null; count_per_user: string }>;
 
     const userMap = Object.fromEntries(users.map((u) => [u.id, u]));
     const discordToUserId = Object.fromEntries(users.map((u) => [u.discordId, u.id]));
@@ -471,12 +494,14 @@ router.get("/leaderboard", async (req, res) => {
       if (!isNaN(amt)) depositedMap[p.userId] = (depositedMap[p.userId] ?? 0) + amt;
     }
 
-    // Group steals by discordId (already sorted by moneyPerSec desc)
+    // Group steals by discordId — rows are already top-5 per user from the window query
     type StealRow = { brainrotName: string; moneyPerSec: string; imageUrl: string | null };
     const stealsMap: Record<string, StealRow[]> = {};
+    const stealCountMap: Record<string, number> = {};
     for (const s of allSteals) {
-      if (!stealsMap[s.discordId]) stealsMap[s.discordId] = [];
-      stealsMap[s.discordId].push({ brainrotName: s.brainrotName, moneyPerSec: s.moneyPerSec, imageUrl: s.imageUrl ?? null });
+      if (!stealsMap[s.discord_id]) stealsMap[s.discord_id] = [];
+      stealsMap[s.discord_id].push({ brainrotName: s.brainrot_name, moneyPerSec: s.money_per_sec, imageUrl: s.image_url ?? null });
+      stealCountMap[s.discord_id] = parseInt(String(s.count_per_user), 10) || 0;
     }
 
     // Collect all unique user IDs — from payments and steals
@@ -494,7 +519,7 @@ router.get("/leaderboard", async (req, res) => {
         username: u.username ?? "Unknown",
         discordId: u.discordId ?? "",
         avatar: u.avatar ?? null,
-        stealCount: userSteals.length,
+        stealCount: stealCountMap[u.discordId] ?? userSteals.length,
         bestStealMoneyPerSec: bestSteal ? bestSteal.moneyPerSec : null,
         bestStealName: bestSteal ? bestSteal.brainrotName : null,
         bestStealImageUrl: bestSteal ? bestSteal.imageUrl : null,
