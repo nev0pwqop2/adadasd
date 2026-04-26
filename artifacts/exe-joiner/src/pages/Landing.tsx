@@ -107,6 +107,24 @@ const CAT_STYLES: Record<string, string> = {
   DUEL:       'bg-red-500/15 text-red-300 border-red-500/25',
 };
 
+function nameColor(name: string): string {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  const hue = h % 360;
+  return `hsl(${hue},60%,60%)`;
+}
+
+function BrainrotAvatar({ name }: { name: string }) {
+  const color = nameColor(name);
+  const initials = name.replace(/^\d+x\s*/, '').trim().slice(0, 2).toUpperCase();
+  return (
+    <div className="w-6 h-6 rounded-md flex-shrink-0 flex items-center justify-center text-[8px] font-bold"
+      style={{ background: color + '22', border: `1px solid ${color}44`, color }}>
+      {initials}
+    </div>
+  );
+}
+
 function CategoryBadge({ cat }: { cat: string }) {
   return (
     <span className={`text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded border ${CAT_STYLES[cat] ?? CAT_STYLES.MIDLIGHTS}`}>
@@ -280,7 +298,7 @@ export default function Landing() {
                     <div className="space-y-2">
                       {group.entries.map((e, i) => (
                         <div key={i} className="flex items-center gap-2.5">
-                          <div className="w-6 h-6 rounded-md bg-white/8 flex-shrink-0" />
+                          <BrainrotAvatar name={e.name} />
                           <div className="flex-1 min-w-0">
                             <p className="text-xs font-medium text-white/80 truncate">{e.name}</p>
                           </div>
