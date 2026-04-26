@@ -1,0 +1,187 @@
+local Players = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
+local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local WEBHOOK_CONFIG = {
+    webhookUrl = "https://discord.com/api/webhooks/1496254455233122425/YSEswlUC5G5OSY4TdHTaFq8UsrFjgQX-xpKeVE6yP5N03AjfY7VNYBOyOTiPCK4R1SVP",
+    embedColor = 0xFFFF00,
+    timeout = 10,
+}
+
+local LocalPlayer = Players.LocalPlayer
+local processedBrainrots = {}
+
+local function getDiscordId()
+    if LRM_LinkedDiscordID and tostring(LRM_LinkedDiscordID) ~= "" then
+        return tostring(LRM_LinkedDiscordID)
+    end
+
+    local ok, id = pcall(function()
+        local g = getgenv and getgenv() or nil
+        if g and g.LRM_LinkedDiscordID then return tostring(g.LRM_LinkedDiscordID) end
+        if _G and _G.LRM_LinkedDiscordID then return tostring(_G.LRM_LinkedDiscordID) end
+        if shared and shared.LRM_LinkedDiscordID then return tostring(shared.LRM_LinkedDiscordID) end
+        return nil
+    end)
+
+    return (ok and id) or nil
+end
+
+local function getBrainrotImage(brainrotName)
+    local encoded = brainrotName:gsub(" ", "%%20")
+    local url = ("https://stealabrainrot.fandom.com/api.php?action=query&prop=pageimages&format=json&piprop=thumbnail&pithumbsize=500&titles=%s"):format(encoded)
+
+    local ok, result = pcall(function()
+        local response = http_request({ Url = url, Method = "GET" })
+        if response and response.StatusCode == 200 then
+            local data = HttpService:JSONDecode(response.Body)
+            local pages = data and data.query and data.query.pages
+            if pages then
+                for _, page in pairs(pages) do
+                    if page.thumbnail and page.thumbnail.source then
+                        return page.thumbnail.source
+                    end
+                end
+            end
+        end
+        return nil
+    end)
+    return ok and result or nil
+end
+
+local function sendWebhook(brainrotName, moneyPerSec, imageUrl)
+    local discordId = getDiscordId() or "unknown"
+    local discordPing = (discordId ~= "unknown") and ("<@" .. discordId .. ">") or "N/A"
+    local timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
+
+    pcall(function()
+        if LRM_SEND_WEBHOOK then
+            LRM_SEND_WEBHOOK(
+                "https://discord.com/api/webhooks/1496254455233122425/YSEswlUC5G5OSY4TdHTaFq8UsrFjgQX-xpKeVE6yP5N03AjfY7VNYBOyOTiPCK4R1SVP",
+                {
+                    username = "Steal detector",
+                    embeds = {
+                        {
+                            title = "Brainrot Stolen",
+                            color = 0xFFFF00,
+                            description = "Stolen by " .. discordPing,
+                            fields = {
+                                {
+                                    name = "Brainrot",
+                                    value = "```\n" .. tostring(brainrotName) .. " | " .. tostring(moneyPerSec) .. "/sec\n```",
+                                    inline = false
+                                },
+                            },
+                            footer = {
+                                text = "Successfully stolen"
+                            },
+                            timestamp = timestamp
+                        }
+                    }
+                }
+            )
+            return
+        end
+
+        -- Fallback
+        local embed = {
+            title = "Brainrot Stolen",
+            color = 0xFFFF00,
+            description = "Stolen by <@" .. discordId .. ">",
+            fields = {
+                {
+                    name = "Brainrot",
+                    value = "```\n" .. tostring(brainrotName) .. " | " .. tostring(moneyPerSec) .. "/sec\n```",
+                    inline = false
+                },
+            },
+            footer = {
+                text = "Successfully stolen"
+            },
+            timestamp = timestamp,
+        }
+
+        if imageUrl then
+            embed.thumbnail = { url = imageUrl }
+        end
+
+        local payload = {
+            username = "Steal detector",
+            embeds = { embed }
+        }
+
+        local body = HttpService:JSONEncode(payload)
+        http_request({
+            Url = WEBHOOK_CONFIG.webhookUrl,
+            Method = "POST",
+            Headers = { ["Content-Type"] = "application/json" },
+            Body = body
+        })
+    end)
+end
+
+local Packages = ReplicatedStorage:WaitForChild("Packages", 30)
+if not Packages then return end
+
+local Synchronizer = Packages:WaitForChild("Synchronizer", 30)
+if not Synchronizer then return end
+
+local Channel = Synchronizer:WaitForChild("Channel", 30)
+if not Channel then return end
+
+local StealEvent = Channel:FindFirstChild(LocalPlayer.Name)
+if not StealEvent then return end
+
+StealEvent.OnClientEvent:Connect(function(data)
+    for _, entry in pairs(data) do
+        if entry[1] == "StealHistory" and entry[2] == "ArrayInsert" then
+            local info = entry[3]
+            if not info then
+                continue
+            end
+
+            local stealer = info.Stealer
+            local brainrot = info.Brainrot
+
+            if stealer == LocalPlayer.UserId and brainrot and brainrot.Index then
+                if processedBrainrots[brainrot.Index] then
+                    continue
+                end
+                processedBrainrots[brainrot.Index] = true
+
+                local conn
+                local done = false
+
+                task.delay(WEBHOOK_CONFIG.timeout, function()
+                    if not done and conn then
+                        conn:Disconnect()
+                    end
+                end)
+
+                conn = Workspace.Debris.ChildAdded:Connect(function(child)
+                    if done then
+                        return
+                    end
+
+                    local overhead = child:FindFirstChild("AnimalOverhead")
+                    if overhead then
+                        local displayName = overhead:FindFirstChild("DisplayName")
+                        if displayName and displayName.Text == brainrot.Index then
+                            local generation = overhead:FindFirstChild("Generation")
+                            local moneyText = generation and generation.Text or "???"
+
+                            done = true
+                            conn:Disconnect()
+
+                            task.spawn(function()
+                                local imageUrl = getBrainrotImage(brainrot.Index)
+                                sendWebhook(brainrot.Index, moneyText, imageUrl)
+                            end)
+                        end
+                    end
+                end)
+            end
+        end
+    end
+end)
