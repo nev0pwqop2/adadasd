@@ -209,6 +209,39 @@ function RenterCard({ renter, index }: { renter: Renter; index: number }) {
   );
 }
 
+const MOCK_RENTERS: Renter[] = [
+  {
+    slotNumber: 1, username: '505', discordId: '905033435817586749', avatar: null,
+    purchasedAt: new Date(Date.now() - 86400000).toISOString(),
+    expiresAt: new Date(Date.now() + 4 * 60000).toISOString(),
+    isPaused: false, pausedAt: null,
+    stealCount: 5, totalDeposited: 28.00,
+    bestSteal: { brainrotName: 'Burguro And Fryuro', moneyPerSec: '600000000', imageUrl: null },
+    otherSteals: [
+      { brainrotName: 'Bobritto Bandito', moneyPerSec: '310000000', imageUrl: null },
+      { brainrotName: 'Chimpanzini Bananini', moneyPerSec: '180000000', imageUrl: null },
+    ],
+  },
+  {
+    slotNumber: 2, username: '!lucy', discordId: '111111111111111111', avatar: null,
+    purchasedAt: new Date(Date.now() - 43200000).toISOString(),
+    expiresAt: new Date(Date.now() + 5 * 60000).toISOString(),
+    isPaused: false, pausedAt: null,
+    stealCount: 4, totalDeposited: 38.00,
+    bestSteal: { brainrotName: 'Ketupat Kepat', moneyPerSec: '210000000', imageUrl: null },
+    otherSteals: [{ brainrotName: 'Trippi Troppi', moneyPerSec: '95000000', imageUrl: null }],
+  },
+  {
+    slotNumber: 3, username: 'vez', discordId: '222222222222222222', avatar: null,
+    purchasedAt: new Date(Date.now() - 21600000).toISOString(),
+    expiresAt: new Date(Date.now() + 6 * 60000).toISOString(),
+    isPaused: false, pausedAt: null,
+    stealCount: 4, totalDeposited: 32.00,
+    bestSteal: { brainrotName: 'Dragon Cannelloni', moneyPerSec: '250000000', imageUrl: null },
+    otherSteals: [],
+  },
+];
+
 export default function RentersPage() {
   const { data, isLoading } = useQuery({
     queryKey: ['renters-public'],
