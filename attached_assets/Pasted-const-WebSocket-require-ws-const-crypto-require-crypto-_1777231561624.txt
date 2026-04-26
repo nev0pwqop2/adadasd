@@ -162,26 +162,16 @@ function formatLog(source, data) {
       duel:        data.duel_mode === true || data.duel_mode === 1 || false,
     };
   } else if (source === 'monraradar') {
-    // Handle brainrots array format
-    if (Array.isArray(data?.brainrots) && data.brainrots.length) {
-      brainrots = data.brainrots;
-      jobId = data.jobId || data.job_id || data.server_id || null;
-      duelMode = brainrots.some(b => b.duel > 0);
-    // Handle single pet format
-    } else if (data?.pet_name || data?.name) {
-      const name = data.pet_name || data.name;
-      const val = Number(data.pet_value || data.value || data.money_per_sec || 0);
-      const fmt = fmtValue(val, data.pet_value_formatted);
-      return {
-        bestName:    `1x ${name}`,
-        bestValue:   val,
-        serverID:    data.server_id || data.job_id || data.jobId || null,
-        allBrainrots:`1x ${name} (${fmt})`,
-        duel:        data.duel_mode === true || data.duel_mode === 1 || false,
-      };
-    } else {
-      return null;
-    }
+    if (data?.type !== 'job' || !data?.name) return null;
+    const val = Number(data.money) || 0;
+    const fmt = fmtValue(val, null);
+    return {
+      bestName:    `1x ${data.name}`,
+      bestValue:   val,
+      serverID:    data.job_id || null,
+      allBrainrots:`1x ${data.name} (${fmt})`,
+      duel:        data.is_duel === true || false,
+    };
   }
 
   if (!brainrots || !brainrots.length) return null;
