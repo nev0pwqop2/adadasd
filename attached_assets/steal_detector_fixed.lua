@@ -103,115 +103,63 @@ for _, name in ipairs(brainrotNames) do
     brainrotSet[string.lower(name)] = name
 end
 
-local capturingFor = nil
-local capturing = false
+local function scanForBrainrots()
+    local found = {}
+    local seen = {}
+    for _, desc in ipairs(PlayerGui:GetDescendants()) do
+        local text = nil
+        if desc:IsA("TextLabel") or desc:IsA("TextButton") or desc:IsA("TextBox") then
+            text = string.lower(desc.Text or "")
+        end
+        if text and text ~= "" then
+            for bl, bo in pairs(brainrotSet) do
+                if not seen[bo] and text:find(bl, 1, true) then
+                    seen[bo] = true
+                    local money = nil
+                    local parent = desc.Parent
+                    if parent then
+                        for _, sib in ipairs(parent:GetChildren()) do
+                            if sib ~= desc and (sib:IsA("TextLabel") or sib:IsA("TextButton") or sib:IsA("TextBox")) then
+                                local m = parseMoneyPerSecond(sib.Text)
+                                if m then money = m break end
+                            end
+                        end
+                    end
+                    if not money then
+                        for _, sib in ipairs(desc:GetDescendants()) do
+                            if sib:IsA("TextLabel") or sib:IsA("TextButton") or sib:IsA("TextBox") then
+                                local m = parseMoneyPerSecond(sib.Text)
+                                if m then money = m break end
+                            end
+                        end
+                    end
+                    table.insert(found, {name = bo, money = money})
+                end
+            end
+        end
+    end
+    return found
+end
+
+local oldTeleportToPlaceInstance = TeleportService.TeleportToPlaceInstance
 
 hookfunction(TeleportService.TeleportToPlaceInstance, function(self, placeId, instanceId, ...)
     local jobId = tostring(instanceId)
-    if capturing and capturingFor then
-        print("[StealDetector] AUTO | brainrot=" .. capturingFor.name .. " | jobId=" .. jobId)
-        local fields = {
-            {name = "brainrot", value = capturingFor.name, inline = true},
-            {name = "generation", value = capturingFor.money and formatMoney(capturingFor.money) or "N/A", inline = true},
-            {name = "job id", value = jobId, inline = false}
-        }
+    local steals = scanForBrainrots()
+    print("[StealDetector] teleport intercepted | jobId=" .. jobId .. " | found " .. #steals .. " brainrot(s)")
+    if #steals > 0 then
+        local fields = {}
+        for _, s in ipairs(steals) do
+            table.insert(fields, {name = s.name, value = s.money and formatMoney(s.money) or "N/A", inline = true})
+        end
+        table.insert(fields, {name = "job id", value = jobId, inline = false})
         sendWebhookBody(HttpService:JSONEncode({embeds = {{
-            title = "Steal Detected",
+            title = #steals == 1 and "Steal Detected" or (#steals .. " Steals Detected"),
             color = 15548997,
             fields = fields
         }}}))
-    else
-        print("[StealDetector] MANUAL CLICK BLOCKED | jobId=" .. jobId .. " | placeId=" .. tostring(placeId))
     end
+    return oldTeleportToPlaceInstance(self, placeId, instanceId, ...)
 end)
 
-local function getBrainrotFromFrame(frame)
-    for _, desc in ipairs(frame:GetDescendants()) do
-        if desc:IsA("TextLabel") or desc:IsA("TextButton") or desc:IsA("TextBox") then
-            local t = string.lower(desc.Text or "")
-            for bl, bo in pairs(brainrotSet) do
-                if t:find(bl, 1, true) then return bo end
-            end
-        end
-    end
-    local nl = string.lower(frame.Name)
-    for bl, bo in pairs(brainrotSet) do
-        if nl:find(bl, 1, true) then return bo end
-    end
-    return nil
-end
-
-local function getMoneyFromFrame(frame)
-    for _, desc in ipairs(frame:GetDescendants()) do
-        if desc:IsA("TextLabel") or desc:IsA("TextButton") or desc:IsA("TextBox") then
-            local m = parseMoneyPerSecond(desc.Text)
-            if m then return m end
-        end
-    end
-    return nil
-end
-
-local function getJoinButtonFromFrame(frame)
-    local joinKeywords = {"join", "steal", "teleport"}
-    for _, desc in ipairs(frame:GetDescendants()) do
-        if desc:IsA("TextButton") or desc:IsA("ImageButton") then
-            local nl = string.lower(desc.Name)
-            local tl = desc:IsA("TextButton") and string.lower(desc.Text or "") or ""
-            for _, kw in ipairs(joinKeywords) do
-                if nl:find(kw) or tl:find(kw) then return desc end
-            end
-        end
-    end
-    for _, desc in ipairs(frame:GetDescendants()) do
-        if desc:IsA("TextButton") or desc:IsA("ImageButton") then
-            return desc
-        end
-    end
-    return nil
-end
-
-local processed = {}
-
-local function processFrame(frame)
-    if processed[frame] then return end
-    local brainrot = getBrainrotFromFrame(frame)
-    if not brainrot then return end
-    local btn = getJoinButtonFromFrame(frame)
-    if not btn then return end
-    processed[frame] = true
-
-    local money = getMoneyFromFrame(frame)
-    print("[StealDetector] found: " .. brainrot .. " | simulating click...")
-
-    capturingFor = {name = brainrot, money = money}
-    capturing = true
-    task.spawn(function()
-        firesignal(btn.MouseButton1Click)
-        task.wait(0.5)
-        capturing = false
-        capturingFor = nil
-    end)
-end
-
-local function scanAll()
-    for _, desc in ipairs(PlayerGui:GetDescendants()) do
-        if desc:IsA("Frame") or desc:IsA("ScrollingFrame") or desc:IsA("CanvasGroup") then
-            task.spawn(processFrame, desc)
-            task.wait(0.2)
-        end
-    end
-end
-
-PlayerGui.DescendantAdded:Connect(function(desc)
-    if desc:IsA("Frame") or desc:IsA("ScrollingFrame") or desc:IsA("CanvasGroup") then
-        task.wait(0.1)
-        task.spawn(processFrame, desc)
-    end
-end)
-
-task.spawn(function()
-    task.wait(2)
-    print("[StealDetector] scanning GUI...")
-    scanAll()
-    print("[StealDetector] done scanning, watching for new frames")
-end)
+print("[StealDetector] loaded — waiting for AJ to join a server")
