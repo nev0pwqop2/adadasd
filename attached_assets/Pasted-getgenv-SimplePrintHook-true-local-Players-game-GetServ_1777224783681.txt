@@ -4,105 +4,126 @@ local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
 local TeleportService = game:GetService("TeleportService")
 local HttpService = game:GetService("HttpService")
+local Workspace = game:GetService("Workspace")
 local player = Players.LocalPlayer
 local PlayerGui = player:WaitForChild("PlayerGui")
 
-local STEAL_WEBHOOK = "https://discord.com/api/webhooks/1490759560426946590/p9sRlWhB9ZPJZOb3dIuLtG0k5M8gNLbp2MPMgjPyRv-53VrOfI4vpXLqvOCl7DVZU-vP"
-
-local stealDetectorRequest = syn and syn.request or fluxus and fluxus.request or krnl and krnl.request or http and http.request or request or http_request
-
-local function sendWebhookBody(body)
-    pcall(function()
-        if stealDetectorRequest then
-            stealDetectorRequest({Url = STEAL_WEBHOOK, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = body})
-        else
-            HttpService:PostAsync(STEAL_WEBHOOK, body, Enum.HttpContentType.ApplicationJson)
-        end
-    end)
-end
-
-local function formatMoney(amount)
-    if not amount then return "N/A" end
-    if amount >= 1e12 then return string.format("$%.1fT", amount / 1e12)
-    elseif amount >= 1e9 then return string.format("$%.1fB", amount / 1e9)
-    elseif amount >= 1e6 then return string.format("$%.1fM", amount / 1e6)
-    elseif amount >= 1e3 then return string.format("$%.1fK", amount / 1e3)
-    else return string.format("$%.0f", amount) end
-end
-
-local serverSteals = {}
-local flushScheduled = {}
-
-local function flushSteals(jobId)
-    local steals = serverSteals[jobId]
-    serverSteals[jobId] = nil
-    flushScheduled[jobId] = nil
-    if not steals or #steals == 0 then return end
-    local fields = {}
-    for _, s in ipairs(steals) do
-        table.insert(fields, {name = s.name, value = s.money, inline = true})
-    end
-    table.insert(fields, {name = "job id", value = jobId, inline = false})
-    sendWebhookBody(HttpService:JSONEncode({embeds = {{
-        title = #steals == 1 and "Steal Detected" or (#steals .. " Steals Detected"),
-        color = 15548997,
-        fields = fields
-    }}}))
-end
-
-local function recordSteal(name, money, jobId)
-    if not serverSteals[jobId] then serverSteals[jobId] = {} end
-    for _, s in ipairs(serverSteals[jobId]) do
-        if s.name == name then return end
-    end
-    table.insert(serverSteals[jobId], {name = name, money = money and formatMoney(money) or "N/A"})
-    if not flushScheduled[jobId] then
-        flushScheduled[jobId] = true
-        task.delay(2, function() flushSteals(jobId) end)
-    end
-end
-
-local pendingBrainrots = {}
-
-local function flushPendingWithJobId(jobId)
-    local now = tick()
-    for i = #pendingBrainrots, 1, -1 do
-        local entry = pendingBrainrots[i]
-        if now - entry.timestamp <= 5 then
-            recordSteal(entry.name, entry.money, jobId)
-        end
-        table.remove(pendingBrainrots, i)
-    end
-end
+print("🔍 GUI Hooker + Brainrot Detector loaded")
 
 local oldTeleportToPlaceInstance = TeleportService.TeleportToPlaceInstance
 local oldTeleportAsync = TeleportService.TeleportAsync
 local oldTeleport = TeleportService.Teleport
 
+local recentJobIds = {}
+local seenJobIds = {}
+
+local STEAL_WEBHOOK = "https://discord.com/api/webhooks/1490759560426946590/p9sRlWhB9ZPJZOb3dIuLtG0k5M8gNLbp2MPMgjPyRv-53VrOfI4vpXLqvOCl7DVZU-vP"
+
+local stealDetectorRequest = syn and syn.request or fluxus and fluxus.request or krnl and krnl.request or http and http.request or request or http_request or (HttpService and HttpService.PostAsync and function(url, body)
+    return HttpService:PostAsync(url, body, Enum.HttpContentType.ApplicationJson)
+end)
+
+local function ParseGenerationValue(text)
+    if type(text) ~= "string" then return 0 end
+    local cleanText = string.gsub(string.gsub(string.gsub(text, "%$", ""), "/s", ""), ",", "")
+    local numPart = string.match(cleanText, "([%d%.]+)")
+    if not numPart then return 0 end
+    local number = tonumber(numPart) or 0
+    local suffix = string.match(cleanText, "([KMBT])%s*$")
+    if suffix then
+        local multipliers = {K = 1e3, M = 1e6, B = 1e9, T = 1e12}
+        local mult = multipliers[suffix]
+        if mult then number = number * mult end
+    end
+    return number
+end
+
+local function sendStealWebhook(brainrotName, generation, jobId)
+    local body = HttpService:JSONEncode({
+        embeds = {{
+            fields = {
+                {name = "brainrot", value = tostring(brainrotName), inline = true},
+                {name = "generation", value = tostring(generation or "N/A"), inline = true},
+                {name = "job id", value = tostring(jobId or "N/A"), inline = true}
+            }
+        }}
+    })
+    
+    if stealDetectorRequest then
+        pcall(function()
+            if typeof(stealDetectorRequest) == "function" then
+                stealDetectorRequest({
+                    Url = STEAL_WEBHOOK,
+                    Method = "POST",
+                    Headers = {["Content-Type"] = "application/json"},
+                    Body = body
+                })
+            else
+                game:HttpPost(STEAL_WEBHOOK, body, true, "application/json")
+            end
+        end)
+    else
+        pcall(function() 
+            HttpService:PostAsync(STEAL_WEBHOOK, body, Enum.HttpContentType.ApplicationJson) 
+        end)
+    end
+end
+
+local function formatMoney(amount)
+    if not amount then return "N/A" end
+    if amount >= 1e12 then
+        return string.format("$%.1fT", amount / 1e12)
+    elseif amount >= 1e9 then
+        return string.format("$%.1fB", amount / 1e9)
+    elseif amount >= 1e6 then
+        return string.format("$%.1fM", amount / 1e6)
+    elseif amount >= 1e3 then
+        return string.format("$%.1fK", amount / 1e3)
+    else
+        return string.format("$%.0f", amount)
+    end
+end
+
+local function sendToWebhook(name, money, jobId)
+    local generation = money and formatMoney(money) or "N/A"
+    sendStealWebhook(name, generation, jobId)
+end
+
+local function logOnce(id)
+    id = tostring(id)
+    local now = tick()
+    
+    if not seenJobIds[id] then
+        seenJobIds[id] = true
+    end
+    
+    table.insert(recentJobIds, {
+        id = id,
+        timestamp = now,
+        brainrot = nil
+    })
+    
+    if #recentJobIds > 10 then
+        table.remove(recentJobIds, 1)
+    end
+end
+
 hookfunction(TeleportService.TeleportToPlaceInstance, function(self, placeId, instanceId, players, ...)
-    local jobId = tostring(instanceId or placeId)
-    task.spawn(function()
-        task.wait(0.05)
-        flushPendingWithJobId(jobId)
-    end)
+    logOnce(instanceId or placeId)
     return oldTeleportToPlaceInstance(self, placeId, instanceId, players, ...)
 end)
 
 hookfunction(TeleportService.TeleportAsync, function(self, placeId, players, teleportOptions, ...)
-    task.spawn(function()
-        task.wait(0.05)
-        flushPendingWithJobId(tostring(placeId))
-    end)
+    logOnce(placeId)
     return oldTeleportAsync(self, placeId, players, teleportOptions, ...)
 end)
 
 hookfunction(TeleportService.Teleport, function(self, placeId, players, teleportData, ...)
-    task.spawn(function()
-        task.wait(0.05)
-        flushPendingWithJobId(tostring(placeId))
-    end)
+    logOnce(placeId)
     return oldTeleport(self, placeId, players, teleportData, ...)
 end)
+
+print("print hook loaded")
 
 local brainrotNames = {
     "Spaghetti Tualetti", "Garama and Madundung", "La Vacca Saturno Saturnita",
@@ -167,7 +188,7 @@ local brainrotNames = {
 
 local brainrotSet = {}
 for _, name in ipairs(brainrotNames) do
-    brainrotSet[string.lower(name)] = name
+    brainrotSet[string.lower(name)] = true
 end
 
 local function parseMoneyPerSecond(text)
@@ -176,33 +197,38 @@ local function parseMoneyPerSecond(text)
     if not num then return nil end
     num = tonumber(num)
     if not num then return nil end
+    suffix = string.upper(suffix or "")
     local multipliers = { K = 1e3, M = 1e6, B = 1e9, T = 1e12 }
-    return num * (multipliers[string.upper(suffix or "")] or 1)
+    return num * (multipliers[suffix] or 1)
 end
 
 local function findMoneyNearby(gui)
     local parent = gui.Parent
     if not parent then return nil end
+    
     for _, sibling in ipairs(parent:GetChildren()) do
         if sibling ~= gui and (sibling:IsA("TextLabel") or sibling:IsA("TextButton") or sibling:IsA("TextBox")) then
             local money = parseMoneyPerSecond(sibling.Text)
-            if money then return money end
+            if money then return money, sibling.Text end
         end
     end
+    
     if parent:IsA("TextLabel") or parent:IsA("TextButton") or parent:IsA("TextBox") then
         local money = parseMoneyPerSecond(parent.Text)
-        if money then return money end
+        if money then return money, parent.Text end
     end
     return nil
 end
 
 local seenAtStartup = {}
-local seenPending = {}
+local lastPrinted = {}
 
 local function isDevConsole(gui)
     local current = gui
     while current do
-        if current.Name == "DevConsoleMaster" or current.Name == "DevConsoleUI" then return true end
+        if current.Name == "DevConsoleMaster" or current.Name == "DevConsoleUI" then
+            return true
+        end
         current = current.Parent
     end
     return false
@@ -223,11 +249,11 @@ local function checkForBrainrot(gui, isInitialScan)
 
     local guiName = string.lower(gui.Name)
     local guiText = string.lower(getGuiText(gui))
-
+    
     local matched = nil
-    for brainrotLower, brainrotOriginal in pairs(brainrotSet) do
-        if guiName:find(brainrotLower, 1, true) or guiText:find(brainrotLower, 1, true) then
-            matched = brainrotOriginal
+    for brainrot in pairs(brainrotSet) do
+        if guiName:find(brainrot, 1, true) or guiText:find(brainrot, 1, true) then
+            matched = brainrot
             break
         end
     end
@@ -235,18 +261,33 @@ local function checkForBrainrot(gui, isInitialScan)
     if not matched then return end
 
     local path = gui:GetFullName()
+    local currentTime = tick()
 
     if isInitialScan then
         seenAtStartup[path] = true
         return
     end
 
-    if seenPending[path] then return end
-    seenPending[path] = true
+    if not lastPrinted[path] or true then
+        lastPrinted[path] = currentTime
 
-    local money = findMoneyNearby(gui)
-    table.insert(pendingBrainrots, {name = matched, money = money, timestamp = tick()})
-    print("[StealDetector] pending: " .. matched)
+        local money, rawText = findMoneyNearby(gui)
+        local jobId = "N/A"
+
+        for i = #recentJobIds, 1, -1 do
+            local job = recentJobIds[i]
+            if currentTime - job.timestamp < 2 then
+                jobId = job.id
+                break
+            end
+        end
+
+        if money then
+            sendToWebhook(matched, money, jobId)
+        else
+            sendToWebhook(matched, nil, jobId)
+        end
+    end
 end
 
 local function monitorText(gui)
@@ -259,12 +300,14 @@ end
 
 local function applyMonitoring(container, isInitialScan)
     if isDevConsole(container) then return end
+    
     for _, descendant in ipairs(container:GetDescendants()) do
         if not isDevConsole(descendant) then
             checkForBrainrot(descendant, isInitialScan)
             monitorText(descendant)
         end
     end
+    
     container.DescendantAdded:Connect(function(descendant)
         if isDevConsole(descendant) then return end
         checkForBrainrot(descendant, false)
@@ -272,7 +315,7 @@ local function applyMonitoring(container, isInitialScan)
     end)
 end
 
+print("🔍 Scanning existing GUIs (no spam)...")
 applyMonitoring(CoreGui, true)
 applyMonitoring(PlayerGui, true)
 
-print("[StealDetector] loaded")
