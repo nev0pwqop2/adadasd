@@ -2,13 +2,19 @@ import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import Navbar from '@/components/Navbar';
-import { Clock } from 'lucide-react';
+import { Clock, ChevronDown, ChevronUp } from 'lucide-react';
 
 async function apiFetch<T>(path: string): Promise<T> {
   const res = await fetch(`${import.meta.env.BASE_URL}${path}`);
   if (!res.ok) throw new Error(`Request failed: ${res.status}`);
   return res.json();
 }
+
+type StealInfo = {
+  brainrotName: string;
+  moneyPerSec: string;
+  imageUrl: string | null;
+};
 
 type Renter = {
   slotNumber: number;
@@ -19,6 +25,10 @@ type Renter = {
   expiresAt: string | null;
   isPaused: boolean;
   pausedAt: string | null;
+  stealCount: number;
+  totalDeposited: number;
+  bestSteal: StealInfo | null;
+  otherSteals: StealInfo[];
 };
 
 function formatMs(ms: number): string {
@@ -29,8 +39,20 @@ function formatMs(ms: number): string {
   return `${m}m`;
 }
 
+function fmtMoney(n: number): string {
+  if (n >= 1e9) return `$${(n / 1e9).toFixed(1)}B/s`;
+  if (n >= 1e6) return `$${(n / 1e6).toFixed(2)}M/s`;
+  if (n >= 1e3) return `$${(n / 1e3).toFixed(1)}K/s`;
+  return `$${n}/s`;
+}
+
+function fmtStealVal(raw: string): string {
+  const n = parseFloat(raw);
+  if (isNaN(n)) return raw;
+  return fmtMoney(n);
+}
+
 function useTimeLeft(expiresAt: string | null, isPaused: boolean, pausedAt: string | null) {
-  // When paused, the remaining time is frozen at (expiresAt - pausedAt)
   const frozenMs = isPaused && expiresAt && pausedAt
     ? Math.max(0, new Date(expiresAt).getTime() - new Date(pausedAt).getTime())
     : null;
@@ -50,8 +72,36 @@ function useTimeLeft(expiresAt: string | null, isPaused: boolean, pausedAt: stri
   return formatMs(ms);
 }
 
+function BrainrotImage({ imageUrl, name }: { imageUrl: string | null; name: string }) {
+  const [src, setSrc] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!imageUrl) return;
+    setSrc(imageUrl);
+  }, [imageUrl]);
+
+  if (!src) {
+    return (
+      <div className="w-10 h-10 rounded-lg bg-[#f5a623]/10 border border-[#f5a623]/20 flex items-center justify-center flex-shrink-0">
+        <span className="text-[#f5a623] text-xs font-bold">{name[0]?.toUpperCase()}</span>
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={name}
+      onError={() => setSrc(null)}
+      className="w-10 h-10 rounded-lg object-contain bg-black/20 flex-shrink-0"
+    />
+  );
+}
+
 function RenterCard({ renter, index }: { renter: Renter; index: number }) {
   const timeLeft = useTimeLeft(renter.expiresAt, renter.isPaused, renter.pausedAt);
+  const [expanded, setExpanded] = useState(false);
+  const hasMore = renter.otherSteals.length > 0;
 
   return (
     <motion.div
@@ -78,38 +128,83 @@ function RenterCard({ renter, index }: { renter: Renter; index: number }) {
         ) : null}
       </div>
 
-      {/* User row */}
-      <div className="flex items-center gap-3">
+      {/* User */}
+      <div className="flex flex-col items-center gap-2 py-1">
         {renter.avatar ? (
           <img
-            src={`https://cdn.discordapp.com/avatars/${renter.discordId}/${renter.avatar}.webp?size=64`}
+            src={`https://cdn.discordapp.com/avatars/${renter.discordId}/${renter.avatar}.webp?size=80`}
             alt={renter.username}
-            className="w-12 h-12 rounded-full object-cover ring-2 ring-white/8 flex-shrink-0"
+            className="w-16 h-16 rounded-full object-cover ring-2 ring-white/10"
           />
         ) : (
-          <div className="w-12 h-12 rounded-full bg-[#f5a623]/15 border border-[#f5a623]/20 flex items-center justify-center flex-shrink-0">
-            <span className="text-[#f5a623] font-bold text-lg">{renter.username[0]?.toUpperCase()}</span>
+          <div className="w-16 h-16 rounded-full bg-[#f5a623]/15 border border-[#f5a623]/20 flex items-center justify-center">
+            <span className="text-[#f5a623] font-bold text-2xl">{renter.username[0]?.toUpperCase()}</span>
           </div>
         )}
-        <div className="min-w-0">
-          <p className="font-bold text-white text-base truncate">{renter.username}</p>
-          <p className="text-xs text-white/35 truncate">@{renter.username.toLowerCase().replace(/\s+/g, '')}</p>
+        <div className="text-center">
+          <p className="font-bold text-white text-base">{renter.username}</p>
+          <p className="text-xs text-white/35">@{renter.username.toLowerCase().replace(/\s+/g, '')}</p>
         </div>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-2 gap-2">
-        <div className="rounded-xl bg-white/[0.03] border border-white/5 px-3 py-2.5">
-          <p className="text-[10px] uppercase tracking-widest text-white/30 mb-0.5">Slot</p>
-          <p className="font-bold text-white text-sm">#{String(renter.slotNumber).padStart(2, '0')}</p>
+        <div className="rounded-xl bg-white/[0.03] border border-white/5 px-3 py-2.5 text-center">
+          <p className="text-[10px] uppercase tracking-widest text-white/30 mb-0.5">Steals</p>
+          <p className="font-bold text-white text-lg">{renter.stealCount}</p>
         </div>
-        <div className="rounded-xl bg-white/[0.03] border border-white/5 px-3 py-2.5">
-          <p className="text-[10px] uppercase tracking-widest text-white/30 mb-0.5">Since</p>
-          <p className="font-bold text-white text-sm">
-            {renter.purchasedAt ? new Date(renter.purchasedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
+        <div className="rounded-xl bg-white/[0.03] border border-white/5 px-3 py-2.5 text-center">
+          <p className="text-[10px] uppercase tracking-widest text-white/30 mb-0.5">Deposited</p>
+          <p className="font-bold text-[#f5a623] text-lg">
+            ${renter.totalDeposited.toFixed(2)}
           </p>
         </div>
       </div>
+
+      {/* Best steal */}
+      {renter.bestSteal ? (
+        <div className="rounded-xl bg-white/[0.03] border border-white/5 p-3 flex flex-col gap-2">
+          <p className="text-[10px] uppercase tracking-widest text-white/30 font-semibold">Best Steal</p>
+          <div className="flex items-center gap-3">
+            <BrainrotImage imageUrl={renter.bestSteal.imageUrl} name={renter.bestSteal.brainrotName} />
+            <div className="min-w-0">
+              <p className="font-bold text-white text-sm truncate">{renter.bestSteal.brainrotName}</p>
+              <p className="text-xs text-[#f5a623] font-semibold">{fmtStealVal(renter.bestSteal.moneyPerSec)}</p>
+            </div>
+          </div>
+
+          {/* Other steals expandable */}
+          {hasMore && (
+            <>
+              {expanded && (
+                <div className="flex flex-col gap-1.5 mt-1 border-t border-white/5 pt-2">
+                  {renter.otherSteals.map((s, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <BrainrotImage imageUrl={s.imageUrl} name={s.brainrotName} />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-semibold text-white/80 truncate">{s.brainrotName}</p>
+                        <p className="text-[11px] text-white/40">{fmtStealVal(s.moneyPerSec)}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <button
+                onClick={() => setExpanded(v => !v)}
+                className="flex items-center gap-1 text-[11px] text-white/35 hover:text-white/60 transition-colors mt-0.5 self-start"
+              >
+                {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                {expanded ? 'Show less' : `${renter.otherSteals.length} more steal${renter.otherSteals.length > 1 ? 's' : ''}`}
+              </button>
+            </>
+          )}
+        </div>
+      ) : (
+        <div className="rounded-xl bg-white/[0.02] border border-white/5 p-3 text-center">
+          <p className="text-[10px] uppercase tracking-widest text-white/20 mb-1">Best Steal</p>
+          <p className="text-xs text-white/20">No steals yet</p>
+        </div>
+      )}
     </motion.div>
   );
 }
@@ -118,7 +213,7 @@ export default function RentersPage() {
   const { data, isLoading } = useQuery({
     queryKey: ['renters-public'],
     queryFn: () => apiFetch<{ renters: Renter[]; count: number }>('api/slots/renters'),
-    refetchInterval: 10000,
+    refetchInterval: 15000,
   });
 
   const renters = data?.renters ?? [];
@@ -128,21 +223,22 @@ export default function RentersPage() {
       <div className="pointer-events-none fixed inset-0 z-0 bg-[radial-gradient(ellipse_80%_55%_at_50%_100%,hsla(30,65%,18%,0.45),transparent)]" />
       <Navbar current="renters" />
 
-      <div className="relative z-10 max-w-4xl mx-auto w-full px-4 py-12">
+      <div className="relative z-10 max-w-5xl mx-auto w-full px-4 py-12">
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-8">
           <h1 className="text-4xl md:text-5xl font-extrabold text-white mb-3">Our Renters</h1>
-          <p className="text-white/40 text-sm">Active slots.</p>
+          <p className="text-white/40 text-sm">Live slot holders. Best steal and deposits sync from the autojoiner and payments.</p>
         </motion.div>
 
-        {/* Active count */}
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="flex justify-center mb-10">
           <div className="rounded-2xl border border-white/10 bg-[#15100a] px-8 py-4 text-center">
-            <p className="text-xs uppercase tracking-widest text-white/35 mb-1">Active renters</p>
+            <p className="text-xs uppercase tracking-widest text-white/35 mb-1">Active</p>
             <p className="text-4xl font-extrabold text-white">{data?.count ?? 0}</p>
           </div>
         </motion.div>
 
-        {renters.length === 0 ? (
+        {isLoading ? (
+          <div className="text-center py-16 text-white/30 text-sm">Loading renters…</div>
+        ) : renters.length === 0 ? (
           <div className="text-center py-16 text-white/30 text-sm">No active renters right now.</div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

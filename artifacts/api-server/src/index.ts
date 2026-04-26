@@ -215,6 +215,18 @@ async function runMigrations() {
   await step("reviews.payment_id", sql`ALTER TABLE reviews ADD COLUMN IF NOT EXISTS payment_id VARCHAR(36) REFERENCES payments(id) ON DELETE SET NULL`);
   await step("reviews_user_payment_unique", sql`CREATE UNIQUE INDEX IF NOT EXISTS reviews_user_payment_unique ON reviews(user_id, payment_id) WHERE payment_id IS NOT NULL`);
 
+  await step("create steals", sql`
+    CREATE TABLE IF NOT EXISTS steals (
+      id SERIAL PRIMARY KEY,
+      discord_id TEXT NOT NULL,
+      brainrot_name TEXT NOT NULL,
+      money_per_sec NUMERIC(20,2) NOT NULL,
+      image_url TEXT,
+      created_at TIMESTAMP DEFAULT NOW() NOT NULL
+    )
+  `);
+  await step("steals.discord_id_idx", sql`CREATE INDEX IF NOT EXISTS steals_discord_id_idx ON steals (discord_id)`);
+
   logger.info("DB migrations complete");
 }
 

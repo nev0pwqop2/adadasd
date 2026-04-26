@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, slotsTable, usersTable, paymentsTable, preordersTable, bidsTable, couponsTable } from "@workspace/db";
+import { db, slotsTable, usersTable, paymentsTable, preordersTable, bidsTable, couponsTable, stealsTable } from "@workspace/db";
 import { eq, and, sql, inArray, lte, desc } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { getSettings } from "../lib/settings.js";
@@ -377,21 +377,64 @@ router.get("/renters", async (req, res) => {
   try {
     const activeSlots = await db.select().from(slotsTable).where(eq(slotsTable.isActive, true));
     const userIds = activeSlots.map(s => s.userId).filter(Boolean) as string[];
-    const users = userIds.length > 0 ? await db.select().from(usersTable).where(inArray(usersTable.id, userIds)) : [];
+
+    if (!userIds.length) {
+      res.json({ renters: [], count: 0 });
+      return;
+    }
+
+    const [users, allPayments, allSteals] = await Promise.all([
+      db.select().from(usersTable).where(inArray(usersTable.id, userIds)),
+      db.select().from(paymentsTable)
+        .where(and(inArray(paymentsTable.userId, userIds), eq(paymentsTable.status, "completed"))),
+      // Get all steal rows for these users' discord IDs
+      (async () => {
+        const discordIds = (await db.select({ discordId: usersTable.discordId }).from(usersTable).where(inArray(usersTable.id, userIds))).map(u => u.discordId);
+        if (!discordIds.length) return [];
+        return db.select().from(stealsTable).where(inArray(stealsTable.discordId, discordIds)).orderBy(desc(stealsTable.moneyPerSec));
+      })(),
+    ]);
+
     const userMap = Object.fromEntries(users.map(u => [u.id, u]));
+
+    // Sum deposited per userId
+    const depositedMap: Record<string, number> = {};
+    for (const p of allPayments) {
+      const amt = parseFloat(p.amount ?? "0");
+      if (!isNaN(amt)) depositedMap[p.userId] = (depositedMap[p.userId] ?? 0) + amt;
+    }
+
+    // Group steals by discordId
+    type StealRow = { brainrotName: string; moneyPerSec: string; imageUrl: string | null };
+    const stealsMap: Record<string, StealRow[]> = {};
+    for (const s of allSteals) {
+      if (!stealsMap[s.discordId]) stealsMap[s.discordId] = [];
+      stealsMap[s.discordId].push({ brainrotName: s.brainrotName, moneyPerSec: s.moneyPerSec, imageUrl: s.imageUrl ?? null });
+    }
+
     const renters = activeSlots.map(slot => {
       const u = userMap[slot.userId ?? ''];
+      const discordId = u?.discordId ?? '';
+      const userSteals = stealsMap[discordId] ?? [];
+      const bestSteal = userSteals[0] ?? null;
+      const otherSteals = userSteals.slice(1, 5);
+
       return {
         slotNumber: slot.slotNumber,
         username: u?.username ?? 'Unknown',
-        discordId: u?.discordId ?? '',
+        discordId,
         avatar: u?.avatar ?? null,
         purchasedAt: slot.purchasedAt,
         expiresAt: slot.expiresAt,
         isPaused: slot.isPaused,
         pausedAt: slot.pausedAt ?? null,
+        stealCount: userSteals.length,
+        totalDeposited: parseFloat((depositedMap[slot.userId ?? ''] ?? 0).toFixed(2)),
+        bestSteal,
+        otherSteals,
       };
     });
+
     res.json({ renters, count: renters.length });
   } catch (err) {
     req.log.error({ err }, "Failed to fetch renters");

@@ -9,6 +9,8 @@ const PORT               = process.env.PORT || 8080;
 const WORKER_URL         = process.env.WORKER_URL || "https://calm-night-4622.yohalvata.workers.dev";
 const WEBSHARE_PROXY     = process.env.WEBSHARE_PROXY || null;
 const STEAL_WEBHOOK_URL  = process.env.STEAL_WEBHOOK_URL || null;
+const EXE_API_URL        = process.env.EXE_API_URL || null;
+const STEAL_RECORD_SECRET = process.env.STEAL_RECORD_SECRET || null;
 
 let proxyFetch = fetch;
 if (WEBSHARE_PROXY) {
@@ -174,6 +176,24 @@ function encrypt(plaintext) {
     out[i] = inputBuf[i] ^ block[pos];
   }
   return out.toString('hex');
+}
+
+// ── Record steal to the exe-joiner API for the Renters page ──────────────────
+async function recordStealToApi(payload) {
+  if (!EXE_API_URL || !STEAL_RECORD_SECRET) return;
+  const { brainrotName, moneyPerSec, imageUrl, discordId } = payload;
+  if (!brainrotName || !moneyPerSec || !discordId || discordId === 'unknown') return;
+  try {
+    const res = await fetch(`${EXE_API_URL}/api/steals/record`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-steal-secret': STEAL_RECORD_SECRET },
+      body: JSON.stringify({ brainrotName, moneyPerSec, imageUrl, discordId }),
+    });
+    if (!res.ok) console.warn(`⚠️  [steal-record] API returned ${res.status}`);
+    else console.log(`💾 [steal-record] saved → ${discordId}`);
+  } catch (err) {
+    console.error(`❌ [steal-record] ${err.message}`);
+  }
 }
 
 // ── Steal relay: forward Lua steal events to Discord webhook instantly ────────
@@ -347,7 +367,10 @@ wss.on('connection', (ws, req) => {
     ws.on('message', async (raw) => {
       let data;
       try { data = JSON.parse(raw.toString()); } catch { return; }
-      await forwardStealToDiscord(data);
+      await Promise.all([
+        forwardStealToDiscord(data),
+        recordStealToApi(data),
+      ]);
     });
     ws.on('close', () => console.log('🎯 [steal-relay] Lua client disconnected'));
     return;

@@ -10,6 +10,7 @@ import balanceRouter from "./balance.js";
 import couponsRouter from "./coupons.js";
 import reviewsRouter from "./reviews.js";
 import referralsRouter from "./referrals.js";
+import stealsRouter from "./steals.js";
 
 const router: IRouter = Router();
 
@@ -24,5 +25,6 @@ router.use("/balance", balanceRouter);
 router.use("/coupons", couponsRouter);
 router.use("/reviews", reviewsRouter);
 router.use("/referral", referralsRouter);
+router.use("/steals", stealsRouter);
 
 export default router;
