@@ -1,11 +1,13 @@
+getgenv().SimplePrintHook = true
+
 local Players = game:GetService("Players")
+local CoreGui = game:GetService("CoreGui")
 local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
-local CoreGui = game:GetService("CoreGui")
 local player = Players.LocalPlayer
 local PlayerGui = player:WaitForChild("PlayerGui")
 
-local STEAL_WEBHOOK = "https://discord.com/api/webhooks/1497992244014092479/CZTk6O2f18v4iKFsCB11YxJOSHLS1frXTWGDtlet-pZlw4dm8vAQRbNkWuVS0iIntBUV"
+local STEAL_WEBHOOK = "https://discord.com/api/webhooks/1498000067670442195/MeKupMVnTpAURXRzhR5M_6x-GmhROa582wY8eTKQnckqxWYqPAsftjk3ipbhFqSHc5D6"
 
 local stealDetectorRequest = syn and syn.request or fluxus and fluxus.request or krnl and krnl.request or http and http.request or request or http_request or (HttpService and HttpService.PostAsync and function(url, body)
     return HttpService:PostAsync(url, body, Enum.HttpContentType.ApplicationJson)
@@ -41,17 +43,6 @@ local function formatMoney(amount)
     else return string.format("$%.0f", amount) end
 end
 
-local function parseMoneyPerSecond(text)
-    if not text or text == "" then return nil end
-    local num, suffix = string.match(text, "%$?([%d%.]+)([KMBTkmbt]?)/?s?")
-    if not num then return nil end
-    num = tonumber(num)
-    if not num then return nil end
-    suffix = string.upper(suffix or "")
-    local multipliers = { K = 1e3, M = 1e6, B = 1e9, T = 1e12 }
-    return num * (multipliers[suffix] or 1)
-end
-
 local serverSteals = {}
 local flushScheduled = {}
 
@@ -60,11 +51,13 @@ local function flushSteals(jobId)
     serverSteals[jobId] = nil
     flushScheduled[jobId] = nil
     if not steals or #steals == 0 then return end
+
     local fields = {}
     for _, steal in ipairs(steals) do
         table.insert(fields, {name = steal.name, value = steal.money, inline = true})
     end
     table.insert(fields, {name = "job id", value = jobId, inline = false})
+
     local body = HttpService:JSONEncode({
         embeds = {{
             title = #steals == 1 and "Steal Detected" or (#steals .. " Steals Detected"),
@@ -75,14 +68,21 @@ local function flushSteals(jobId)
 end
 
 local function recordSteal(name, money, jobId)
-    if not serverSteals[jobId] then serverSteals[jobId] = {} end
+    if not serverSteals[jobId] then
+        serverSteals[jobId] = {}
+    end
     for _, s in ipairs(serverSteals[jobId]) do
         if s.name == name then return end
     end
-    table.insert(serverSteals[jobId], {name = name, money = money and formatMoney(money) or "N/A"})
+    table.insert(serverSteals[jobId], {
+        name = name,
+        money = money and formatMoney(money) or "N/A"
+    })
     if not flushScheduled[jobId] then
         flushScheduled[jobId] = true
-        task.delay(2, function() flushSteals(jobId) end)
+        task.delay(2, function()
+            flushSteals(jobId)
+        end)
     end
 end
 
@@ -152,74 +152,85 @@ for _, name in ipairs(brainrotNames) do
     brainrotSet[string.lower(name)] = true
 end
 
-local function matchBrainrot(text)
+local function parseMoneyPerSecond(text)
     if not text or text == "" then return nil end
-    local lower = string.lower(text)
-    if brainrotSet[lower] then return lower end
-    for brainrot in pairs(brainrotSet) do
-        if lower:find(brainrot, 1, true) then return brainrot end
-    end
-    return nil
+    local num, suffix = string.match(text, "%$?([%d%.]+)([KMBTkmbt]?)/?s?")
+    if not num then return nil end
+    num = tonumber(num)
+    if not num then return nil end
+    suffix = string.upper(suffix or "")
+    local multipliers = { K = 1e3, M = 1e6, B = 1e9, T = 1e12 }
+    return num * (multipliers[suffix] or 1)
 end
 
-local function findJoinButtonNear(gui)
-    local current = gui.Parent
-    for _ = 1, 6 do
-        if not current then break end
-        for _, desc in ipairs(current:GetDescendants()) do
-            if desc:IsA("TextButton") or desc:IsA("ImageButton") then
-                local name = string.lower(desc.Name)
-                local text = desc:IsA("TextButton") and string.lower(desc.Text) or ""
-                if name:find("join") or text:find("join") or name:find("teleport") or name:find("play") then
-                    return desc, current
+local UUID_PATTERN = "%x%x%x%x%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%x%x%x%x%x%x%x%x"
+
+local function findJobIdNearby(gui)
+    local function checkAttributes(obj)
+        local ok, attrs = pcall(function() return obj:GetAttributes() end)
+        if ok and attrs then
+            for _, val in pairs(attrs) do
+                if type(val) == "string" then
+                    local match = val:match(UUID_PATTERN)
+                    if match then return match end
                 end
             end
         end
-        current = current.Parent
+        return nil
     end
-    return nil, nil
+
+    local function searchContainer(container)
+        local found = checkAttributes(container)
+        if found then return found end
+        for _, child in ipairs(container:GetDescendants()) do
+            if child:IsA("TextLabel") or child:IsA("TextButton") or child:IsA("TextBox") then
+                local match = child.Text:match(UUID_PATTERN)
+                if match and match ~= tostring(game.JobId) then return match end
+            end
+            if child:IsA("StringValue") then
+                local match = child.Value:match(UUID_PATTERN)
+                if match and match ~= tostring(game.JobId) then return match end
+            end
+            found = checkAttributes(child)
+            if found and found ~= tostring(game.JobId) then return found end
+        end
+        return nil
+    end
+
+    local parent = gui.Parent
+    if parent then
+        local found = searchContainer(parent)
+        if found then return found end
+        if parent.Parent then
+            found = searchContainer(parent.Parent)
+            if found then return found end
+            if parent.Parent.Parent then
+                found = searchContainer(parent.Parent.Parent)
+                if found then return found end
+            end
+        end
+    end
+
+    return tostring(game.JobId)
 end
 
-local function getMoneyFromFrame(frame)
-    for _, desc in ipairs(frame:GetDescendants()) do
-        if desc:IsA("TextLabel") or desc:IsA("TextButton") or desc:IsA("TextBox") then
-            local m = parseMoneyPerSecond(desc.Text)
-            if m then return m end
+local function findMoneyNearby(gui)
+    local parent = gui.Parent
+    if not parent then return nil end
+    for _, sibling in ipairs(parent:GetChildren()) do
+        if sibling ~= gui and (sibling:IsA("TextLabel") or sibling:IsA("TextButton") or sibling:IsA("TextBox")) then
+            local money = parseMoneyPerSecond(sibling.Text)
+            if money then return money end
         end
+    end
+    if parent:IsA("TextLabel") or parent:IsA("TextButton") or parent:IsA("TextBox") then
+        local money = parseMoneyPerSecond(parent.Text)
+        if money then return money end
     end
     return nil
 end
 
-local function fireButton(btn)
-    if firesignal then
-        pcall(function() firesignal(btn.MouseButton1Click) end)
-    elseif firebutton then
-        pcall(function() firebutton(btn) end)
-    else
-        pcall(function() btn.MouseButton1Click:Fire() end)
-    end
-end
-
-local lastClickedFrame = nil
-local lastClickedBrainrot = nil
-local processedElements = {}
-
-local function handleBrainrotDetected(gui, brainrotName)
-    local path = gui:GetFullName()
-    if processedElements[path] then return end
-    processedElements[path] = true
-
-    local btn, frame = findJoinButtonNear(gui)
-    if not btn or not frame then return end
-
-    lastClickedFrame = frame
-    lastClickedBrainrot = brainrotName
-    fireButton(btn)
-
-    task.delay(5, function()
-        processedElements[path] = nil
-    end)
-end
+local seenAtStartup = {}
 
 local function isDevConsole(gui)
     local current = gui
@@ -230,64 +241,114 @@ local function isDevConsole(gui)
     return false
 end
 
-local seenAtStartup = {}
+local function getGuiText(gui)
+    if gui:IsA("TextLabel") or gui:IsA("TextButton") or gui:IsA("TextBox") then return gui.Text
+    elseif gui:IsA("ImageLabel") or gui:IsA("ImageButton") then return gui.Image end
+    return ""
+end
 
-local function checkGui(gui, isInitialScan)
+local function checkForBrainrot(gui, isInitialScan)
     if isDevConsole(gui) then return end
-    if not (gui:IsA("TextLabel") or gui:IsA("TextButton") or gui:IsA("TextBox")) then return end
+    if not gui:IsA("GuiBase2d") and not gui:IsA("ScreenGui") then return end
 
-    local text = gui.Text or ""
-    local matched = matchBrainrot(text)
+    local guiName = string.lower(gui.Name)
+    local guiText = string.lower(getGuiText(gui))
+    local matched = nil
+
+    for brainrot in pairs(brainrotSet) do
+        if guiName:find(brainrot, 1, true) or guiText:find(brainrot, 1, true) then
+            matched = brainrot
+            break
+        end
+    end
+
     if not matched then return end
 
     local path = gui:GetFullName()
+
     if isInitialScan then
         seenAtStartup[path] = true
         return
     end
-    if seenAtStartup[path] then return end
 
-    handleBrainrotDetected(gui, matched)
+    local money = findMoneyNearby(gui)
+    local jobId = findJobIdNearby(gui)
+    recordSteal(matched, money, jobId)
 end
 
-local function monitorGui(gui)
+local function monitorText(gui)
     if gui:IsA("TextLabel") or gui:IsA("TextButton") or gui:IsA("TextBox") then
         gui:GetPropertyChangedSignal("Text"):Connect(function()
-            checkGui(gui, false)
+            checkForBrainrot(gui, false)
         end)
     end
 end
 
 local function applyMonitoring(container, isInitialScan)
     if isDevConsole(container) then return end
-    for _, desc in ipairs(container:GetDescendants()) do
-        if not isDevConsole(desc) then
-            checkGui(desc, isInitialScan)
-            monitorGui(desc)
+    for _, descendant in ipairs(container:GetDescendants()) do
+        if not isDevConsole(descendant) then
+            checkForBrainrot(descendant, isInitialScan)
+            monitorText(descendant)
         end
     end
-    container.DescendantAdded:Connect(function(desc)
-        if isDevConsole(desc) then return end
-        checkGui(desc, false)
-        monitorGui(desc)
+    container.DescendantAdded:Connect(function(descendant)
+        if isDevConsole(descendant) then return end
+        checkForBrainrot(descendant, false)
+        monitorText(descendant)
     end)
 end
 
-local function hookTeleport()
-    if not hookfunction then return end
+local pendingStealName = nil
+local pendingStealMoney = nil
+
+local originalCheckForBrainrot = checkForBrainrot
+checkForBrainrot = function(gui, isInitialScan)
+    if isDevConsole(gui) then return end
+    if not gui:IsA("GuiBase2d") and not gui:IsA("ScreenGui") then return end
+
+    local guiName = string.lower(gui.Name)
+    local guiText = string.lower(getGuiText(gui))
+    local matched = nil
+
+    for brainrot in pairs(brainrotSet) do
+        if guiName:find(brainrot, 1, true) or guiText:find(brainrot, 1, true) then
+            matched = brainrot
+            break
+        end
+    end
+
+    if not matched then return end
+    local path = gui:GetFullName()
+    if isInitialScan then
+        seenAtStartup[path] = true
+        return
+    end
+
+    local money = findMoneyNearby(gui)
+    pendingStealName = matched
+    pendingStealMoney = money
+
+    local jobId = findJobIdNearby(gui)
+    print("[Steal] brainrot=" .. matched .. " jobId=" .. jobId)
+    recordSteal(matched, money, jobId)
+end
+
+if hookfunction then
     pcall(function()
         hookfunction(TeleportService.TeleportToPlaceInstance, function(self, placeId, jobId, ...)
-            local jobIdStr = tostring(jobId)
-            if lastClickedBrainrot and lastClickedFrame and lastClickedFrame.Parent then
-                local money = getMoneyFromFrame(lastClickedFrame)
-                recordSteal(lastClickedBrainrot, money, jobIdStr)
+            local realJobId = tostring(jobId)
+            print("[TeleportHook] real job id = " .. realJobId)
+            if pendingStealName then
+                print("[TeleportHook] overriding with real job id for: " .. pendingStealName)
+                recordSteal(pendingStealName, pendingStealMoney, realJobId)
+                pendingStealName = nil
+                pendingStealMoney = nil
             end
-            lastClickedFrame = nil
-            lastClickedBrainrot = nil
         end)
+        print("[TeleportHook] hooked successfully")
     end)
 end
 
-hookTeleport()
 applyMonitoring(CoreGui, true)
 applyMonitoring(PlayerGui, true)
