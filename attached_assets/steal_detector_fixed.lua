@@ -128,26 +128,58 @@ local brainrotNames = {
 
 local brainrotSet = {}
 for _, name in ipairs(brainrotNames) do
-    brainrotSet[string.lower(name)] = true
+    brainrotSet[string.lower(name)] = name
 end
 
-local function getBrainrotFromFrame(frame)
+local JOB_ATTR_NAMES = {"JobId", "jobId", "job_id", "ServerId", "serverJobId", "ServerJobId", "PlaceJobId"}
+
+local function getJobIdFromButton(btn)
+    for _, attrName in ipairs(JOB_ATTR_NAMES) do
+        local val = pcall(function() return btn:GetAttribute(attrName) end) and btn:GetAttribute(attrName)
+        if val and type(val) == "string" and #val > 8 then
+            return val
+        end
+    end
+    local nameLower = btn.Name:lower()
+    if #btn.Name > 8 and (nameLower:find("%-") or nameLower:find("%x%x%x%x%x%x%x%x")) then
+        return btn.Name
+    end
+    local parent = btn.Parent
+    if parent then
+        for _, attrName in ipairs(JOB_ATTR_NAMES) do
+            local ok, val = pcall(function() return parent:GetAttribute(attrName) end)
+            if ok and val and type(val) == "string" and #val > 8 then
+                return val
+            end
+        end
+        if #parent.Name > 8 and (parent.Name:lower():find("%-") or parent.Name:lower():find("%x%x%x%x%x%x%x%x")) then
+            return parent.Name
+        end
+    end
+    return tostring(game.JobId)
+end
+
+local function findBrainrotInFrame(frame)
     for _, desc in ipairs(frame:GetDescendants()) do
         if desc:IsA("TextLabel") or desc:IsA("TextButton") or desc:IsA("TextBox") then
-            local text = string.lower(desc.Text or "")
-            for brainrot in pairs(brainrotSet) do
-                if text:find(brainrot, 1, true) then return brainrot end
+            local textLower = string.lower(desc.Text or "")
+            for brainrotLower, brainrotOriginal in pairs(brainrotSet) do
+                if textLower == brainrotLower or textLower:find(brainrotLower, 1, true) then
+                    return brainrotOriginal
+                end
             end
         end
     end
     local frameNameLower = string.lower(frame.Name)
-    for brainrot in pairs(brainrotSet) do
-        if frameNameLower:find(brainrot, 1, true) then return brainrot end
+    for brainrotLower, brainrotOriginal in pairs(brainrotSet) do
+        if frameNameLower == brainrotLower or frameNameLower:find(brainrotLower, 1, true) then
+            return brainrotOriginal
+        end
     end
     return nil
 end
 
-local function getMoneyFromFrame(frame)
+local function findMoneyInFrame(frame)
     for _, desc in ipairs(frame:GetDescendants()) do
         if desc:IsA("TextLabel") or desc:IsA("TextButton") or desc:IsA("TextBox") then
             local m = parseMoneyPerSecond(desc.Text)
@@ -157,122 +189,79 @@ local function getMoneyFromFrame(frame)
     return nil
 end
 
-local pendingStealName = nil
-local pendingStealMoney = nil
-local hookAvailable = typeof(hookfunction) == "function"
-
-local function watchTemplateButtons(template)
-    local function onClicked()
-        local brainrot = getBrainrotFromFrame(template)
-        local money = getMoneyFromFrame(template)
-        if brainrot then
-            pendingStealName = brainrot
-            pendingStealMoney = money
-            print("[Click] pending steal: " .. brainrot)
-            print("[Click] my job id (own server): " .. tostring(game.JobId))
-            if not hookAvailable then
-                recordSteal(brainrot, money, tostring(game.JobId))
-                pendingStealName = nil
-                pendingStealMoney = nil
-            end
-        else
-            print("[Click] no brainrot found in this frame: " .. template:GetFullName())
-        end
-    end
-    for _, desc in ipairs(template:GetDescendants()) do
+local function findJoinButtonsInFrame(frame)
+    local buttons = {}
+    local joinKeywords = {"join", "steal", "teleport", "go", "play"}
+    for _, desc in ipairs(frame:GetDescendants()) do
         if desc:IsA("TextButton") or desc:IsA("ImageButton") then
-            desc.MouseButton1Click:Connect(onClicked)
-        end
-    end
-    template.DescendantAdded:Connect(function(desc)
-        if desc:IsA("TextButton") or desc:IsA("ImageButton") then
-            desc.MouseButton1Click:Connect(onClicked)
-        end
-    end)
-end
-
-local alreadyReported = {}
-
-local function watchBrainrotsContainer(container)
-    print("[Watcher] found Brainrots container at: " .. container:GetFullName())
-    local function handleTemplate(child)
-        task.spawn(watchTemplateButtons, child)
-        if not hookAvailable then
-            local brainrot = getBrainrotFromFrame(child)
-            if brainrot and not alreadyReported[child] then
-                alreadyReported[child] = true
-                local money = getMoneyFromFrame(child)
-                recordSteal(brainrot, money, tostring(game.JobId))
-            end
-            child.DescendantAdded:Connect(function()
-                if not alreadyReported[child] then
-                    local b = getBrainrotFromFrame(child)
-                    if b then
-                        alreadyReported[child] = true
-                        local m = getMoneyFromFrame(child)
-                        recordSteal(b, m, tostring(game.JobId))
-                    end
+            local nameLower = string.lower(desc.Name)
+            local textLower = desc:IsA("TextButton") and string.lower(desc.Text or "") or ""
+            local isJoin = false
+            for _, kw in ipairs(joinKeywords) do
+                if nameLower:find(kw) or textLower:find(kw) then
+                    isJoin = true
+                    break
                 end
-            end)
-        end
-    end
-    for _, child in ipairs(container:GetChildren()) do
-        handleTemplate(child)
-    end
-    container.ChildAdded:Connect(handleTemplate)
-end
-
-local function findBrainrotsContainer()
-    for _, desc in ipairs(PlayerGui:GetDescendants()) do
-        if desc.Name == "Brainrots" then
-            return desc
-        end
-    end
-    return nil
-end
-
-if hookAvailable then
-    pcall(function()
-        hookfunction(TeleportService.TeleportToPlaceInstance, function(self, placeId, jobId, ...)
-            local realJobId = tostring(jobId)
-            print("[TeleportHook] intercepted job id = " .. realJobId)
-            print("[TeleportHook] own server job id  = " .. tostring(game.JobId))
-            if pendingStealName then
-                print("[TeleportHook] sending steal: " .. pendingStealName .. " | job: " .. realJobId)
-                recordSteal(pendingStealName, pendingStealMoney, realJobId)
-                pendingStealName = nil
-                pendingStealMoney = nil
             end
-        end)
-        print("[TeleportHook] hooked successfully")
-    end)
-else
-    print("[TeleportHook] hookfunction not available — fallback mode active")
+            if not isJoin then
+                isJoin = true
+            end
+            if isJoin then
+                table.insert(buttons, desc)
+            end
+        end
+    end
+    return buttons
 end
+
+local hookedFrames = {}
+
+local function watchFrame(frame)
+    if hookedFrames[frame] then return end
+    hookedFrames[frame] = true
+
+    local function tryAttach()
+        local brainrot = findBrainrotInFrame(frame)
+        if not brainrot then return end
+        local money = findMoneyInFrame(frame)
+        local buttons = findJoinButtonsInFrame(frame)
+        if #buttons == 0 then return end
+        for _, btn in ipairs(buttons) do
+            if not hookedFrames[btn] then
+                hookedFrames[btn] = true
+                btn.MouseButton1Click:Connect(function()
+                    local jobId = getJobIdFromButton(btn)
+                    print("[StealDetector] brainrot=" .. brainrot .. " jobId=" .. jobId)
+                    recordSteal(brainrot, money, jobId)
+                end)
+            end
+        end
+    end
+
+    tryAttach()
+
+    frame.DescendantAdded:Connect(function()
+        task.wait(0.05)
+        tryAttach()
+    end)
+end
+
+local function scanPlayerGui()
+    for _, desc in ipairs(PlayerGui:GetDescendants()) do
+        if desc:IsA("Frame") or desc:IsA("ScrollingFrame") or desc:IsA("CanvasGroup") then
+            task.spawn(watchFrame, desc)
+        end
+    end
+end
+
+PlayerGui.DescendantAdded:Connect(function(desc)
+    if desc:IsA("Frame") or desc:IsA("ScrollingFrame") or desc:IsA("CanvasGroup") then
+        task.spawn(watchFrame, desc)
+    end
+end)
 
 task.spawn(function()
-    print("[Watcher] scanning PlayerGui for Brainrots container...")
-    local brainrots = findBrainrotsContainer()
-    if not brainrots then
-        print("[Watcher] not found yet — waiting for it to appear...")
-        local found = false
-        PlayerGui.DescendantAdded:Connect(function(desc)
-            if desc.Name == "Brainrots" and not found then
-                found = true
-                print("[Watcher] Brainrots appeared: " .. desc:GetFullName())
-                watchBrainrotsContainer(desc)
-            end
-        end)
-        task.delay(30, function()
-            if not found then
-                print("[Watcher] ERROR: Brainrots container never appeared after 30s")
-                print("[Watcher] Current PlayerGui children:")
-                for _, child in ipairs(PlayerGui:GetChildren()) do
-                    print("  - " .. child.Name)
-                end
-            end
-        end)
-    else
-        watchBrainrotsContainer(brainrots)
-    end
+    print("[StealDetector] scanning PlayerGui...")
+    scanPlayerGui()
+    print("[StealDetector] initial scan complete, live watching active")
 end)
