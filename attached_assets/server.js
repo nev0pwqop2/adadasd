@@ -41,6 +41,13 @@ const WS_SOURCES = [
     isAuthed: () => true,
     skipMessage: (data) => data && (data.type === 'ping' || data.type === 'init'),
   },
+  {
+    name: "vanishnotifier",
+    url: "wss://ws.vanishnotifier.org/ws?token=VnshWS-0Nf3FqsuR3A0UpXIZtafGGUzj-hQ1QLj",
+    authMessage: null,
+    isAuthed: () => true,
+    skipMessage: (data) => data && (data.type === 'ping' || data.type === 'pong' || data.type === 'connected' || data.type === 'init'),
+  },
 ];
 
 const HTTP_SOURCES = [
@@ -101,6 +108,31 @@ function formatLog(source, data) {
     brainrots = data.brainrots;
     jobId = data.jobId || data.server_id || null;
     duelMode = brainrots.some(b => b.duel > 0);
+  } else if (source === 'vanishnotifier') {
+    // Log raw shape until format is confirmed
+    console.log('[vanishnotifier] raw message:', JSON.stringify(data));
+    // Try brainrots-array format
+    if (data?.brainrots?.length) {
+      brainrots = data.brainrots;
+      jobId = data.jobId || data.server_id || data.serverID || null;
+      duelMode = brainrots.some(b => b.duel > 0);
+    // Try flat bestName/bestValue format
+    } else if (data?.bestName) {
+      return {
+        bestName:    data.bestName,
+        bestValue:   Number(data.bestValue) || 0,
+        serverID:    data.serverID || data.server_id || null,
+        allBrainrots:data.allBrainrots || data.bestName,
+        duel:        data.duel === true || data.duel === 1 || false,
+      };
+    // Try event-wrapped format (like projectx)
+    } else if (data?.event?.data?.brainrots) {
+      brainrots = data.event.data.brainrots;
+      jobId = data.event.data.jobId || null;
+      duelMode = brainrots.some(b => b.duel > 0);
+    } else {
+      return null;
+    }
   } else if ((source === 'railway-job' || source === 'railway-job-2') && data?.pet_name) {
     const val = Number(data.pet_value) || 0;
     const fmt = fmtValue(val, data.pet_value_formatted);
