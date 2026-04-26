@@ -80,8 +80,8 @@ export default function LeaderboardPage() {
   const combined = all.slice(0, 10);
 
   return (
-    <div className="min-h-screen bg-[#0a0a08] text-white flex flex-col">
-      <div className="pointer-events-none fixed inset-0 z-0 bg-[radial-gradient(ellipse_70%_50%_at_50%_80%,hsla(30,65%,20%,0.25),transparent)]" />
+    <div className="min-h-screen bg-[#110d08] text-white flex flex-col">
+      <div className="pointer-events-none fixed inset-0 z-0 bg-[radial-gradient(ellipse_80%_55%_at_50%_100%,hsla(30,65%,18%,0.45),transparent)]" />
       <Navbar current="leaderboard" />
 
       <div className="relative z-10 max-w-5xl mx-auto w-full px-4 py-12">

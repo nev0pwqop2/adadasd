@@ -88,22 +88,25 @@ export default function PlansPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#0a0a08] text-white flex flex-col">
-      <div className="pointer-events-none fixed inset-0 z-0 bg-[radial-gradient(ellipse_70%_50%_at_50%_80%,hsla(30,65%,20%,0.3),transparent)]" />
+    <div className="min-h-screen bg-[#110d08] text-white flex flex-col">
+      <div className="pointer-events-none fixed inset-0 z-0 bg-[radial-gradient(ellipse_80%_55%_at_50%_100%,hsla(30,65%,18%,0.5),transparent)]" />
       <Navbar current="plans" />
 
       <div className="relative z-10 max-w-3xl mx-auto w-full px-4 py-12">
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-10">
-          <h1 className="text-4xl md:text-5xl font-extrabold text-white mb-3">Choose Your Plan</h1>
-          <p className="text-white/40 text-sm max-w-md mx-auto">
-            Rent a slot and get your script key the moment you pay. All plans include instant delivery.
+          <span className="inline-block mb-4 px-3 py-1 rounded-full border border-white/12 bg-white/[0.05] text-[10px] font-bold uppercase tracking-widest text-white/40">
+            Pricing
+          </span>
+          <h1 className="text-4xl md:text-5xl font-extrabold text-white mb-3">Choose your plan</h1>
+          <p className="text-white/35 text-sm max-w-md mx-auto">
+            Real-time notifications with the tier that fits you. Instant delivery and no delay on every tier.
           </p>
         </motion.div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
             {/* ── Premium Card ── */}
-            <div className="rounded-2xl border border-[#f5a623]/25 bg-[#13110a] p-6 flex flex-col">
+            <div className="rounded-2xl border border-[#f5a623]/25 bg-[#15100a] p-6 flex flex-col">
               <div className="flex items-start justify-between mb-4">
                 <div>
                   <span className="text-[10px] font-bold uppercase tracking-widest text-[#f5a623]/70 mb-1 block">Most Popular</span>
@@ -181,7 +184,7 @@ export default function PlansPage() {
             </div>
 
             {/* ── Bid Slot Card ── */}
-            <div className="rounded-2xl border border-white/10 bg-[#13110a] p-6 flex flex-col">
+            <div className="rounded-2xl border border-white/10 bg-[#15100a] p-6 flex flex-col">
               <div className="flex items-start justify-between mb-4">
                 <div>
                   <span className="text-[10px] font-bold uppercase tracking-widest text-white/40 mb-1 block">Bid Slot</span>

@@ -43,7 +43,7 @@ function RenterCard({ renter, index }: { renter: Renter; index: number }) {
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.05 }}
-      className="rounded-2xl border border-white/8 bg-[#13110a] p-5 flex flex-col gap-4"
+      className="rounded-2xl border border-white/8 bg-[#15100a] p-5 flex flex-col gap-4"
     >
       {/* Header row */}
       <div className="flex items-center justify-between">
@@ -104,8 +104,8 @@ export default function RentersPage() {
   const renters = data?.renters ?? [];
 
   return (
-    <div className="min-h-screen bg-[#0a0a08] text-white flex flex-col">
-      <div className="pointer-events-none fixed inset-0 z-0 bg-[radial-gradient(ellipse_70%_50%_at_50%_80%,hsla(30,65%,20%,0.25),transparent)]" />
+    <div className="min-h-screen bg-[#110d08] text-white flex flex-col">
+      <div className="pointer-events-none fixed inset-0 z-0 bg-[radial-gradient(ellipse_80%_55%_at_50%_100%,hsla(30,65%,18%,0.45),transparent)]" />
       <Navbar current="renters" />
 
       <div className="relative z-10 max-w-4xl mx-auto w-full px-4 py-12">
@@ -116,7 +116,7 @@ export default function RentersPage() {
 
         {/* Active count */}
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="flex justify-center mb-10">
-          <div className="rounded-2xl border border-white/10 bg-[#13110a] px-8 py-4 text-center">
+          <div className="rounded-2xl border border-white/10 bg-[#15100a] px-8 py-4 text-center">
             <p className="text-xs uppercase tracking-widest text-white/35 mb-1">Active renters</p>
             <p className="text-4xl font-extrabold text-white">{data?.count ?? 0}</p>
           </div>
