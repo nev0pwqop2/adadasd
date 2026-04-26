@@ -282,7 +282,8 @@ export default function LeaderboardPage() {
   });
 
   const raw = data?.leaderboard ?? [];
-  const entries = sortedBy(raw, tab);
+  const entries = sortedBy(raw.length ? raw : MOCK, tab);
+  const isLive = raw.length > 0;
   const top3 = entries.slice(0, 3);
   const rest = entries.slice(3);
 
@@ -297,26 +298,33 @@ export default function LeaderboardPage() {
 
       <div className="relative z-10 max-w-5xl mx-auto w-full px-4 py-10">
         {/* Header */}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
-          <h1 className="text-4xl md:text-5xl font-extrabold text-white mb-2">Leaderboard</h1>
-          <p className="text-white/35 text-sm">See the top users on Exe Joiner.</p>
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mb-6 flex items-end justify-between flex-wrap gap-3">
+          <div>
+            <h1 className="text-4xl md:text-5xl font-extrabold text-white mb-1">Leaderboard</h1>
+            <p className="text-white/35 text-sm">See the top users on Exe Joiner.</p>
+          </div>
+          {!isLoading && !isLive && (
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-white/30 bg-white/[0.05] border border-white/[0.08] px-2.5 py-1 rounded-full">
+              Preview · No live data yet
+            </span>
+          )}
         </motion.div>
 
         {/* Tabs */}
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}
-          className="grid grid-cols-3 gap-2 mb-10 rounded-2xl border border-white/[0.07] bg-[#15100a] p-2"
+          className="grid grid-cols-3 gap-1.5 mb-8 rounded-2xl border border-white/[0.07] bg-[#15100a] p-1.5"
         >
           {TABS.map(t => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className={`rounded-xl px-3 py-3 text-left transition-all ${tab === t.id
-                ? 'bg-[#f5a623]/15 border border-[#f5a623]/25'
+              className={`rounded-xl px-3 py-2.5 text-left transition-all ${tab === t.id
+                ? 'bg-[#f5a623]/15 border border-[#f5a623]/20'
                 : 'hover:bg-white/[0.03] border border-transparent'
               }`}
             >
-              <p className={`text-sm font-semibold ${tab === t.id ? 'text-[#f5a623]' : 'text-white/60'}`}>{t.label}</p>
-              <p className="text-[11px] text-white/30 mt-0.5 leading-snug">{t.sub}</p>
+              <p className={`text-sm font-semibold leading-tight ${tab === t.id ? 'text-[#f5a623]' : 'text-white/55'}`}>{t.label}</p>
+              <p className="text-[10px] text-white/25 mt-0.5 leading-snug hidden sm:block">{t.sub}</p>
             </button>
           ))}
         </motion.div>
@@ -328,8 +336,8 @@ export default function LeaderboardPage() {
             <motion.div key={tab} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
               {/* TOP 3 */}
               {top3.length > 0 && (
-                <div className="mb-8">
-                  <p className="text-[11px] uppercase tracking-widest text-white/25 text-center mb-4">Top 3</p>
+                <div className="mb-6">
+                  <p className="text-[10px] uppercase tracking-widest text-white/20 text-center mb-4">Top 3</p>
                   <div className={`grid gap-3 items-end ${top3.length === 1 ? 'max-w-xs mx-auto' : top3.length === 2 ? 'grid-cols-2 max-w-lg mx-auto' : 'grid-cols-3'}`}>
                     {top3.length >= 3 ? (
                       <>
