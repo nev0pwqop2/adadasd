@@ -80,6 +80,9 @@ function getRealIp(req: express.Request): string {
 app.use(cookieParser());
 app.use(sessionMiddleware);
 
+// Server-to-server steal record endpoint — authenticated by secret header, no CORS needed
+app.use("/api/steals/record", cors());
+
 // Raw body required before JSON parser for webhook signature verification
 app.use("/api/payments/stripe-webhook", express.raw({ type: "application/json" }));
 app.use("/api/payments/nowpayments-ipn", express.raw({ type: "application/json" }));
