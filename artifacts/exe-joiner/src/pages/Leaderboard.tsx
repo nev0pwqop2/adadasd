@@ -222,53 +222,6 @@ function LeaderRow({ entry, rank, tab }: { entry: LeaderEntry; rank: number; tab
   );
 }
 
-const MOCK: LeaderEntry[] = [
-  {
-    username: 'Reece', discordId: '111', avatar: null, stealCount: 167,
-    bestStealMoneyPerSec: '2638000000', bestStealName: 'Cerberus', bestStealImageUrl: null,
-    topSteals: [
-      { brainrotName: 'Cerberus', moneyPerSec: '2638000000', imageUrl: null },
-      { brainrotName: 'Cerberus', moneyPerSec: '2458000000', imageUrl: null },
-      { brainrotName: 'Cerberus', moneyPerSec: '2278000000', imageUrl: null },
-    ],
-    totalDeposited: 1186.00,
-  },
-  {
-    username: 'Huu Phuong', discordId: '222', avatar: null, stealCount: 362,
-    bestStealMoneyPerSec: '2020000000', bestStealName: 'Burguro And Fryuro', bestStealImageUrl: null,
-    topSteals: [
-      { brainrotName: 'Burguro And Fryuro', moneyPerSec: '2020000000', imageUrl: null },
-      { brainrotName: 'Burguro And Fryuro', moneyPerSec: '1958000000', imageUrl: null },
-    ],
-    totalDeposited: 910.84,
-  },
-  {
-    username: 'izy', discordId: '333', avatar: null, stealCount: 140,
-    bestStealMoneyPerSec: '375000000', bestStealName: 'La Lucky Grande', bestStealImageUrl: null,
-    topSteals: [
-      { brainrotName: 'La Lucky Grande', moneyPerSec: '375000000', imageUrl: null },
-    ],
-    totalDeposited: 793.20,
-  },
-  {
-    username: 'moneykept', discordId: '444', avatar: null, stealCount: 59,
-    bestStealMoneyPerSec: '5400000000', bestStealName: 'Skibidi Toilet', bestStealImageUrl: null,
-    topSteals: [
-      { brainrotName: 'Skibidi Toilet', moneyPerSec: '5400000000', imageUrl: null },
-      { brainrotName: 'Cerberus', moneyPerSec: '1498000000', imageUrl: null },
-    ],
-    totalDeposited: 656.00,
-  },
-  {
-    username: 'hax', discordId: '555', avatar: null, stealCount: 109,
-    bestStealMoneyPerSec: '4950000000', bestStealName: 'Meowl', bestStealImageUrl: null,
-    topSteals: [
-      { brainrotName: 'Meowl', moneyPerSec: '4950000000', imageUrl: null },
-      { brainrotName: 'Ketupat Bros', moneyPerSec: '4138000000', imageUrl: null },
-    ],
-    totalDeposited: 1172.50,
-  },
-];
 
 export default function LeaderboardPage() {
   const [tab, setTab] = useState<Tab>('steals');
@@ -280,7 +233,7 @@ export default function LeaderboardPage() {
   });
 
   const raw = data?.leaderboard ?? [];
-  const entries = sortedBy(raw.length ? raw : MOCK, tab);
+  const entries = sortedBy(raw, tab);
   const isLive = raw.length > 0;
   const top3 = entries.slice(0, 3);
   const rest = entries.slice(3);
