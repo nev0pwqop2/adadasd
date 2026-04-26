@@ -108,103 +108,107 @@ function RenterCard({ renter, index }: { renter: Renter; index: number }) {
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.05 }}
-      className="rounded-2xl border border-white/8 bg-[#15100a] p-5 flex flex-col gap-4"
+      className="rounded-2xl border border-white/[0.07] bg-[#15100a] overflow-hidden flex flex-col"
     >
-      {/* Header row */}
-      <div className="flex items-center justify-between">
-        <span className="text-[10px] font-bold uppercase tracking-widest text-[#f5a623] bg-[#f5a623]/10 border border-[#f5a623]/20 px-2.5 py-1 rounded-full">
-          Premium
-        </span>
-        {renter.isPaused ? (
-          <div className="flex items-center gap-1.5 text-xs text-amber-400/80 bg-amber-400/10 border border-amber-400/20 px-2 py-0.5 rounded-full">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse inline-block" />
-            <span>Paused · {timeLeft ?? '—'} left</span>
-          </div>
-        ) : timeLeft ? (
-          <div className="flex items-center gap-1 text-xs text-white/35">
-            <Clock className="w-3 h-3" />
-            <span>Ends in {timeLeft}</span>
-          </div>
-        ) : null}
-      </div>
+      {/* Top accent bar */}
+      <div className="h-0.5 w-full bg-gradient-to-r from-transparent via-[#f5a623]/50 to-transparent" />
 
-      {/* User */}
-      <div className="flex flex-col items-center gap-2 py-1">
-        {renter.avatar ? (
-          <img
-            src={`https://cdn.discordapp.com/avatars/${renter.discordId}/${renter.avatar}.webp?size=80`}
-            alt={renter.username}
-            className="w-16 h-16 rounded-full object-cover ring-2 ring-white/10"
-          />
+      <div className="p-5 flex flex-col gap-5">
+        {/* User row */}
+        <div className="flex items-center gap-3">
+          {renter.avatar ? (
+            <img
+              src={`https://cdn.discordapp.com/avatars/${renter.discordId}/${renter.avatar}.webp?size=80`}
+              alt={renter.username}
+              className="w-12 h-12 rounded-full object-cover ring-2 ring-[#f5a623]/20 flex-shrink-0"
+            />
+          ) : (
+            <div className="w-12 h-12 rounded-full bg-[#f5a623]/10 border border-[#f5a623]/20 flex items-center justify-center flex-shrink-0">
+              <span className="text-[#f5a623] font-bold text-xl">{renter.username[0]?.toUpperCase()}</span>
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <p className="font-bold text-white text-sm truncate">{renter.username}</p>
+            <p className="text-[11px] text-white/30 truncate">@{renter.username.toLowerCase().replace(/\s+/g, '')}</p>
+          </div>
+          <div className="flex flex-col items-end gap-1 flex-shrink-0">
+            <span className="text-[9px] font-bold uppercase tracking-widest text-[#f5a623] bg-[#f5a623]/10 border border-[#f5a623]/20 px-2 py-0.5 rounded-full">
+              Premium
+            </span>
+            {renter.isPaused ? (
+              <div className="flex items-center gap-1 text-[10px] text-amber-400/70">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse inline-block" />
+                Paused
+              </div>
+            ) : timeLeft ? (
+              <div className="flex items-center gap-1 text-[10px] text-white/25">
+                <Clock className="w-2.5 h-2.5" />
+                {timeLeft}
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        {/* Divider */}
+        <div className="border-t border-white/[0.05]" />
+
+        {/* Stats row */}
+        <div className="flex items-center">
+          <div className="flex-1 text-center">
+            <p className="text-[9px] uppercase tracking-widest text-white/25 mb-1">Steals</p>
+            <p className="font-extrabold text-white text-xl">{renter.stealCount}</p>
+          </div>
+          <div className="w-px h-8 bg-white/[0.06]" />
+          <div className="flex-1 text-center">
+            <p className="text-[9px] uppercase tracking-widest text-white/25 mb-1">Deposited</p>
+            <p className="font-extrabold text-[#f5a623] text-xl">${renter.totalDeposited.toFixed(2)}</p>
+          </div>
+        </div>
+
+        {/* Best steal */}
+        {renter.bestSteal ? (
+          <div className="flex flex-col gap-2">
+            <p className="text-[9px] uppercase tracking-widest text-white/25 font-semibold">Best Steal</p>
+            <div className="flex items-center gap-3 bg-white/[0.025] rounded-xl px-3 py-2.5">
+              <BrainrotImage imageUrl={renter.bestSteal.imageUrl} name={renter.bestSteal.brainrotName} />
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold text-white text-sm truncate">{renter.bestSteal.brainrotName}</p>
+                <p className="text-xs text-[#f5a623]">{fmtStealVal(renter.bestSteal.moneyPerSec)}</p>
+              </div>
+            </div>
+
+            {hasMore && (
+              <>
+                {expanded && (
+                  <div className="flex flex-col gap-1.5">
+                    {renter.otherSteals.map((s, i) => (
+                      <div key={i} className="flex items-center gap-2 px-1">
+                        <BrainrotImage imageUrl={s.imageUrl} name={s.brainrotName} />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-medium text-white/70 truncate">{s.brainrotName}</p>
+                          <p className="text-[11px] text-white/35">{fmtStealVal(s.moneyPerSec)}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <button
+                  onClick={() => setExpanded(v => !v)}
+                  className="flex items-center gap-1 text-[11px] text-white/30 hover:text-white/55 transition-colors self-start"
+                >
+                  {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                  {expanded ? 'Show less' : `${renter.otherSteals.length} more steal${renter.otherSteals.length > 1 ? 's' : ''}`}
+                </button>
+              </>
+            )}
+          </div>
         ) : (
-          <div className="w-16 h-16 rounded-full bg-[#f5a623]/15 border border-[#f5a623]/20 flex items-center justify-center">
-            <span className="text-[#f5a623] font-bold text-2xl">{renter.username[0]?.toUpperCase()}</span>
+          <div className="text-center py-2">
+            <p className="text-[9px] uppercase tracking-widest text-white/20 mb-1">Best Steal</p>
+            <p className="text-xs text-white/15">No steals yet</p>
           </div>
         )}
-        <div className="text-center">
-          <p className="font-bold text-white text-base">{renter.username}</p>
-          <p className="text-xs text-white/35">@{renter.username.toLowerCase().replace(/\s+/g, '')}</p>
-        </div>
       </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-2 gap-2">
-        <div className="rounded-xl bg-white/[0.03] border border-white/5 px-3 py-2.5 text-center">
-          <p className="text-[10px] uppercase tracking-widest text-white/30 mb-0.5">Steals</p>
-          <p className="font-bold text-white text-lg">{renter.stealCount}</p>
-        </div>
-        <div className="rounded-xl bg-white/[0.03] border border-white/5 px-3 py-2.5 text-center">
-          <p className="text-[10px] uppercase tracking-widest text-white/30 mb-0.5">Deposited</p>
-          <p className="font-bold text-[#f5a623] text-lg">
-            ${renter.totalDeposited.toFixed(2)}
-          </p>
-        </div>
-      </div>
-
-      {/* Best steal */}
-      {renter.bestSteal ? (
-        <div className="rounded-xl bg-white/[0.03] border border-white/5 p-3 flex flex-col gap-2">
-          <p className="text-[10px] uppercase tracking-widest text-white/30 font-semibold">Best Steal</p>
-          <div className="flex items-center gap-3">
-            <BrainrotImage imageUrl={renter.bestSteal.imageUrl} name={renter.bestSteal.brainrotName} />
-            <div className="min-w-0">
-              <p className="font-bold text-white text-sm truncate">{renter.bestSteal.brainrotName}</p>
-              <p className="text-xs text-[#f5a623] font-semibold">{fmtStealVal(renter.bestSteal.moneyPerSec)}</p>
-            </div>
-          </div>
-
-          {/* Other steals expandable */}
-          {hasMore && (
-            <>
-              {expanded && (
-                <div className="flex flex-col gap-1.5 mt-1 border-t border-white/5 pt-2">
-                  {renter.otherSteals.map((s, i) => (
-                    <div key={i} className="flex items-center gap-2">
-                      <BrainrotImage imageUrl={s.imageUrl} name={s.brainrotName} />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-semibold text-white/80 truncate">{s.brainrotName}</p>
-                        <p className="text-[11px] text-white/40">{fmtStealVal(s.moneyPerSec)}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <button
-                onClick={() => setExpanded(v => !v)}
-                className="flex items-center gap-1 text-[11px] text-white/35 hover:text-white/60 transition-colors mt-0.5 self-start"
-              >
-                {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                {expanded ? 'Show less' : `${renter.otherSteals.length} more steal${renter.otherSteals.length > 1 ? 's' : ''}`}
-              </button>
-            </>
-          )}
-        </div>
-      ) : (
-        <div className="rounded-xl bg-white/[0.02] border border-white/5 p-3 text-center">
-          <p className="text-[10px] uppercase tracking-widest text-white/20 mb-1">Best Steal</p>
-          <p className="text-xs text-white/20">No steals yet</p>
-        </div>
-      )}
     </motion.div>
   );
 }
