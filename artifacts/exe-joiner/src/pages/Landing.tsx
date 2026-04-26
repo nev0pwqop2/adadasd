@@ -69,6 +69,7 @@ function useLiveFeed() {
           try {
             const data = JSON.parse(e.data);
             if (!data.bestName || data.success || data.info) return;
+            if ((data.bestValue || 0) < 10_000_000) return;
             const group: FeedGroup = {
               id: `${Date.now()}-${Math.random()}`,
               time: new Date(),
