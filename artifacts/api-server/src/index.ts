@@ -211,6 +211,8 @@ async function runMigrations() {
       created_at TIMESTAMP DEFAULT NOW() NOT NULL
     )
   `);
+  await step("reviews.payment_id", sql`ALTER TABLE reviews ADD COLUMN IF NOT EXISTS payment_id VARCHAR(36) REFERENCES payments(id) ON DELETE SET NULL`);
+  await step("reviews_user_payment_unique", sql`CREATE UNIQUE INDEX IF NOT EXISTS reviews_user_payment_unique ON reviews(user_id, payment_id) WHERE payment_id IS NOT NULL`);
 
   logger.info("DB migrations complete");
 }

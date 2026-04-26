@@ -115,22 +115,22 @@ export default function Dashboard() {
   });
 
   const { data: myReviewRes } = useQuery({
-    queryKey: ['my-review'],
+    queryKey: ['my-reviews'],
     queryFn: async () => {
       const res = await fetch(`${import.meta.env.BASE_URL}api/reviews/mine`, { credentials: 'include' });
       if (!res.ok) throw new Error('Failed');
-      return res.json() as Promise<{ review: { id: number; rating: number; body: string; isVisible: boolean } | null }>;
+      return res.json() as Promise<{ reviews: Record<string, { id: number; rating: number; body: string; isVisible: boolean }> }>;
     },
     enabled: !!user,
     staleTime: 60000,
   });
 
   const { mutate: submitReview, isPending: isSubmittingReview } = useMutation({
-    mutationFn: async ({ rating, body }: { rating: number; body: string }) => {
+    mutationFn: async ({ rating, body, paymentId }: { rating: number; body: string; paymentId: string }) => {
       const res = await fetch(`${import.meta.env.BASE_URL}api/reviews`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rating, body }),
+        body: JSON.stringify({ rating, body, paymentId }),
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.message || 'Failed');
@@ -139,7 +139,7 @@ export default function Dashboard() {
     onSuccess: (d) => {
       toast({ title: 'Review submitted!', description: d.message });
       setReviewRating(0); setReviewBody('');
-      queryClient.invalidateQueries({ queryKey: ['my-review'] });
+      queryClient.invalidateQueries({ queryKey: ['my-reviews'] });
     },
     onError: (e: any) => toast({ title: 'Error', description: e.message, variant: 'destructive' }),
   });
@@ -502,56 +502,66 @@ export default function Dashboard() {
               </div>
             </motion.div>
 
-            {/* Leave a Review — shown after a slot has expired (has completed payment, no current active slot) */}
-            {completedPayments.length > 0 && !mySlot && <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-                <div className="rounded-2xl border border-white/8 bg-[#15100a] overflow-hidden">
-                  <div className="px-5 py-4 border-b border-white/6">
-                    <h3 className="font-bold text-white text-sm">Leave a Review</h3>
-                    <p className="text-xs text-white/30 mt-0.5">Share your experience — shown once approved</p>
-                  </div>
-                  <div className="p-5">
-                    {myReviewRes?.review ? (
-                      <div className="flex items-start gap-3 rounded-xl border border-green-500/20 bg-green-500/5 p-4">
-                        <div className="flex gap-0.5 mt-0.5">
-                          {[1,2,3,4,5].map(i => (
-                            <Star key={i} className={`w-4 h-4 ${i <= (myReviewRes.review!.rating) ? 'fill-amber-400 text-amber-400' : 'text-white/15'}`} />
-                          ))}
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium text-green-400">{myReviewRes.review.isVisible ? 'Review approved and visible' : 'Submitted — pending approval'}</p>
-                          <p className="text-xs text-white/50 mt-1 leading-relaxed">{myReviewRes.review.body}</p>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="space-y-4">
-                        <div>
-                          <p className="text-xs text-white/50 mb-2">Rating</p>
-                          <div className="flex gap-1">
+            {/* Leave a Review — one per completed slot, shown when no active slot */}
+            {(() => {
+              if (mySlot || completedPayments.length === 0) return null;
+              const reviewMap = myReviewRes?.reviews ?? {};
+              // Find the most recent completed payment that hasn't been reviewed yet
+              const pendingPayment = completedPayments.find(p => !reviewMap[p.id]);
+              if (!pendingPayment) return null;
+              const existingReview = reviewMap[pendingPayment.id] ?? null;
+              return (
+                <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+                  <div className="rounded-2xl border border-[#f5a623]/20 bg-[#15100a] overflow-hidden">
+                    <div className="px-5 py-4 border-b border-white/6">
+                      <h3 className="font-bold text-white text-sm">How was Slot #{pendingPayment.slotNumber}?</h3>
+                      <p className="text-xs text-white/30 mt-0.5">Your slot just ended — share your experience</p>
+                    </div>
+                    <div className="p-5">
+                      {existingReview ? (
+                        <div className="flex items-start gap-3 rounded-xl border border-green-500/20 bg-green-500/5 p-4">
+                          <div className="flex gap-0.5 mt-0.5">
                             {[1,2,3,4,5].map(i => (
-                              <button key={i} onMouseEnter={() => setReviewHover(i)} onMouseLeave={() => setReviewHover(0)}
-                                onClick={() => setReviewRating(i)} className="transition-transform hover:scale-110">
-                                <Star className={`w-7 h-7 transition-colors ${i <= (reviewHover || reviewRating) ? 'fill-amber-400 text-amber-400' : 'text-white/20'}`} />
-                              </button>
+                              <Star key={i} className={`w-4 h-4 ${i <= existingReview.rating ? 'fill-amber-400 text-amber-400' : 'text-white/15'}`} />
                             ))}
                           </div>
+                          <div>
+                            <p className="text-xs font-medium text-green-400">{existingReview.isVisible ? 'Review approved and visible' : 'Submitted — pending approval'}</p>
+                            <p className="text-xs text-white/50 mt-1 leading-relaxed">{existingReview.body}</p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-xs text-white/50 mb-2">Your review</p>
-                          <textarea value={reviewBody} onChange={e => setReviewBody(e.target.value)}
-                            maxLength={500} rows={3} placeholder="Tell others about your experience…"
-                            className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm text-white placeholder:text-white/25 resize-none focus:outline-none focus:ring-1 focus:ring-[#f5a623]/40" />
-                          <p className="text-[10px] text-white/20 mt-1 text-right">{reviewBody.length}/500</p>
+                      ) : (
+                        <div className="space-y-4">
+                          <div>
+                            <p className="text-xs text-white/50 mb-2">Rating</p>
+                            <div className="flex gap-1">
+                              {[1,2,3,4,5].map(i => (
+                                <button key={i} onMouseEnter={() => setReviewHover(i)} onMouseLeave={() => setReviewHover(0)}
+                                  onClick={() => setReviewRating(i)} className="transition-transform hover:scale-110">
+                                  <Star className={`w-7 h-7 transition-colors ${i <= (reviewHover || reviewRating) ? 'fill-amber-400 text-amber-400' : 'text-white/20'}`} />
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          <div>
+                            <p className="text-xs text-white/50 mb-2">Your review</p>
+                            <textarea value={reviewBody} onChange={e => setReviewBody(e.target.value)}
+                              maxLength={500} rows={3} placeholder="Tell others about your experience…"
+                              className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm text-white placeholder:text-white/25 resize-none focus:outline-none focus:ring-1 focus:ring-[#f5a623]/40" />
+                            <p className="text-[10px] text-white/20 mt-1 text-right">{reviewBody.length}/500</p>
+                          </div>
+                          <button disabled={!reviewRating || reviewBody.trim().length < 5 || isSubmittingReview}
+                            onClick={() => submitReview({ rating: reviewRating, body: reviewBody, paymentId: pendingPayment.id })}
+                            className="px-5 h-9 rounded-lg bg-[#f5a623] text-black font-bold text-sm hover:bg-[#e8961a] transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+                            {isSubmittingReview ? 'Submitting…' : 'Submit Review'}
+                          </button>
                         </div>
-                        <button disabled={!reviewRating || reviewBody.trim().length < 5 || isSubmittingReview}
-                          onClick={() => submitReview({ rating: reviewRating, body: reviewBody })}
-                          className="px-5 h-9 rounded-lg bg-[#f5a623] text-black font-bold text-sm hover:bg-[#e8961a] transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
-                          {isSubmittingReview ? 'Submitting…' : 'Submit Review'}
-                        </button>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
-                </div>
-              </motion.div>}
+                </motion.div>
+              );
+            })()}
 
           </div>{/* end main content */}
         </div>{/* end two-column */}
