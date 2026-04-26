@@ -18,7 +18,7 @@ async function forwardToDiscord(payload: {
 
   const { brainrotName, moneyPerSec, imageUrl, discordId } = payload;
   const ping = discordId ? `<@${discordId}>` : "unknown";
-  const timeStr = new Date().toUTCString().replace(/:\d{2} GMT$/, " UTC");
+  const timeStr = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
 
   const embed: Record<string, any> = {
     title: "Steal Successful",

