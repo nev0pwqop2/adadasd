@@ -302,36 +302,57 @@ end
 local pendingStealName = nil
 local pendingStealMoney = nil
 
-local originalCheckForBrainrot = checkForBrainrot
-checkForBrainrot = function(gui, isInitialScan)
-    if isDevConsole(gui) then return end
-    if not gui:IsA("GuiBase2d") and not gui:IsA("ScreenGui") then return end
-
-    local guiName = string.lower(gui.Name)
-    local guiText = string.lower(getGuiText(gui))
-    local matched = nil
-
-    for brainrot in pairs(brainrotSet) do
-        if guiName:find(brainrot, 1, true) or guiText:find(brainrot, 1, true) then
-            matched = brainrot
-            break
+local function getBrainrotFromFrame(frame)
+    for _, desc in ipairs(frame:GetDescendants()) do
+        if desc:IsA("TextLabel") or desc:IsA("TextButton") or desc:IsA("TextBox") then
+            local text = string.lower(desc.Text or "")
+            for brainrot in pairs(brainrotSet) do
+                if text:find(brainrot, 1, true) then return brainrot end
+            end
         end
     end
+    return nil
+end
 
-    if not matched then return end
-    local path = gui:GetFullName()
-    if isInitialScan then
-        seenAtStartup[path] = true
-        return
+local function getMoneyFromFrame(frame)
+    for _, desc in ipairs(frame:GetDescendants()) do
+        if desc:IsA("TextLabel") or desc:IsA("TextButton") or desc:IsA("TextBox") then
+            local m = parseMoneyPerSecond(desc.Text)
+            if m then return m end
+        end
     end
+    return nil
+end
 
-    local money = findMoneyNearby(gui)
-    pendingStealName = matched
-    pendingStealMoney = money
+local function watchTemplateButtons(template)
+    local function onButtonClicked()
+        local brainrot = getBrainrotFromFrame(template)
+        local money = getMoneyFromFrame(template)
+        if brainrot then
+            pendingStealName = brainrot
+            pendingStealMoney = money
+            print("[Click] pending steal set: " .. brainrot)
+        end
+    end
+    for _, desc in ipairs(template:GetDescendants()) do
+        if desc:IsA("TextButton") or desc:IsA("ImageButton") then
+            desc.MouseButton1Click:Connect(onButtonClicked)
+        end
+    end
+    template.DescendantAdded:Connect(function(desc)
+        if desc:IsA("TextButton") or desc:IsA("ImageButton") then
+            desc.MouseButton1Click:Connect(onButtonClicked)
+        end
+    end)
+end
 
-    local jobId = findJobIdNearby(gui)
-    print("[Steal] brainrot=" .. matched .. " jobId=" .. jobId)
-    recordSteal(matched, money, jobId)
+local function watchBrainrotsContainer(container)
+    for _, child in ipairs(container:GetChildren()) do
+        task.spawn(watchTemplateButtons, child)
+    end
+    container.ChildAdded:Connect(function(child)
+        task.spawn(watchTemplateButtons, child)
+    end)
 end
 
 if hookfunction then
@@ -340,13 +361,26 @@ if hookfunction then
             local realJobId = tostring(jobId)
             print("[TeleportHook] real job id = " .. realJobId)
             if pendingStealName then
-                print("[TeleportHook] overriding with real job id for: " .. pendingStealName)
+                print("[TeleportHook] sending for: " .. pendingStealName)
                 recordSteal(pendingStealName, pendingStealMoney, realJobId)
                 pendingStealName = nil
                 pendingStealMoney = nil
             end
         end)
         print("[TeleportHook] hooked successfully")
+
+        task.spawn(function()
+            local gui = PlayerGui:WaitForChild("CraftingMachine", 30)
+            if not gui then return end
+            local inner = gui:WaitForChild("CraftingMachine", 10)
+            if not inner then return end
+            local content = inner:WaitForChild("Content", 10)
+            if not content then return end
+            local brainrots = content:WaitForChild("Brainrots", 10)
+            if not brainrots then return end
+            watchBrainrotsContainer(brainrots)
+            print("[TeleportHook] watching join buttons")
+        end)
     end)
 end
 
