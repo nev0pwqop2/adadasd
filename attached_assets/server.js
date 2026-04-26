@@ -241,26 +241,22 @@ async function forwardStealToDiscord(payload) {
   if (!brainrotName || !moneyPerSec) return;
 
   const ping = discordId && discordId !== 'unknown' ? `<@${discordId}>` : 'N/A';
-  const isoTs = new Date().toISOString();
+  const unixTs = timestamp ? Math.floor(new Date(timestamp).getTime() / 1000) : Math.floor(Date.now() / 1000);
 
   const embed = {
-    title: 'Brainrot Stolen',
+    title: 'Steal Successful',
     color: 0xffff00,
-    description: `Stolen by ${ping}`,
+    description: `**Player**\n${ping}`,
     fields: [
-      {
-        name: 'Brainrot',
-        value: `\`\`\`\n${brainrotName} | ${moneyPerSec}/sec\n\`\`\``,
-        inline: false,
-      },
+      { name: 'Brainrot', value: String(brainrotName), inline: true },
+      { name: 'Value',    value: String(moneyPerSec),  inline: true },
     ],
-    footer: { text: 'Successfully stolen' },
-    timestamp: isoTs,
+    footer: { text: `discord.gg/exenotifier` },
     ...(imageUrl ? { thumbnail: { url: imageUrl } } : {}),
   };
 
   const body = JSON.stringify({
-    username: 'Steal detector',
+    username: 'EXE Notifier',
     embeds: [embed],
   });
 
