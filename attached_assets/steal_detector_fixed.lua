@@ -162,6 +162,36 @@ local function parseMoneyPerSecond(text)
     return num * (multipliers[suffix] or 1)
 end
 
+local UUID_PATTERN = "%x%x%x%x%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%x%x%x%x%x%x%x%x"
+
+local function findJobIdNearby(gui)
+    local function searchContainer(container)
+        for _, child in ipairs(container:GetDescendants()) do
+            if child:IsA("TextLabel") or child:IsA("TextButton") or child:IsA("TextBox") then
+                local match = child.Text:match(UUID_PATTERN)
+                if match then return match end
+            end
+        end
+        return nil
+    end
+
+    local parent = gui.Parent
+    if parent then
+        local found = searchContainer(parent)
+        if found then return found end
+        if parent.Parent then
+            found = searchContainer(parent.Parent)
+            if found then return found end
+            if parent.Parent.Parent then
+                found = searchContainer(parent.Parent.Parent)
+                if found then return found end
+            end
+        end
+    end
+
+    return tostring(game.JobId)
+end
+
 local function findMoneyNearby(gui)
     local parent = gui.Parent
     if not parent then return nil end
@@ -220,7 +250,7 @@ local function checkForBrainrot(gui, isInitialScan)
     end
 
     local money = findMoneyNearby(gui)
-    local jobId = tostring(game.JobId)
+    local jobId = findJobIdNearby(gui)
     recordSteal(matched, money, jobId)
 end
 
