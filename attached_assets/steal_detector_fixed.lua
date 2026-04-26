@@ -165,12 +165,33 @@ end
 local UUID_PATTERN = "%x%x%x%x%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%x%x%x%x%x%x%x%x"
 
 local function findJobIdNearby(gui)
+    local function checkAttributes(obj)
+        local ok, attrs = pcall(function() return obj:GetAttributes() end)
+        if ok and attrs then
+            for _, val in pairs(attrs) do
+                if type(val) == "string" then
+                    local match = val:match(UUID_PATTERN)
+                    if match then return match end
+                end
+            end
+        end
+        return nil
+    end
+
     local function searchContainer(container)
+        local found = checkAttributes(container)
+        if found then return found end
         for _, child in ipairs(container:GetDescendants()) do
             if child:IsA("TextLabel") or child:IsA("TextButton") or child:IsA("TextBox") then
                 local match = child.Text:match(UUID_PATTERN)
-                if match then return match end
+                if match and match ~= tostring(game.JobId) then return match end
             end
+            if child:IsA("StringValue") then
+                local match = child.Value:match(UUID_PATTERN)
+                if match and match ~= tostring(game.JobId) then return match end
+            end
+            found = checkAttributes(child)
+            if found and found ~= tostring(game.JobId) then return found end
         end
         return nil
     end
