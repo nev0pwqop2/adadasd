@@ -388,6 +388,8 @@ router.get("/renters", async (req, res) => {
         avatar: u?.avatar ?? null,
         purchasedAt: slot.purchasedAt,
         expiresAt: slot.expiresAt,
+        isPaused: slot.isPaused,
+        pausedAt: slot.pausedAt ?? null,
       };
     });
     res.json({ renters, count: renters.length });

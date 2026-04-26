@@ -17,17 +17,11 @@ type Renter = {
   avatar: string | null;
   purchasedAt: string | null;
   expiresAt: string | null;
+  isPaused: boolean;
+  pausedAt: string | null;
 };
 
-function useTimeLeft(expiresAt: string | null) {
-  const getMs = () => expiresAt ? Math.max(0, new Date(expiresAt).getTime() - Date.now()) : 0;
-  const [ms, setMs] = useState(getMs);
-  useEffect(() => {
-    if (!expiresAt) return;
-    const id = setInterval(() => setMs(getMs()), 1000);
-    return () => clearInterval(id);
-  }, [expiresAt]);
-  if (!expiresAt || ms === 0) return null;
+function formatMs(ms: number): string {
   const totalMin = Math.floor(ms / 60000);
   const h = Math.floor(totalMin / 60);
   const m = totalMin % 60;
@@ -35,8 +29,29 @@ function useTimeLeft(expiresAt: string | null) {
   return `${m}m`;
 }
 
+function useTimeLeft(expiresAt: string | null, isPaused: boolean, pausedAt: string | null) {
+  // When paused, the remaining time is frozen at (expiresAt - pausedAt)
+  const frozenMs = isPaused && expiresAt && pausedAt
+    ? Math.max(0, new Date(expiresAt).getTime() - new Date(pausedAt).getTime())
+    : null;
+
+  const getMs = () => expiresAt ? Math.max(0, new Date(expiresAt).getTime() - Date.now()) : 0;
+  const [ms, setMs] = useState(getMs);
+
+  useEffect(() => {
+    if (!expiresAt || isPaused) return;
+    const id = setInterval(() => setMs(getMs()), 1000);
+    return () => clearInterval(id);
+  }, [expiresAt, isPaused]);
+
+  if (!expiresAt) return null;
+  if (isPaused && frozenMs !== null) return frozenMs === 0 ? null : formatMs(frozenMs);
+  if (ms === 0) return null;
+  return formatMs(ms);
+}
+
 function RenterCard({ renter, index }: { renter: Renter; index: number }) {
-  const timeLeft = useTimeLeft(renter.expiresAt);
+  const timeLeft = useTimeLeft(renter.expiresAt, renter.isPaused, renter.pausedAt);
 
   return (
     <motion.div
@@ -50,12 +65,17 @@ function RenterCard({ renter, index }: { renter: Renter; index: number }) {
         <span className="text-[10px] font-bold uppercase tracking-widest text-[#f5a623] bg-[#f5a623]/10 border border-[#f5a623]/20 px-2.5 py-1 rounded-full">
           Premium
         </span>
-        {timeLeft && (
+        {renter.isPaused ? (
+          <div className="flex items-center gap-1.5 text-xs text-amber-400/80 bg-amber-400/10 border border-amber-400/20 px-2 py-0.5 rounded-full">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse inline-block" />
+            <span>Paused · {timeLeft ?? '—'} left</span>
+          </div>
+        ) : timeLeft ? (
           <div className="flex items-center gap-1 text-xs text-white/35">
             <Clock className="w-3 h-3" />
             <span>Ends in {timeLeft}</span>
           </div>
-        )}
+        ) : null}
       </div>
 
       {/* User row */}
