@@ -336,8 +336,19 @@ const pausedKeys = new Set();
 let globalPaused = false;
 
 
+const recentBroadcasts = new Map();
+const DEDUP_WINDOW_MS = 5000;
+
 function broadcastPayload(source, formatted) {
   if (globalPaused) return;
+  const dedupKey = `${formatted.bestName}|${formatted.bestValue}|${formatted.allBrainrots}`;
+  const now = Date.now();
+  if (recentBroadcasts.has(dedupKey)) {
+    console.log(`⚠️  [${source}] duplicate suppressed — already sent within ${DEDUP_WINDOW_MS / 1000}s`);
+    return;
+  }
+  recentBroadcasts.set(dedupKey, now);
+  setTimeout(() => recentBroadcasts.delete(dedupKey), DEDUP_WINDOW_MS);
   const out = { ...formatted };
   if (out.serverID) out.serverID = encrypt(out.serverID);
   const payload = JSON.stringify(out);
