@@ -1,6 +1,7 @@
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
+local CoreGui = game:GetService("CoreGui")
 local player = Players.LocalPlayer
 local PlayerGui = player:WaitForChild("PlayerGui")
 
@@ -74,21 +75,14 @@ local function flushSteals(jobId)
 end
 
 local function recordSteal(name, money, jobId)
-    if not serverSteals[jobId] then
-        serverSteals[jobId] = {}
-    end
+    if not serverSteals[jobId] then serverSteals[jobId] = {} end
     for _, s in ipairs(serverSteals[jobId]) do
         if s.name == name then return end
     end
-    table.insert(serverSteals[jobId], {
-        name = name,
-        money = money and formatMoney(money) or "N/A"
-    })
+    table.insert(serverSteals[jobId], {name = name, money = money and formatMoney(money) or "N/A"})
     if not flushScheduled[jobId] then
         flushScheduled[jobId] = true
-        task.delay(2, function()
-            flushSteals(jobId)
-        end)
+        task.delay(2, function() flushSteals(jobId) end)
     end
 end
 
@@ -158,22 +152,39 @@ for _, name in ipairs(brainrotNames) do
     brainrotSet[string.lower(name)] = true
 end
 
-local lastClickedTemplate = nil
-local processedTemplates = {}
+local function matchBrainrot(text)
+    if not text or text == "" then return nil end
+    local lower = string.lower(text)
+    if brainrotSet[lower] then return lower end
+    for brainrot in pairs(brainrotSet) do
+        if lower:find(brainrot, 1, true) then return brainrot end
+    end
+    return nil
+end
 
-local function findJoinButton(template)
-    for _, desc in ipairs(template:GetDescendants()) do
-        if desc:IsA("TextButton") or desc:IsA("ImageButton") then
-            local name = string.lower(desc.Name)
-            local text = desc:IsA("TextButton") and string.lower(desc.Text) or ""
-            if name:find("join") or text:find("join") or name:find("teleport") or name:find("play") then
-                return desc
+local function findJoinButtonNear(gui)
+    local current = gui.Parent
+    for _ = 1, 6 do
+        if not current then break end
+        for _, desc in ipairs(current:GetDescendants()) do
+            if desc:IsA("TextButton") or desc:IsA("ImageButton") then
+                local name = string.lower(desc.Name)
+                local text = desc:IsA("TextButton") and string.lower(desc.Text) or ""
+                if name:find("join") or text:find("join") or name:find("teleport") or name:find("play") then
+                    return desc, current
+                end
             end
         end
+        current = current.Parent
     end
-    for _, desc in ipairs(template:GetDescendants()) do
-        if desc:IsA("TextButton") or desc:IsA("ImageButton") then
-            return desc
+    return nil, nil
+end
+
+local function getMoneyFromFrame(frame)
+    for _, desc in ipairs(frame:GetDescendants()) do
+        if desc:IsA("TextLabel") or desc:IsA("TextButton") or desc:IsA("TextBox") then
+            local m = parseMoneyPerSecond(desc.Text)
+            if m then return m end
         end
     end
     return nil
@@ -189,39 +200,77 @@ local function fireButton(btn)
     end
 end
 
-local function getBrainrotFromTemplate(template)
-    local title = template:FindFirstChild("Title", true)
-    if not title then return nil end
-    local text = string.lower(title.Text or "")
-    if brainrotSet[text] then return text end
-    for brainrot in pairs(brainrotSet) do
-        if text:find(brainrot, 1, true) then return brainrot end
-    end
-    return nil
+local lastClickedFrame = nil
+local lastClickedBrainrot = nil
+local processedElements = {}
+
+local function handleBrainrotDetected(gui, brainrotName)
+    local path = gui:GetFullName()
+    if processedElements[path] then return end
+    processedElements[path] = true
+
+    local btn, frame = findJoinButtonNear(gui)
+    if not btn or not frame then return end
+
+    lastClickedFrame = frame
+    lastClickedBrainrot = brainrotName
+    fireButton(btn)
+
+    task.delay(5, function()
+        processedElements[path] = nil
+    end)
 end
 
-local function getMoneyFromTemplate(template)
-    for _, desc in ipairs(template:GetDescendants()) do
-        if desc:IsA("TextLabel") or desc:IsA("TextButton") or desc:IsA("TextBox") then
-            local m = parseMoneyPerSecond(desc.Text)
-            if m then return m end
+local function isDevConsole(gui)
+    local current = gui
+    while current do
+        if current.Name == "DevConsoleMaster" or current.Name == "DevConsoleUI" then return true end
+        current = current.Parent
+    end
+    return false
+end
+
+local seenAtStartup = {}
+
+local function checkGui(gui, isInitialScan)
+    if isDevConsole(gui) then return end
+    if not (gui:IsA("TextLabel") or gui:IsA("TextButton") or gui:IsA("TextBox")) then return end
+
+    local text = gui.Text or ""
+    local matched = matchBrainrot(text)
+    if not matched then return end
+
+    local path = gui:GetFullName()
+    if isInitialScan then
+        seenAtStartup[path] = true
+        return
+    end
+    if seenAtStartup[path] then return end
+
+    handleBrainrotDetected(gui, matched)
+end
+
+local function monitorGui(gui)
+    if gui:IsA("TextLabel") or gui:IsA("TextButton") or gui:IsA("TextBox") then
+        gui:GetPropertyChangedSignal("Text"):Connect(function()
+            checkGui(gui, false)
+        end)
+    end
+end
+
+local function applyMonitoring(container, isInitialScan)
+    if isDevConsole(container) then return end
+    for _, desc in ipairs(container:GetDescendants()) do
+        if not isDevConsole(desc) then
+            checkGui(desc, isInitialScan)
+            monitorGui(desc)
         end
     end
-    return nil
-end
-
-local function processTemplate(template)
-    if processedTemplates[template] then return end
-    processedTemplates[template] = true
-
-    local brainrot = getBrainrotFromTemplate(template)
-    if not brainrot then return end
-
-    local btn = findJoinButton(template)
-    if not btn then return end
-
-    lastClickedTemplate = template
-    fireButton(btn)
+    container.DescendantAdded:Connect(function(desc)
+        if isDevConsole(desc) then return end
+        checkGui(desc, false)
+        monitorGui(desc)
+    end)
 end
 
 local function hookTeleport()
@@ -229,56 +278,16 @@ local function hookTeleport()
     pcall(function()
         hookfunction(TeleportService.TeleportToPlaceInstance, function(self, placeId, jobId, ...)
             local jobIdStr = tostring(jobId)
-            if lastClickedTemplate and lastClickedTemplate.Parent then
-                local brainrot = getBrainrotFromTemplate(lastClickedTemplate)
-                local money = getMoneyFromTemplate(lastClickedTemplate)
-                if brainrot then
-                    recordSteal(brainrot, money, jobIdStr)
-                end
+            if lastClickedBrainrot and lastClickedFrame and lastClickedFrame.Parent then
+                local money = getMoneyFromFrame(lastClickedFrame)
+                recordSteal(lastClickedBrainrot, money, jobIdStr)
             end
-            lastClickedTemplate = nil
+            lastClickedFrame = nil
+            lastClickedBrainrot = nil
         end)
     end)
 end
 
-local function watchBrainrots(brainrotsContainer)
-    for _, child in ipairs(brainrotsContainer:GetChildren()) do
-        if child.Name == "Template" then
-            task.delay(0.1, function() processTemplate(child) end)
-        end
-    end
-    brainrotsContainer.ChildAdded:Connect(function(child)
-        if child.Name == "Template" then
-            task.delay(0.1, function() processTemplate(child) end)
-        end
-    end)
-    brainrotsContainer.ChildRemoved:Connect(function(child)
-        processedTemplates[child] = nil
-    end)
-end
-
 hookTeleport()
-
-task.spawn(function()
-    local ok, craftingGui = pcall(function()
-        return PlayerGui:WaitForChild("CraftingMachine", 30)
-    end)
-    if not ok or not craftingGui then return end
-
-    local ok2, inner = pcall(function()
-        return craftingGui:WaitForChild("CraftingMachine", 10)
-    end)
-    if not ok2 or not inner then return end
-
-    local ok3, content = pcall(function()
-        return inner:WaitForChild("Content", 10)
-    end)
-    if not ok3 or not content then return end
-
-    local ok4, brainrots = pcall(function()
-        return content:WaitForChild("Brainrots", 10)
-    end)
-    if not ok4 or not brainrots then return end
-
-    watchBrainrots(brainrots)
-end)
+applyMonitoring(CoreGui, true)
+applyMonitoring(PlayerGui, true)
