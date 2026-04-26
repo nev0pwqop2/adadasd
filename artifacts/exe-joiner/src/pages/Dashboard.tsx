@@ -503,8 +503,7 @@ export default function Dashboard() {
             </motion.div>
 
             {/* Leave a Review */}
-            {completedPayments.length > 0 && (
-              <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
                 <div className="rounded-2xl border border-white/8 bg-[#15100a] overflow-hidden">
                   <div className="px-5 py-4 border-b border-white/6">
                     <h3 className="font-bold text-white text-sm">Leave a Review</h3>
@@ -553,7 +552,6 @@ export default function Dashboard() {
                   </div>
                 </div>
               </motion.div>
-            )}
 
           </div>{/* end main content */}
         </div>{/* end two-column */}
