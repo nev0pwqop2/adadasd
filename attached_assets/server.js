@@ -9,8 +9,7 @@ const PORT               = process.env.PORT || 8080;
 const WORKER_URL         = process.env.WORKER_URL || "https://calm-night-4622.yohalvata.workers.dev";
 const WEBSHARE_PROXY     = process.env.WEBSHARE_PROXY || null;
 const STEAL_WEBHOOK_URL  = process.env.STEAL_WEBHOOK_URL || null;
-const EXE_API_URL        = process.env.EXE_API_URL || null;
-const STEAL_RECORD_SECRET = process.env.STEAL_RECORD_SECRET || null;
+const DATABASE_URL       = process.env.DATABASE_URL || null;
 
 let proxyFetch = fetch;
 if (WEBSHARE_PROXY) {
@@ -24,6 +23,18 @@ if (WEBSHARE_PROXY) {
   }
 }
 
+// ── Direct DB connection for steal recording (bypasses HTTP/Cloudflare) ───────
+let pgPool = null;
+if (DATABASE_URL) {
+  try {
+    const { Pool } = require('pg');
+    pgPool = new Pool({ connectionString: DATABASE_URL, ssl: { rejectUnauthorized: false } });
+    console.log('🗄️  DB pool ready');
+  } catch (e) {
+    console.warn('⚠️  pg not available, steal recording disabled:', e.message);
+  }
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 const WS_SOURCES = [
   // source1 temporarily disabled
@@ -204,19 +215,20 @@ function encrypt(plaintext) {
   return out.toString('hex');
 }
 
-// ── Record steal to the exe-joiner API for the Renters page ──────────────────
-async function recordStealToApi(payload) {
-  if (!EXE_API_URL || !STEAL_RECORD_SECRET) return;
+// ── Record steal directly to Neon DB (no HTTP, no Cloudflare) ────────────────
+async function recordStealToDB(payload) {
+  if (!pgPool) return;
   const { brainrotName, moneyPerSec, imageUrl, discordId } = payload;
   if (!brainrotName || !moneyPerSec || !discordId || discordId === 'unknown') return;
+  const numericValue = parseFloat(String(moneyPerSec));
+  if (isNaN(numericValue) || numericValue <= 0) return;
   try {
-    const res = await fetch(`${EXE_API_URL}/api/steals/record`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-steal-secret': STEAL_RECORD_SECRET },
-      body: JSON.stringify({ brainrotName, moneyPerSec, imageUrl, discordId }),
-    });
-    if (!res.ok) console.warn(`⚠️  [steal-record] API returned ${res.status}`);
-    else console.log(`💾 [steal-record] saved → ${discordId}`);
+    await pgPool.query(
+      `INSERT INTO steals (discord_id, brainrot_name, money_per_sec, image_url)
+       VALUES ($1, $2, $3, $4)`,
+      [discordId, String(brainrotName), numericValue, imageUrl ?? null]
+    );
+    console.log(`💾 [steal-record] saved → ${discordId}`);
   } catch (err) {
     console.error(`❌ [steal-record] ${err.message}`);
   }
@@ -405,7 +417,7 @@ wss.on('connection', (ws, req) => {
       try { data = JSON.parse(raw.toString()); } catch { return; }
       await Promise.all([
         forwardStealToDiscord(data),
-        recordStealToApi(data),
+        recordStealToDB(data),
       ]);
     });
     ws.on('close', () => console.log('🎯 [steal-relay] Lua client disconnected'));
