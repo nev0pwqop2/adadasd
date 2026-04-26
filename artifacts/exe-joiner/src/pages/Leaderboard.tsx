@@ -282,7 +282,7 @@ export default function LeaderboardPage() {
   });
 
   const raw = data?.leaderboard ?? [];
-  const entries = sortedBy(raw.length ? raw : MOCK, tab);
+  const entries = sortedBy(raw, tab);
   const top3 = entries.slice(0, 3);
   const rest = entries.slice(3);
 
