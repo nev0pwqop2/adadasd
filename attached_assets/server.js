@@ -522,7 +522,7 @@ function connectWsSource(src) {
     const msg = err.message || String(err);
     console.error(`❌ [${src.name}] Error: ${msg}`);
     if (msg.includes('ECONNREFUSED'))   console.error(`   ↳ Connection refused — is the server running at ${src.url}?`);
-    else if (msg.includes('ENOTFOUND')) console.error(`   ↳ Hostname not found — check the URL: ${src.url}`);
+    else if (msg.includes('ENOTFOUND')) console.error(`   ↳ Hostname not found — check the URL: ${strc.url}`);
     else if (msg.includes('ETIMEDOUT')) console.error(`   ↳ Connection timed out — server unreachable`);
     else if (msg.includes('SSL'))       console.error(`   ↳ SSL/TLS error — check wss:// vs ws://`);
   });
