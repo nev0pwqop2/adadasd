@@ -215,13 +215,26 @@ function encrypt(plaintext) {
   return out.toString('hex');
 }
 
+// ── Parse money string like "$1.23B/s", "251,200,000", "1.5M/s" → number ─────
+function parseMoney(raw) {
+  if (!raw) return NaN;
+  const s = String(raw).replace(/[$,\s]/g, '').toLowerCase().replace('/s', '').replace('sec', '');
+  const n = parseFloat(s);
+  if (isNaN(n)) return NaN;
+  if (s.endsWith('b')) return n * 1e9;
+  if (s.endsWith('m')) return n * 1e6;
+  if (s.endsWith('k')) return n * 1e3;
+  return n;
+}
+
 // ── Record steal directly to Neon DB (no HTTP, no Cloudflare) ────────────────
 async function recordStealToDB(payload) {
   if (!pgPool) return;
   const { brainrotName, moneyPerSec, imageUrl, discordId } = payload;
   if (!brainrotName || !moneyPerSec || !discordId || discordId === 'unknown') return;
-  const numericValue = parseFloat(String(moneyPerSec));
+  const numericValue = parseMoney(moneyPerSec);
   if (isNaN(numericValue) || numericValue <= 0) return;
+  console.log(`🔍 [steal-record] parsed "${moneyPerSec}" → ${numericValue}`);
   try {
     await pgPool.query(
       `INSERT INTO steals (discord_id, brainrot_name, money_per_sec, image_url)
