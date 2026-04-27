@@ -14,25 +14,35 @@ local WS_RELAY_URL = "wss://gigue.onrender.com/ws/steal"
 local LocalPlayer = Players.LocalPlayer
 local sentBrainrots = {}
 
--- ─── WS relay (saves each join to DB) ────────────────────────────────────────
+-- ─── WS relay ────────────────────────────────────────────────────────────────
 local wsConn = nil
 local wsReady = false
 
 local function connectRelay()
-    pcall(function()
+    print("[DEBUG] Attempting WS connect to " .. WS_RELAY_URL)
+    local ok, err = pcall(function()
         wsConn = WebSocket.connect(WS_RELAY_URL)
         wsReady = true
-        print("[Brainrot Detector] WS relay connected")
+        print("[DEBUG] WS relay CONNECTED OK")
+
         wsConn.OnClose:Connect(function()
             wsReady = false
             wsConn = nil
-            print("[Brainrot Detector] WS relay disconnected — retrying in 5s")
+            print("[DEBUG] WS relay CLOSED — retrying in 5s")
             task.delay(5, connectRelay)
         end)
-        wsConn.OnMessage:Connect(function() end)
+
+        wsConn.OnMessage:Connect(function(msg)
+            print("[DEBUG] WS relay msg received: " .. tostring(msg))
+        end)
     end)
+
+    if not ok then
+        print("[DEBUG] WS connect ERROR: " .. tostring(err))
+    end
+
     if not wsReady then
-        print("[Brainrot Detector] WS relay connect failed — retrying in 5s")
+        print("[DEBUG] WS not ready after connect attempt — retrying in 5s")
         task.delay(5, connectRelay)
     end
 end
@@ -41,24 +51,42 @@ task.spawn(connectRelay)
 -- ─────────────────────────────────────────────────────────────────────────────
 
 local function getDiscordId()
-    if LRM_LinkedDiscordID and tostring(LRM_LinkedDiscordID) ~= "" then
-        return tostring(LRM_LinkedDiscordID)
-    end
+    print("[DEBUG] getDiscordId() called")
+
+    local direct = pcall(function()
+        if LRM_LinkedDiscordID and tostring(LRM_LinkedDiscordID) ~= "" then
+            print("[DEBUG] Discord ID from LRM_LinkedDiscordID (direct): " .. tostring(LRM_LinkedDiscordID))
+            return tostring(LRM_LinkedDiscordID)
+        end
+    end)
 
     local ok, id = pcall(function()
         local g = getgenv and getgenv() or nil
-        if g and g.LRM_LinkedDiscordID then return tostring(g.LRM_LinkedDiscordID) end
-        if _G and _G.LRM_LinkedDiscordID then return tostring(_G.LRM_LinkedDiscordID) end
-        if shared and shared.LRM_LinkedDiscordID then return tostring(shared.LRM_LinkedDiscordID) end
+        if g and g.LRM_LinkedDiscordID then
+            print("[DEBUG] Discord ID from getgenv: " .. tostring(g.LRM_LinkedDiscordID))
+            return tostring(g.LRM_LinkedDiscordID)
+        end
+        if _G and _G.LRM_LinkedDiscordID then
+            print("[DEBUG] Discord ID from _G: " .. tostring(_G.LRM_LinkedDiscordID))
+            return tostring(_G.LRM_LinkedDiscordID)
+        end
+        if shared and shared.LRM_LinkedDiscordID then
+            print("[DEBUG] Discord ID from shared: " .. tostring(shared.LRM_LinkedDiscordID))
+            return tostring(shared.LRM_LinkedDiscordID)
+        end
+        print("[DEBUG] Discord ID NOT found in any scope — will use 'unknown'")
         return nil
     end)
 
-    return (ok and id) or nil
+    local result = (ok and id) or nil
+    print("[DEBUG] getDiscordId() returning: " .. tostring(result))
+    return result
 end
 
 local function getBrainrotImage(brainrotName)
     local encoded = brainrotName:gsub(" ", "%%20")
     local url = ("https://stealabrainrot.fandom.com/api.php?action=query&prop=pageimages&format=json&piprop=thumbnail&pithumbsize=500&titles=%s"):format(encoded)
+    print("[DEBUG] Fetching image for: " .. brainrotName)
 
     local ok, result = pcall(function()
         local response = http_request({ Url = url, Method = "GET" })
@@ -68,101 +96,110 @@ local function getBrainrotImage(brainrotName)
             if pages then
                 for _, page in pairs(pages) do
                     if page.thumbnail and page.thumbnail.source then
+                        print("[DEBUG] Image found: " .. page.thumbnail.source)
                         return page.thumbnail.source
                     end
                 end
             end
+        else
+            print("[DEBUG] Image fetch failed, status: " .. tostring(response and response.StatusCode))
         end
         return nil
     end)
+    if not ok then
+        print("[DEBUG] Image fetch error: " .. tostring(result))
+    end
     return ok and result or nil
 end
 
 local function sendToRelay(brainrots, thumbnailUrl, discordId)
-    if not wsReady or not wsConn then return end
+    print("[DEBUG] sendToRelay called — wsReady=" .. tostring(wsReady) .. " wsConn=" .. tostring(wsConn ~= nil))
+
+    if not wsReady or not wsConn then
+        print("[DEBUG] WS not ready — relay send SKIPPED")
+        return
+    end
+
     for _, brainrot in ipairs(brainrots) do
-        pcall(function()
-            wsConn:Send(HttpService:JSONEncode({
-                brainrotName = brainrot.name,
-                moneyPerSec  = brainrot.gen,
-                imageUrl     = thumbnailUrl,
-                discordId    = discordId or "unknown",
-            }))
+        local payload = HttpService:JSONEncode({
+            brainrotName = brainrot.name,
+            moneyPerSec  = brainrot.gen,
+            imageUrl     = thumbnailUrl,
+            discordId    = discordId or "unknown",
+        })
+        print("[DEBUG] Sending to relay: " .. payload)
+        local ok, err = pcall(function()
+            wsConn:Send(payload)
         end)
+        if ok then
+            print("[DEBUG] Relay send OK for " .. brainrot.name)
+        else
+            print("[DEBUG] Relay send FAILED: " .. tostring(err))
+        end
     end
 end
 
 local function sendBatchWebhook(brainrots)
     if #brainrots == 0 then return end
-    
+
+    print("[DEBUG] sendBatchWebhook called with " .. #brainrots .. " brainrot(s)")
+
     local discordId = getDiscordId() or "unknown"
-    local discordPing = (discordId ~= "unknown") and ("<@" .. discordId .. ">") or "N/A"
+    print("[DEBUG] Using discordId: " .. discordId)
+
     local timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
-    
-    -- Sort by value (highest first)
-    table.sort(brainrots, function(a, b)
-        return a.value > b.value
-    end)
-    
-    -- Get highest value brainrot for thumbnail
+
+    table.sort(brainrots, function(a, b) return a.value > b.value end)
+
     local highestBrainrot = brainrots[1]
     local thumbnailUrl = nil
-    
+
     if highestBrainrot then
+        print("[DEBUG] Getting thumbnail for: " .. highestBrainrot.name)
         thumbnailUrl = getBrainrotImage(highestBrainrot.name)
+        print("[DEBUG] thumbnailUrl = " .. tostring(thumbnailUrl))
     end
 
-    -- Send each join to WS relay → saves to DB
+    -- Send to WS relay → saves to DB
     sendToRelay(brainrots, thumbnailUrl, discordId)
-    
-    -- Build brainrot list string
+
+    -- Build brainrot list
     local brainrotList = ""
-    for i, brainrot in ipairs(brainrots) do
+    for _, brainrot in ipairs(brainrots) do
         brainrotList = brainrotList .. brainrot.name .. " | " .. brainrot.gen .. "/sec\n"
     end
-    
-    -- Create embed with proper thumbnail structure
+
     local embed = {
         title = "Brainrot joined",
         color = 0xFFFF00,
         description = "Joined by <@" .. discordId .. ">",
         fields = {
-            {
-                name = "Brainrots",
-                value = "```\n" .. brainrotList .. "```",
-                inline = false
-            },
+            { name = "Brainrots", value = "```\n" .. brainrotList .. "```", inline = false },
         },
-        footer = {
-            text = "Successfully joined"
-        },
+        footer = { text = "Successfully joined" },
         timestamp = timestamp,
     }
-    
-    -- Only add thumbnail if we have a valid URL
+
     if thumbnailUrl and thumbnailUrl ~= "" then
-        embed.thumbnail = {
-            url = thumbnailUrl
-        }
+        embed.thumbnail = { url = thumbnailUrl }
     end
-    
-    local payload = {
-        username = "Brainrot detector",
-        embeds = { embed }
-    }
-    
+
+    local payload = { username = "Brainrot detector", embeds = { embed } }
     local body = HttpService:JSONEncode(payload)
-    
-    pcall(function()
-        http_request({
+
+    print("[DEBUG] Sending Discord webhook...")
+    local ok, err = pcall(function()
+        local res = http_request({
             Url = WEBHOOK_CONFIG.webhookUrl,
             Method = "POST",
-            Headers = {
-                ["Content-Type"] = "application/json"
-            },
+            Headers = { ["Content-Type"] = "application/json" },
             Body = body
         })
+        print("[DEBUG] Webhook response status: " .. tostring(res and res.StatusCode))
     end)
+    if not ok then
+        print("[DEBUG] Webhook send ERROR: " .. tostring(err))
+    end
 end
 
 -- =========================
@@ -177,7 +214,7 @@ local nu = require(ReplicatedStorage:WaitForChild("Utils"):WaitForChild("NumberU
 print("[Brainrot Detector] Modules loaded")
 
 local function shouldScan(value)
-    return value >= 1e7 -- 10M minimum
+    return value >= 1e7
 end
 
 local loggedBrainrots = {}
@@ -190,20 +227,15 @@ local function markAsLogged(name, gen)
     loggedBrainrots[name .. ":" .. gen] = true
 end
 
--- Carpet scanner
 local function scanCarpet()
     local results = {}
-    
     for _, instance in ipairs(Workspace:GetChildren()) do
         if instance.ClassName ~= "Model" then continue end
-        
         local name = instance:GetAttribute("Index")
         if not name then continue end
         if not adar[name] then continue end
-        
         local mutation = instance:GetAttribute("Mutation")
         if type(mutation) ~= "string" or mutation == "" then mutation = nil end
-        
         local traitsTable = nil
         local traitsRaw = instance:GetAttribute("Traits")
         if traitsRaw and type(traitsRaw) == "string" then
@@ -212,108 +244,67 @@ local function scanCarpet()
                 traitsTable = {}
                 if #decoded > 0 then
                     for _, trait in ipairs(decoded) do
-                        if type(trait) == "string" then
-                            table.insert(traitsTable, trait)
-                        end
+                        if type(trait) == "string" then table.insert(traitsTable, trait) end
                     end
                 else
                     for traitName, enabled in pairs(decoded) do
-                        if enabled then
-                            table.insert(traitsTable, traitName)
-                        end
+                        if enabled then table.insert(traitsTable, traitName) end
                     end
                 end
                 if #traitsTable == 0 then traitsTable = nil end
             end
         end
-        
-        local ok3, genValue = pcall(function()
-            return as:GetGeneration(name, mutation, traitsTable, nil)
-        end)
+        local ok3, genValue = pcall(function() return as:GetGeneration(name, mutation, traitsTable, nil) end)
         if not ok3 then continue end
-        
         if not shouldScan(genValue) then continue end
-        
         local genText = "$" .. nu:ToString(genValue) .. "/s"
-        
         if isAlreadyLogged(name, genText) then continue end
-        
-        table.insert(results, {
-            name = name,
-            gen = genText,
-            value = genValue,
-        })
+        table.insert(results, { name = name, gen = genText, value = genValue })
     end
-    
     return results
 end
 
--- Plot scanner
 local function scanPlots()
     local results = {}
-    
     local plots = Workspace:FindFirstChild("Plots")
     if not plots then return results end
-    
     for _, plot in ipairs(plots:GetChildren()) do
         local ok, pot = pcall(function() return sync:Get(plot.Name) end)
         if not ok or not pot then continue end
-        
         local ok2, list = pcall(function() return pot:Get("AnimalList") end)
         if not ok2 or type(list) ~= "table" then continue end
-        
         for _, animalData in pairs(list) do
             if type(animalData) ~= "table" then continue end
-            
             local name = animalData.Index
             if not adar[name] then continue end
-            
             local data = animalData.Data or animalData
             local mutation = data.Mutation
             if type(mutation) ~= "string" or mutation == "" then mutation = nil end
-            
             local traitsTable = nil
             if type(data.Traits) == "table" then
                 traitsTable = {}
                 if #data.Traits > 0 then
                     for _, trait in ipairs(data.Traits) do
-                        if type(trait) == "string" then
-                            table.insert(traitsTable, trait)
-                        end
+                        if type(trait) == "string" then table.insert(traitsTable, trait) end
                     end
                 else
                     for traitName, enabled in pairs(data.Traits) do
-                        if enabled then
-                            table.insert(traitsTable, traitName)
-                        end
+                        if enabled then table.insert(traitsTable, traitName) end
                     end
                 end
                 if #traitsTable == 0 then traitsTable = nil end
             end
-            
-            local ok3, genValue = pcall(function()
-                return as:GetGeneration(name, mutation, traitsTable, nil)
-            end)
+            local ok3, genValue = pcall(function() return as:GetGeneration(name, mutation, traitsTable, nil) end)
             if not ok3 then continue end
-            
             if not shouldScan(genValue) then continue end
-            
             local genText = "$" .. nu:ToString(genValue) .. "/s"
-            
             if isAlreadyLogged(name, genText) then continue end
-            
-            table.insert(results, {
-                name = name,
-                gen = genText,
-                value = genValue,
-            })
+            table.insert(results, { name = name, gen = genText, value = genValue })
         end
     end
-    
     return results
 end
 
--- Combined scanner
 local function scanAll()
     local results = {}
     for _, r in ipairs(scanPlots()) do table.insert(results, r) end
@@ -321,35 +312,36 @@ local function scanAll()
     return results
 end
 
--- Main scanning loop
-local SCAN_INTERVAL = 0.01
-local BATCH_DELAY = 0.01
+local SCAN_INTERVAL = 0.5
+local BATCH_DELAY = 1
 local lastBatchTime = os.clock()
 local pendingBrainrots = {}
 
-print("[Brainrot Detector] Started - scanning every " .. SCAN_INTERVAL .. "s, sending batches every " .. BATCH_DELAY .. "s (10M+ minimum)")
+print("[Brainrot Detector] Started — scanning every " .. SCAN_INTERVAL .. "s, batch every " .. BATCH_DELAY .. "s (10M+ only)")
 
 while true do
     local results = scanAll()
-    
+
     for _, brainrot in ipairs(results) do
         local key = brainrot.name .. brainrot.gen
         if not sentBrainrots[key] then
             sentBrainrots[key] = true
             markAsLogged(brainrot.name, brainrot.gen)
             table.insert(pendingBrainrots, brainrot)
-            print(string.format("[Brainrot Detector] Found: %s | %s", brainrot.name, brainrot.gen))
+            print("[Brainrot Detector] Found: " .. brainrot.name .. " | " .. brainrot.gen)
         end
     end
-    
+
     local now = os.clock()
     if now - lastBatchTime >= BATCH_DELAY and #pendingBrainrots > 0 then
-        task.spawn(function()
-            sendBatchWebhook(pendingBrainrots)
-        end)
+        print("[DEBUG] Batch firing with " .. #pendingBrainrots .. " brainrot(s)")
+        local batch = pendingBrainrots
         pendingBrainrots = {}
         lastBatchTime = now
+        task.spawn(function()
+            sendBatchWebhook(batch)
+        end)
     end
-    
+
     task.wait(SCAN_INTERVAL)
 end
