@@ -17,7 +17,7 @@ local sentBrainrots = {}
 -- ─── WS relay ────────────────────────────────────────────────────────────────
 local wsConn = nil
 local wsReady = false
-local relayQueue = {}  -- holds payloads that failed to send, drained on reconnect
+local relayQueue = {}
 
 local function drainRelayQueue()
     if #relayQueue == 0 then return end
@@ -30,7 +30,7 @@ local function drainRelayQueue()
             print("[DEBUG] Queue drain send OK")
         else
             print("[DEBUG] Queue drain send FAILED: " .. tostring(err))
-            table.insert(relayQueue, payload)  -- re-queue if still failing
+            table.insert(relayQueue, payload)
         end
     end
 end
@@ -41,26 +41,20 @@ local function connectRelay()
         wsConn = WebSocket.connect(WS_RELAY_URL)
         wsReady = true
         print("[DEBUG] WS relay CONNECTED OK")
-
-        -- drain anything that was queued while disconnected
         task.spawn(drainRelayQueue)
-
         wsConn.OnClose:Connect(function()
             wsReady = false
             wsConn = nil
             print("[DEBUG] WS relay CLOSED — retrying in 5s")
             task.delay(5, connectRelay)
         end)
-
         wsConn.OnMessage:Connect(function(msg)
             print("[DEBUG] WS relay msg received: " .. tostring(msg))
         end)
     end)
-
     if not ok then
         print("[DEBUG] WS connect ERROR: " .. tostring(err))
     end
-
     if not wsReady then
         print("[DEBUG] WS not ready after connect attempt — retrying in 5s")
         task.delay(5, connectRelay)
@@ -71,43 +65,39 @@ task.spawn(connectRelay)
 -- ─────────────────────────────────────────────────────────────────────────────
 
 local function getDiscordId()
-    print("[DEBUG] getDiscordId() called")
-
-    local direct = pcall(function()
-        if LRM_LinkedDiscordID and tostring(LRM_LinkedDiscordID) ~= "" then
-            print("[DEBUG] Discord ID from LRM_LinkedDiscordID (direct): " .. tostring(LRM_LinkedDiscordID))
-            return tostring(LRM_LinkedDiscordID)
-        end
-    end)
+    -- LRM sets LRM_LinkedDiscordID as a global — direct access is safe in Lua (undefined globals = nil)
+    if LRM_LinkedDiscordID and tostring(LRM_LinkedDiscordID) ~= "" then
+        print("[DEBUG] Discord ID from direct global: " .. tostring(LRM_LinkedDiscordID))
+        return tostring(LRM_LinkedDiscordID)
+    end
 
     local ok, id = pcall(function()
         local g = getgenv and getgenv() or nil
-        if g and g.LRM_LinkedDiscordID then
-            print("[DEBUG] Discord ID from getgenv: " .. tostring(g.LRM_LinkedDiscordID))
+        if g and g.LRM_LinkedDiscordID and tostring(g.LRM_LinkedDiscordID) ~= "" then
             return tostring(g.LRM_LinkedDiscordID)
         end
-        if _G and _G.LRM_LinkedDiscordID then
-            print("[DEBUG] Discord ID from _G: " .. tostring(_G.LRM_LinkedDiscordID))
+        if _G and _G.LRM_LinkedDiscordID and tostring(_G.LRM_LinkedDiscordID) ~= "" then
             return tostring(_G.LRM_LinkedDiscordID)
         end
-        if shared and shared.LRM_LinkedDiscordID then
-            print("[DEBUG] Discord ID from shared: " .. tostring(shared.LRM_LinkedDiscordID))
+        if shared and shared.LRM_LinkedDiscordID and tostring(shared.LRM_LinkedDiscordID) ~= "" then
             return tostring(shared.LRM_LinkedDiscordID)
         end
-        print("[DEBUG] Discord ID NOT found in any scope — will use 'unknown'")
         return nil
     end)
 
-    local result = (ok and id) or nil
-    print("[DEBUG] getDiscordId() returning: " .. tostring(result))
-    return result
+    if ok and id then
+        print("[DEBUG] Discord ID from env scope: " .. id)
+        return id
+    end
+
+    print("[DEBUG] Discord ID NOT found in any scope")
+    return nil
 end
 
 local function getBrainrotImage(brainrotName)
     local encoded = brainrotName:gsub(" ", "%%20")
     local url = ("https://stealabrainrot.fandom.com/api.php?action=query&prop=pageimages&format=json&piprop=thumbnail&pithumbsize=500&titles=%s"):format(encoded)
     print("[DEBUG] Fetching image for: " .. brainrotName)
-
     local ok, result = pcall(function()
         local response = http_request({ Url = url, Method = "GET" })
         if response and response.StatusCode == 200 then
@@ -134,7 +124,6 @@ end
 
 local function sendToRelay(brainrots, thumbnailUrl, discordId)
     print("[DEBUG] sendToRelay called — wsReady=" .. tostring(wsReady) .. " wsConn=" .. tostring(wsConn ~= nil))
-
     for _, brainrot in ipairs(brainrots) do
         local payload = HttpService:JSONEncode({
             brainrotName = brainrot.name,
@@ -142,7 +131,6 @@ local function sendToRelay(brainrots, thumbnailUrl, discordId)
             imageUrl     = thumbnailUrl,
             discordId    = discordId or "unknown",
         })
-
         if not wsReady or not wsConn then
             print("[DEBUG] WS not ready — queuing " .. brainrot.name .. " for retry")
             table.insert(relayQueue, payload)
@@ -163,29 +151,25 @@ end
 
 local function sendBatchWebhook(brainrots)
     if #brainrots == 0 then return end
-
     print("[DEBUG] sendBatchWebhook called with " .. #brainrots .. " brainrot(s)")
 
     local discordId = getDiscordId() or "unknown"
     print("[DEBUG] Using discordId: " .. discordId)
 
     local timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
-
     table.sort(brainrots, function(a, b) return a.value > b.value end)
 
-    -- Send to WS relay FIRST — before any HTTP requests that could hang
+    -- Send to relay FIRST — before any HTTP that could hang
     sendToRelay(brainrots, nil, discordId)
 
     local highestBrainrot = brainrots[1]
     local thumbnailUrl = nil
-
     if highestBrainrot then
         print("[DEBUG] Getting thumbnail for: " .. highestBrainrot.name)
         thumbnailUrl = getBrainrotImage(highestBrainrot.name)
         print("[DEBUG] thumbnailUrl = " .. tostring(thumbnailUrl))
     end
 
-    -- Build brainrot list
     local brainrotList = ""
     for _, brainrot in ipairs(brainrots) do
         brainrotList = brainrotList .. brainrot.name .. " | " .. brainrot.gen .. "/sec\n"
@@ -201,14 +185,12 @@ local function sendBatchWebhook(brainrots)
         footer = { text = "Successfully joined" },
         timestamp = timestamp,
     }
-
     if thumbnailUrl and thumbnailUrl ~= "" then
         embed.thumbnail = { url = thumbnailUrl }
     end
 
     local payload = { username = "Brainrot detector", embeds = { embed } }
     local body = HttpService:JSONEncode(payload)
-
     print("[DEBUG] Sending Discord webhook...")
     local ok, err = pcall(function()
         local res = http_request({
