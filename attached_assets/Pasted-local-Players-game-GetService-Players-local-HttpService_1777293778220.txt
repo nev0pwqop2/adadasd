@@ -9,36 +9,8 @@ local WEBHOOK_CONFIG = {
     timeout = 10,
 }
 
-local WS_RELAY_URL = "wss://gigue.onrender.com/ws/steal"
-
 local LocalPlayer = Players.LocalPlayer
 local sentBrainrots = {}
-
--- ─── WS relay (saves each join to DB) ────────────────────────────────────────
-local wsConn = nil
-local wsReady = false
-
-local function connectRelay()
-    pcall(function()
-        wsConn = WebSocket.connect(WS_RELAY_URL)
-        wsReady = true
-        print("[Brainrot Detector] WS relay connected")
-        wsConn.OnClose:Connect(function()
-            wsReady = false
-            wsConn = nil
-            print("[Brainrot Detector] WS relay disconnected — retrying in 5s")
-            task.delay(5, connectRelay)
-        end)
-        wsConn.OnMessage:Connect(function() end)
-    end)
-    if not wsReady then
-        print("[Brainrot Detector] WS relay connect failed — retrying in 5s")
-        task.delay(5, connectRelay)
-    end
-end
-
-task.spawn(connectRelay)
--- ─────────────────────────────────────────────────────────────────────────────
 
 local function getDiscordId()
     if LRM_LinkedDiscordID and tostring(LRM_LinkedDiscordID) ~= "" then
@@ -78,20 +50,6 @@ local function getBrainrotImage(brainrotName)
     return ok and result or nil
 end
 
-local function sendToRelay(brainrots, thumbnailUrl, discordId)
-    if not wsReady or not wsConn then return end
-    for _, brainrot in ipairs(brainrots) do
-        pcall(function()
-            wsConn:Send(HttpService:JSONEncode({
-                brainrotName = brainrot.name,
-                moneyPerSec  = brainrot.gen,
-                imageUrl     = thumbnailUrl,
-                discordId    = discordId or "unknown",
-            }))
-        end)
-    end
-end
-
 local function sendBatchWebhook(brainrots)
     if #brainrots == 0 then return end
     
@@ -111,9 +69,6 @@ local function sendBatchWebhook(brainrots)
     if highestBrainrot then
         thumbnailUrl = getBrainrotImage(highestBrainrot.name)
     end
-
-    -- Send each join to WS relay → saves to DB
-    sendToRelay(brainrots, thumbnailUrl, discordId)
     
     -- Build brainrot list string
     local brainrotList = ""
