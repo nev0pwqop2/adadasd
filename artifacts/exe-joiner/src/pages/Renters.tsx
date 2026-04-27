@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import Navbar from '@/components/Navbar';
-import { Clock, ChevronDown, ChevronUp } from 'lucide-react';
+import { Clock, ChevronDown, ChevronUp, AlertTriangle, WifiOff } from 'lucide-react';
 
 async function apiFetch<T>(path: string): Promise<T> {
   const res = await fetch(`${import.meta.env.BASE_URL}${path}`);
@@ -247,7 +247,7 @@ const MOCK_RENTERS: Renter[] = [
 ];
 
 export default function RentersPage() {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ['renters-public'],
     queryFn: () => apiFetch<{ renters: Renter[]; count: number }>('api/slots/renters'),
     refetchInterval: 15000,
@@ -267,6 +267,22 @@ export default function RentersPage() {
           <p className="text-white/40 text-sm">Live slot holders. Best join and deposits sync from the autojoiner and payments.</p>
         </motion.div>
 
+        {/* Error banner — API unreachable */}
+        {isError && (
+          <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="mb-6 flex items-center gap-3 rounded-xl border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+            <WifiOff className="w-4 h-4 flex-shrink-0" />
+            <span>Could not reach the server. Showing cached data — retrying automatically.</span>
+          </motion.div>
+        )}
+
+        {/* Warning banner — relay not connected / no joins in DB */}
+        {!isLoading && !isError && usingMock && (
+          <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="mb-6 flex items-center gap-3 rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-400">
+            <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+            <span>No active renters found. Relay may not be connected to the database — joins won't appear until it is.</span>
+          </motion.div>
+        )}
+
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="flex justify-center mb-10">
           <div className="rounded-2xl border border-white/10 bg-[#15100a] px-8 py-4 text-center">
             <p className="text-xs uppercase tracking-widest text-white/35 mb-1">Active</p>
@@ -276,8 +292,6 @@ export default function RentersPage() {
 
         {isLoading ? (
           <div className="text-center py-16 text-white/30 text-sm">Loading renters…</div>
-        ) : renters.length === 0 ? (
-          <div className="text-center py-16 text-white/30 text-sm">No active renters right now.</div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {renters.map((r, i) => (

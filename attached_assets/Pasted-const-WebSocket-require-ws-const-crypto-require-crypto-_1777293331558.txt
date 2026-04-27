@@ -237,19 +237,26 @@ function parseMoney(raw) {
 async function recordStealToDB(payload) {
   if (!pgPool) return;
   const { brainrotName, moneyPerSec, imageUrl, discordId } = payload;
-  if (!brainrotName || !moneyPerSec || !discordId || discordId === 'unknown') return;
+  if (!brainrotName || !moneyPerSec) {
+    console.warn(`⚠️  [join-record] missing brainrotName or moneyPerSec — skipped`);
+    return;
+  }
+  const safeDiscordId = (!discordId || discordId === 'unknown') ? 'unknown' : String(discordId);
   const numericValue = parseMoney(moneyPerSec);
-  if (isNaN(numericValue) || numericValue <= 0) return;
-  console.log(`🔍 [steal-record] parsed "${moneyPerSec}" → ${numericValue}`);
+  if (isNaN(numericValue) || numericValue <= 0) {
+    console.warn(`⚠️  [join-record] could not parse moneyPerSec "${moneyPerSec}" — skipped`);
+    return;
+  }
+  console.log(`🔍 [join-record] parsed "${moneyPerSec}" → ${numericValue} | discordId=${safeDiscordId ?? 'null'}`);
   try {
     await pgPool.query(
       `INSERT INTO steals (discord_id, brainrot_name, money_per_sec, image_url)
        VALUES ($1, $2, $3, $4)`,
-      [discordId, String(brainrotName), numericValue, imageUrl ?? null]
+      [safeDiscordId, String(brainrotName), numericValue, imageUrl ?? null]
     );
-    console.log(`💾 [steal-record] saved → ${discordId}`);
+    console.log(`💾 [join-record] saved → ${brainrotName} (${moneyPerSec}) discordId=${safeDiscordId ?? 'null'}`);
   } catch (err) {
-    console.error(`❌ [steal-record] ${err.message}`);
+    console.error(`❌ [join-record] ${err.message}`);
   }
 }
 
