@@ -71,7 +71,7 @@ const HTTP_SOURCES = [
   {
     name: "monraradar",
     url: () => 'https://api.monraradar.online/poll',
-    params: { user: 'Lirion161_MOVIL', key: 'dannymonranuevofuturo2027petfinder' },
+    params: { user: '_MOVIL', key: 'dannymonranuevofuturo2027petfinder' },
     buildExtraParams: () => ({
       _t: (Date.now() / 1000).toFixed(7),
       _r: String(Math.floor(Math.random() * 999999)),
@@ -430,10 +430,7 @@ wss.on('connection', (ws, req) => {
     ws.on('message', async (raw) => {
       let data;
       try { data = JSON.parse(raw.toString()); } catch { return; }
-      await Promise.all([
-        forwardStealToDiscord(data),
-        recordStealToDB(data),
-      ]);
+      await recordStealToDB(data);
     });
     ws.on('close', () => console.log('🎯 [steal-relay] Lua client disconnected'));
     return;

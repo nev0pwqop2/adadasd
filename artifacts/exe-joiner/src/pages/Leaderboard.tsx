@@ -26,8 +26,8 @@ type LeaderEntry = {
 type Tab = 'steals' | 'best' | 'deposits';
 
 const TABS: { id: Tab; label: string; sub: string }[] = [
-  { id: 'steals', label: 'By steals', sub: 'Ranked by total successful steals.' },
-  { id: 'best', label: 'By best steal', sub: 'Ranked by brainrot tier, then highest $/s.' },
+  { id: 'steals', label: 'By joins', sub: 'Ranked by total successful joins.' },
+  { id: 'best', label: 'By best join', sub: 'Ranked by brainrot tier, then highest $/s.' },
   { id: 'deposits', label: 'By deposits', sub: 'Ranked by lifetime USD deposited.' },
 ];
 
@@ -142,7 +142,7 @@ function PodiumCard({ entry, rank, tab, isCenter }: { entry: LeaderEntry; rank: 
         <div className="grid grid-cols-3 text-center gap-0.5">
           <div className="min-w-0">
             <p className="text-lg font-extrabold text-[#4ade80] leading-tight">{entry.stealCount}</p>
-            <p className="text-[9px] uppercase tracking-widest text-white/30">Stolen</p>
+            <p className="text-[9px] uppercase tracking-widest text-white/30">Joins</p>
           </div>
           <div className="min-w-0">
             <p className="text-sm font-bold text-white truncate leading-tight">{fmtMoney(entry.bestStealMoneyPerSec)}</p>
@@ -159,7 +159,7 @@ function PodiumCard({ entry, rank, tab, isCenter }: { entry: LeaderEntry; rank: 
 
         {/* Top steals */}
         <div className="min-w-0">
-          <p className="text-[9px] uppercase tracking-widest text-white/25 mb-2">Top Steals</p>
+          <p className="text-[9px] uppercase tracking-widest text-white/25 mb-2">Top Joins</p>
           {entry.topSteals.length > 0 ? (
             <div className="flex flex-col gap-1.5">
               {/* Best steal — larger */}
@@ -184,7 +184,7 @@ function PodiumCard({ entry, rank, tab, isCenter }: { entry: LeaderEntry; rank: 
               )}
             </div>
           ) : (
-            <p className="text-xs text-white/20 text-center py-2">No steals yet</p>
+            <p className="text-xs text-white/20 text-center py-2">No joins yet</p>
           )}
         </div>
       </div>
@@ -194,7 +194,7 @@ function PodiumCard({ entry, rank, tab, isCenter }: { entry: LeaderEntry; rank: 
 
 function LeaderRow({ entry, rank, tab }: { entry: LeaderEntry; rank: number; tab: Tab }) {
   const value =
-    tab === 'steals' ? `${entry.stealCount} steals` :
+    tab === 'steals' ? `${entry.stealCount} joins` :
     tab === 'deposits' ? `$${entry.totalDeposited.toFixed(2)}` :
     fmtMoney(entry.bestStealMoneyPerSec);
 

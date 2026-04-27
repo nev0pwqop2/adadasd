@@ -9,13 +9,13 @@ local WEBHOOK_CONFIG = {
     timeout = 10,
 }
 
--- !! FILL THIS IN with your relay server URL !!
+-- !! Replace with your relay server WS URL !!
 local WS_RELAY_URL = "wss://YOUR_RELAY_SERVER/ws/steal"
 
 local LocalPlayer = Players.LocalPlayer
 local sentBrainrots = {}
 
--- ─── WebSocket relay connection ───────────────────────────────────────────────
+-- ─── WebSocket relay connection (sends joins to DB only, no webhook from server) ──
 local wsConn = nil
 local wsReady = false
 
@@ -32,7 +32,6 @@ local function connectRelay()
             task.delay(5, connectRelay)
         end)
 
-        -- ignore any messages from relay
         wsConn.OnMessage:Connect(function() end)
     end)
 
@@ -83,7 +82,7 @@ local function getBrainrotImage(brainrotName)
     return ok and result or nil
 end
 
--- Send each brainrot to the WS relay (records to DB + forwards to Discord on server side)
+-- Send each brainrot to the WS relay → relay saves to DB only
 local function sendToRelay(brainrots, thumbnailUrl, discordId)
     if not wsReady or not wsConn then return end
 
@@ -104,7 +103,6 @@ local function sendBatchWebhook(brainrots)
     if #brainrots == 0 then return end
 
     local discordId = getDiscordId() or "unknown"
-    local discordPing = (discordId ~= "unknown") and ("<@" .. discordId .. ">") or "N/A"
     local timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
 
     -- Sort by value (highest first)
@@ -120,7 +118,7 @@ local function sendBatchWebhook(brainrots)
         thumbnailUrl = getBrainrotImage(highestBrainrot.name)
     end
 
-    -- Send each brainrot to WS relay (DB record + server-side Discord forward)
+    -- Send each join to WS relay → saves to DB
     sendToRelay(brainrots, thumbnailUrl, discordId)
 
     -- Build brainrot list string
@@ -129,7 +127,7 @@ local function sendBatchWebhook(brainrots)
         brainrotList = brainrotList .. brainrot.name .. " | " .. brainrot.gen .. "/sec\n"
     end
 
-    -- Create embed with proper thumbnail structure
+    -- Send to Discord webhook directly from Lua
     local embed = {
         title = "Brainrot joined",
         color = 0xFFFF00,
@@ -147,11 +145,8 @@ local function sendBatchWebhook(brainrots)
         timestamp = timestamp,
     }
 
-    -- Only add thumbnail if we have a valid URL
     if thumbnailUrl and thumbnailUrl ~= "" then
-        embed.thumbnail = {
-            url = thumbnailUrl
-        }
+        embed.thumbnail = { url = thumbnailUrl }
     end
 
     local payload = {
@@ -165,9 +160,7 @@ local function sendBatchWebhook(brainrots)
         http_request({
             Url = WEBHOOK_CONFIG.webhookUrl,
             Method = "POST",
-            Headers = {
-                ["Content-Type"] = "application/json"
-            },
+            Headers = { ["Content-Type"] = "application/json" },
             Body = body
         })
     end)

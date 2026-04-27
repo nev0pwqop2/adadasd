@@ -155,7 +155,7 @@ function RenterCard({ renter, index }: { renter: Renter; index: number }) {
         {/* Stats row */}
         <div className="flex items-center">
           <div className="flex-1 text-center">
-            <p className="text-[9px] uppercase tracking-widest text-white/25 mb-1">Steals</p>
+            <p className="text-[9px] uppercase tracking-widest text-white/25 mb-1">Joins</p>
             <p className="font-extrabold text-white text-xl">{renter.stealCount}</p>
           </div>
           <div className="w-px h-8 bg-white/[0.06]" />
@@ -168,7 +168,7 @@ function RenterCard({ renter, index }: { renter: Renter; index: number }) {
         {/* Best steal */}
         {renter.bestSteal ? (
           <div className="flex flex-col gap-2">
-            <p className="text-[9px] uppercase tracking-widest text-white/25 font-semibold">Best Steal</p>
+            <p className="text-[9px] uppercase tracking-widest text-white/25 font-semibold">Best Join</p>
             <div className="flex items-center gap-3 bg-white/[0.025] rounded-xl px-3 py-2.5">
               <BrainrotImage imageUrl={renter.bestSteal.imageUrl} name={renter.bestSteal.brainrotName} />
               <div className="min-w-0 flex-1">
@@ -197,15 +197,15 @@ function RenterCard({ renter, index }: { renter: Renter; index: number }) {
                   className="flex items-center gap-1 text-[11px] text-white/30 hover:text-white/55 transition-colors self-start"
                 >
                   {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                  {expanded ? 'Show less' : `${renter.otherSteals.length} more steal${renter.otherSteals.length > 1 ? 's' : ''}`}
+                  {expanded ? 'Show less' : `${renter.otherSteals.length} more join${renter.otherSteals.length > 1 ? 's' : ''}`}
                 </button>
               </>
             )}
           </div>
         ) : (
           <div className="text-center py-2">
-            <p className="text-[9px] uppercase tracking-widest text-white/20 mb-1">Best Steal</p>
-            <p className="text-xs text-white/15">No steals yet</p>
+            <p className="text-[9px] uppercase tracking-widest text-white/20 mb-1">Best Join</p>
+            <p className="text-xs text-white/15">No joins yet</p>
           </div>
         )}
       </div>
@@ -263,7 +263,7 @@ export default function RentersPage() {
       <div className="relative z-10 max-w-5xl mx-auto w-full px-4 py-12">
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-8">
           <h1 className="text-4xl md:text-5xl font-extrabold text-white mb-3">Our Renters</h1>
-          <p className="text-white/40 text-sm">Live slot holders. Best steal and deposits sync from the autojoiner and payments.</p>
+          <p className="text-white/40 text-sm">Live slot holders. Best join and deposits sync from the autojoiner and payments.</p>
         </motion.div>
 
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="flex justify-center mb-10">
