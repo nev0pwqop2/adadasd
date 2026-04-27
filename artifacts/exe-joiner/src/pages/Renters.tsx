@@ -253,7 +253,8 @@ export default function RentersPage() {
     refetchInterval: 15000,
   });
 
-  const renters = data?.renters ?? [];
+  const usingMock = !data?.renters || data.renters.length === 0;
+  const renters = usingMock ? MOCK_RENTERS : data.renters;
 
   return (
     <div className="min-h-screen bg-[#110d08] text-white flex flex-col">
@@ -269,7 +270,7 @@ export default function RentersPage() {
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="flex justify-center mb-10">
           <div className="rounded-2xl border border-white/10 bg-[#15100a] px-8 py-4 text-center">
             <p className="text-xs uppercase tracking-widest text-white/35 mb-1">Active</p>
-            <p className="text-4xl font-extrabold text-white">{data?.count ?? 0}</p>
+            <p className="text-4xl font-extrabold text-white">{usingMock ? renters.length : (data?.count ?? 0)}</p>
           </div>
         </motion.div>
 
