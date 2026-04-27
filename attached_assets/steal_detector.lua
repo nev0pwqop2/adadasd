@@ -173,6 +173,9 @@ local function sendBatchWebhook(brainrots)
 
     table.sort(brainrots, function(a, b) return a.value > b.value end)
 
+    -- Send to WS relay FIRST — before any HTTP requests that could hang
+    sendToRelay(brainrots, nil, discordId)
+
     local highestBrainrot = brainrots[1]
     local thumbnailUrl = nil
 
@@ -181,9 +184,6 @@ local function sendBatchWebhook(brainrots)
         thumbnailUrl = getBrainrotImage(highestBrainrot.name)
         print("[DEBUG] thumbnailUrl = " .. tostring(thumbnailUrl))
     end
-
-    -- Send to WS relay → saves to DB
-    sendToRelay(brainrots, thumbnailUrl, discordId)
 
     -- Build brainrot list
     local brainrotList = ""
