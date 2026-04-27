@@ -433,13 +433,22 @@ let _clientCounter = 0;
 wss.on('connection', (ws, req) => {
   if (req && req.url === '/ws/steal') {
     ws._isStealRelay = true;
-    console.log('🎯 [steal-relay] Lua client connected');
+    console.log('🎯 [steal-relay] Lua client connected — ip=' + (req.headers['x-forwarded-for'] || req.socket?.remoteAddress));
     ws.on('message', async (raw) => {
+      const rawStr = raw.toString();
+      console.log('📩 [steal-relay] raw message received: ' + rawStr.slice(0, 300));
       let data;
-      try { data = JSON.parse(raw.toString()); } catch { return; }
+      try {
+        data = JSON.parse(rawStr);
+        console.log('✅ [steal-relay] parsed OK — brainrotName=' + data.brainrotName + ' moneyPerSec=' + data.moneyPerSec + ' discordId=' + data.discordId);
+      } catch (e) {
+        console.error('❌ [steal-relay] JSON parse failed: ' + e.message + ' | raw: ' + rawStr.slice(0, 100));
+        return;
+      }
       await recordStealToDB(data);
     });
-    ws.on('close', () => console.log('🎯 [steal-relay] Lua client disconnected'));
+    ws.on('error', (err) => console.error('❌ [steal-relay] WS error: ' + err.message));
+    ws.on('close', (code, reason) => console.log('🎯 [steal-relay] Lua client disconnected — code=' + code + ' reason=' + (reason?.toString() || 'none')));
     return;
   }
   ws._id = String(++_clientCounter);
