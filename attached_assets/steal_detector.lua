@@ -17,6 +17,23 @@ local sentBrainrots = {}
 -- ─── WS relay ────────────────────────────────────────────────────────────────
 local wsConn = nil
 local wsReady = false
+local relayQueue = {}  -- holds payloads that failed to send, drained on reconnect
+
+local function drainRelayQueue()
+    if #relayQueue == 0 then return end
+    print("[DEBUG] Draining relay queue — " .. #relayQueue .. " item(s)")
+    local queue = relayQueue
+    relayQueue = {}
+    for _, payload in ipairs(queue) do
+        local ok, err = pcall(function() wsConn:Send(payload) end)
+        if ok then
+            print("[DEBUG] Queue drain send OK")
+        else
+            print("[DEBUG] Queue drain send FAILED: " .. tostring(err))
+            table.insert(relayQueue, payload)  -- re-queue if still failing
+        end
+    end
+end
 
 local function connectRelay()
     print("[DEBUG] Attempting WS connect to " .. WS_RELAY_URL)
@@ -24,6 +41,9 @@ local function connectRelay()
         wsConn = WebSocket.connect(WS_RELAY_URL)
         wsReady = true
         print("[DEBUG] WS relay CONNECTED OK")
+
+        -- drain anything that was queued while disconnected
+        task.spawn(drainRelayQueue)
 
         wsConn.OnClose:Connect(function()
             wsReady = false
@@ -115,11 +135,6 @@ end
 local function sendToRelay(brainrots, thumbnailUrl, discordId)
     print("[DEBUG] sendToRelay called — wsReady=" .. tostring(wsReady) .. " wsConn=" .. tostring(wsConn ~= nil))
 
-    if not wsReady or not wsConn then
-        print("[DEBUG] WS not ready — relay send SKIPPED")
-        return
-    end
-
     for _, brainrot in ipairs(brainrots) do
         local payload = HttpService:JSONEncode({
             brainrotName = brainrot.name,
@@ -127,14 +142,21 @@ local function sendToRelay(brainrots, thumbnailUrl, discordId)
             imageUrl     = thumbnailUrl,
             discordId    = discordId or "unknown",
         })
-        print("[DEBUG] Sending to relay: " .. payload)
-        local ok, err = pcall(function()
-            wsConn:Send(payload)
-        end)
-        if ok then
-            print("[DEBUG] Relay send OK for " .. brainrot.name)
+
+        if not wsReady or not wsConn then
+            print("[DEBUG] WS not ready — queuing " .. brainrot.name .. " for retry")
+            table.insert(relayQueue, payload)
         else
-            print("[DEBUG] Relay send FAILED: " .. tostring(err))
+            print("[DEBUG] Sending to relay: " .. payload)
+            local ok, err = pcall(function()
+                wsConn:Send(payload)
+            end)
+            if ok then
+                print("[DEBUG] Relay send OK for " .. brainrot.name)
+            else
+                print("[DEBUG] Relay send FAILED — queuing: " .. tostring(err))
+                table.insert(relayQueue, payload)
+            end
         end
     end
 end
