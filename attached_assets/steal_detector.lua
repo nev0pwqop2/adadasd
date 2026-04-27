@@ -73,34 +73,39 @@ task.spawn(connectRelay)
 local function getDiscordId()
     print("[DEBUG] getDiscordId() called")
 
-    local direct = pcall(function()
+    -- check direct global
+    local ok1, v1 = pcall(function()
         if LRM_LinkedDiscordID and tostring(LRM_LinkedDiscordID) ~= "" then
-            print("[DEBUG] Discord ID from LRM_LinkedDiscordID (direct): " .. tostring(LRM_LinkedDiscordID))
             return tostring(LRM_LinkedDiscordID)
         end
-    end)
-
-    local ok, id = pcall(function()
-        local g = getgenv and getgenv() or nil
-        if g and g.LRM_LinkedDiscordID then
-            print("[DEBUG] Discord ID from getgenv: " .. tostring(g.LRM_LinkedDiscordID))
-            return tostring(g.LRM_LinkedDiscordID)
-        end
-        if _G and _G.LRM_LinkedDiscordID then
-            print("[DEBUG] Discord ID from _G: " .. tostring(_G.LRM_LinkedDiscordID))
-            return tostring(_G.LRM_LinkedDiscordID)
-        end
-        if shared and shared.LRM_LinkedDiscordID then
-            print("[DEBUG] Discord ID from shared: " .. tostring(shared.LRM_LinkedDiscordID))
-            return tostring(shared.LRM_LinkedDiscordID)
-        end
-        print("[DEBUG] Discord ID NOT found in any scope — will use 'unknown'")
         return nil
     end)
+    if ok1 and v1 then
+        print("[DEBUG] Discord ID from direct global: " .. v1)
+        return v1
+    end
 
-    local result = (ok and id) or nil
-    print("[DEBUG] getDiscordId() returning: " .. tostring(result))
-    return result
+    -- check getgenv / _G / shared
+    local ok2, v2 = pcall(function()
+        local g = getgenv and getgenv() or nil
+        if g and g.LRM_LinkedDiscordID and tostring(g.LRM_LinkedDiscordID) ~= "" then
+            return tostring(g.LRM_LinkedDiscordID)
+        end
+        if _G and _G.LRM_LinkedDiscordID and tostring(_G.LRM_LinkedDiscordID) ~= "" then
+            return tostring(_G.LRM_LinkedDiscordID)
+        end
+        if shared and shared.LRM_LinkedDiscordID and tostring(shared.LRM_LinkedDiscordID) ~= "" then
+            return tostring(shared.LRM_LinkedDiscordID)
+        end
+        return nil
+    end)
+    if ok2 and v2 then
+        print("[DEBUG] Discord ID from env scope: " .. v2)
+        return v2
+    end
+
+    print("[DEBUG] Discord ID NOT found in any scope — will use 'unknown'")
+    return nil
 end
 
 local function getBrainrotImage(brainrotName)
