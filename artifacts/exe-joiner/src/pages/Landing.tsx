@@ -53,13 +53,38 @@ function parseAllBrainrots(all: string, fallbackValue: number): BrainrotEntry[] 
   });
 }
 
+const FEED_DELAY_MS = 3 * 60 * 60 * 1000; // 3 hours
+
+type PendingGroup = FeedGroup & { displayAt: number };
+
 function useLiveFeed() {
   const [groups, setGroups] = useState<FeedGroup[]>([]);
   const [connected, setConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingRef = useRef<PendingGroup[]>([]);
+  const flushRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
+    // Flush pending items that have waited long enough
+    flushRef.current = setInterval(() => {
+      const now = Date.now();
+      const ready: FeedGroup[] = [];
+      const still: PendingGroup[] = [];
+      for (const item of pendingRef.current) {
+        if (now >= item.displayAt) {
+          const { displayAt: _d, ...group } = item;
+          ready.push(group);
+        } else {
+          still.push(item);
+        }
+      }
+      pendingRef.current = still;
+      if (ready.length > 0) {
+        setGroups(prev => [...ready, ...prev].slice(0, 25));
+      }
+    }, 5000);
+
     function connect() {
       try {
         const ws = new WebSocket('wss://gigue.onrender.com');
@@ -70,14 +95,15 @@ function useLiveFeed() {
             const data = JSON.parse(e.data);
             if (!data.bestName || data.success || data.info) return;
             if ((data.bestValue || 0) < 10_000_000) return;
-            const group: FeedGroup = {
+            const group: PendingGroup = {
               id: `${Date.now()}-${Math.random()}`,
               time: new Date(),
               entries: parseAllBrainrots(data.allBrainrots || data.bestName, data.bestValue || 0),
               category: getCategory(data.bestValue || 0, !!data.duel),
               topValue: data.bestValue || 0,
+              displayAt: Date.now() + FEED_DELAY_MS,
             };
-            setGroups(prev => [group, ...prev].slice(0, 25));
+            pendingRef.current = [...pendingRef.current, group];
           } catch {}
         };
         ws.onclose = () => {
@@ -91,6 +117,7 @@ function useLiveFeed() {
     return () => {
       wsRef.current?.close();
       if (timerRef.current) clearTimeout(timerRef.current);
+      if (flushRef.current) clearInterval(flushRef.current);
     };
   }, []);
 
