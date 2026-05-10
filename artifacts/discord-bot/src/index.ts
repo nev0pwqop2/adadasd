@@ -1,0 +1,1027 @@
+import {
+  Client,
+  GatewayIntentBits,
+  Partials,
+  REST,
+  Routes,
+  SlashCommandBuilder,
+  ChatInputCommandInteraction,
+  Events,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+} from "discord.js";
+import pg from "pg";
+
+const { Client: PgClient } = pg;
+
+const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
+const DISCORD_APPLICATION_ID = process.env.DISCORD_APPLICATION_ID || process.env.DISCORD_CLIENT_ID;
+const DISCORD_GUILD_ID = process.env.DISCORD_GUILD_ID;
+const SUPABASE_DATABASE_URL = process.env.SUPABASE_DATABASE_URL || process.env.DATABASE_URL;
+const LUARMOR_API_KEY = process.env.LUARMOR_API_KEY;
+const LUARMOR_PROJECT_ID = process.env.LUARMOR_PROJECT_ID;
+
+const ALLOWED_USER_IDS = new Set(["1279091875378368595", "905033435817586749", "1435005690824622090", "1411024429365989456", "1485902008601804900", "633039714160738342", "335796369921015808"]);
+
+if (!DISCORD_BOT_TOKEN || !DISCORD_APPLICATION_ID || !SUPABASE_DATABASE_URL) {
+  console.error("Missing required env vars:", {
+    DISCORD_BOT_TOKEN: !!DISCORD_BOT_TOKEN,
+    DISCORD_APPLICATION_ID: !!DISCORD_APPLICATION_ID,
+    DATABASE_URL: !!SUPABASE_DATABASE_URL,
+  });
+  process.exit(1);
+}
+
+const db = new PgClient({ connectionString: SUPABASE_DATABASE_URL });
+await db.connect();
+console.log("Connected to database");
+
+// ---------------------------------------------------------------------------
+// Luarmor helpers (only active when LUARMOR_API_KEY + LUARMOR_PROJECT_ID set)
+// ---------------------------------------------------------------------------
+
+function luarmorConfigured(): boolean {
+  return !!(LUARMOR_API_KEY && LUARMOR_PROJECT_ID);
+}
+
+async function luarmorRequest(path: string, options: RequestInit = {}): Promise<unknown> {
+  if (!LUARMOR_API_KEY || !LUARMOR_PROJECT_ID) throw new Error("Luarmor not configured");
+  const res = await fetch(`https://api.luarmor.net/v3${path}`, {
+    ...options,
+    headers: {
+      Authorization: LUARMOR_API_KEY,
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Luarmor ${res.status}: ${text}`);
+  }
+  return res.json();
+}
+
+async function luarmorCreateOrUpdateUser(discordId: string, username: string, expiresAt: Date): Promise<string> {
+  const authExpire = Math.floor(expiresAt.getTime() / 1000);
+  try {
+    const data = await luarmorRequest(`/projects/${LUARMOR_PROJECT_ID}/users`, {
+      method: "POST",
+      body: JSON.stringify({ discord_id: discordId, note: username, auth_expire: authExpire }),
+    }) as { user_key: string };
+    return data.user_key;
+  } catch {
+    // User may already exist — find and update them
+    const list = await luarmorRequest(`/projects/${LUARMOR_PROJECT_ID}/users`) as { users: { user_key: string; discord_id: string }[] };
+    const existing = list.users?.find((u) => u.discord_id === discordId);
+    if (existing) {
+      await luarmorRequest(`/projects/${LUARMOR_PROJECT_ID}/users`, {
+        method: "PATCH",
+        body: JSON.stringify({ user_key: existing.user_key, auth_expire: authExpire, note: username }),
+      });
+      return existing.user_key;
+    }
+    throw new Error("Could not create or find Luarmor user");
+  }
+}
+
+async function luarmorDeleteUser(userKey: string): Promise<void> {
+  await luarmorRequest(
+    `/projects/${LUARMOR_PROJECT_ID}/users?user_key=${encodeURIComponent(userKey)}`,
+    { method: "DELETE" }
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Commands
+// ---------------------------------------------------------------------------
+
+const commands = [
+  new SlashCommandBuilder()
+    .setName("whitelist")
+    .setDescription("Whitelist a user by granting them a slot for a set duration")
+    .addUserOption((opt) =>
+      opt
+        .setName("mention")
+        .setDescription("Ping/mention the Discord user directly")
+        .setRequired(false)
+    )
+    .addStringOption((opt) =>
+      opt
+        .setName("username")
+        .setDescription("Site username or Discord ID (use mention instead if possible)")
+        .setRequired(false)
+    )
+    .addIntegerOption((opt) =>
+      opt
+        .setName("hours")
+        .setDescription("Hours to whitelist for (can combine with minutes)")
+        .setRequired(false)
+        .setMinValue(0)
+        .setMaxValue(720)
+    )
+    .addIntegerOption((opt) =>
+      opt
+        .setName("minutes")
+        .setDescription("Extra minutes to whitelist for (can combine with hours)")
+        .setRequired(false)
+        .setMinValue(0)
+        .setMaxValue(59)
+    )
+    .addIntegerOption((opt) =>
+      opt
+        .setName("slot")
+        .setDescription("Specific slot number to assign (auto-assigns if not set)")
+        .setRequired(false)
+        .setMinValue(1)
+        .setMaxValue(50)
+    )
+    .toJSON(),
+  new SlashCommandBuilder()
+    .setName("addbalance")
+    .setDescription("Add balance to a user's account")
+    .addUserOption((opt) =>
+      opt
+        .setName("mention")
+        .setDescription("The Discord user to add balance to")
+        .setRequired(true)
+    )
+    .addNumberOption((opt) =>
+      opt
+        .setName("amount")
+        .setDescription("Amount in USD to add (e.g. 10.00)")
+        .setRequired(true)
+        .setMinValue(0.01)
+    )
+    .toJSON(),
+  new SlashCommandBuilder()
+    .setName("unwhitelist")
+    .setDescription("Remove a user's active slot(s)")
+    .addUserOption((opt) =>
+      opt
+        .setName("mention")
+        .setDescription("Ping/mention the Discord user directly")
+        .setRequired(false)
+    )
+    .addStringOption((opt) =>
+      opt
+        .setName("username")
+        .setDescription("Site username or Discord ID (use mention instead if possible)")
+        .setRequired(false)
+    )
+    .addIntegerOption((opt) =>
+      opt
+        .setName("slot")
+        .setDescription("Specific slot number to remove (removes all active slots if not set)")
+        .setRequired(false)
+        .setMinValue(1)
+        .setMaxValue(50)
+    )
+    .toJSON(),
+  new SlashCommandBuilder()
+    .setName("unban")
+    .setDescription("Unban all users that were banned on a specific day this month and re-add them to the server")
+    .addIntegerOption((opt) =>
+      opt
+        .setName("day")
+        .setDescription("Day of the current month (1–31)")
+        .setRequired(true)
+        .setMinValue(1)
+        .setMaxValue(31)
+    )
+    .toJSON(),
+  new SlashCommandBuilder()
+    .setName("add")
+    .setDescription("Add all users who authorized the bot (guilds.join scope) back to the server")
+    .toJSON(),
+];
+
+const rest = new REST({
+  version: "10",
+  ...(process.env.DISCORD_REST_PROXY
+    ? { api: process.env.DISCORD_REST_PROXY.replace(/\/$/, "") }
+    : {}),
+}).setToken(DISCORD_BOT_TOKEN!);
+
+async function registerCommands() {
+  try {
+    await rest.put(Routes.applicationCommands(DISCORD_APPLICATION_ID!), { body: commands });
+    console.log("Slash commands registered globally");
+  } catch (err) {
+    console.error("Failed to register commands:", err);
+  }
+}
+
+async function getAvailableSlot(preferredSlot?: number): Promise<number | null> {
+  const settingsRes = await db.query(`SELECT value FROM settings WHERE key = 'slotCount' LIMIT 1`);
+  const slotCount = settingsRes.rows.length > 0 ? parseInt(settingsRes.rows[0].value) : 10;
+
+  if (preferredSlot) {
+    const activeRes = await db.query(
+      `SELECT 1 FROM slots WHERE slot_number = $1 AND is_active = true LIMIT 1`,
+      [preferredSlot]
+    );
+    if (activeRes.rows.length > 0) return null;
+    return preferredSlot;
+  }
+
+  const activeRes = await db.query(`SELECT DISTINCT slot_number FROM slots WHERE is_active = true`);
+  const activeSlots = new Set<number>(activeRes.rows.map((r: { slot_number: number }) => r.slot_number));
+
+  for (let i = 1; i <= slotCount; i++) {
+    if (!activeSlots.has(i)) return i;
+  }
+  return null;
+}
+
+async function handleWhitelist(interaction: ChatInputCommandInteraction) {
+  if (!ALLOWED_USER_IDS.has(interaction.user.id)) {
+    await interaction.reply({ content: "❌ You are not authorized to use this command.", ephemeral: true });
+    return;
+  }
+
+  await interaction.deferReply({ ephemeral: true });
+
+  const mentionedUser = interaction.options.getUser("mention");
+  const usernameRaw = interaction.options.getString("username")?.replace(/^@+/, "").trim();
+  const hours = interaction.options.getInteger("hours") ?? 0;
+  const minutes = interaction.options.getInteger("minutes") ?? 0;
+  const preferredSlot = interaction.options.getInteger("slot") ?? undefined;
+
+  if (!mentionedUser && !usernameRaw) {
+    await interaction.editReply("❌ You must provide either a @mention or a username.");
+    return;
+  }
+
+  const totalMs = (hours * 60 + minutes) * 60 * 1000;
+  if (totalMs <= 0) {
+    await interaction.editReply("❌ You must specify at least 1 minute (use the `hours` and/or `minutes` options).");
+    return;
+  }
+
+  let userRes;
+  let username: string;
+  if (mentionedUser) {
+    userRes = await db.query(`SELECT * FROM users WHERE discord_id = $1 LIMIT 1`, [mentionedUser.id]);
+    username = mentionedUser.username;
+  } else {
+    const isSnowflake = /^\d{15,20}$/.test(usernameRaw!);
+    userRes = isSnowflake
+      ? await db.query(`SELECT * FROM users WHERE discord_id = $1 LIMIT 1`, [usernameRaw])
+      : await db.query(`SELECT * FROM users WHERE LOWER(username) = LOWER($1) LIMIT 1`, [usernameRaw]);
+    username = usernameRaw!;
+  }
+
+  if (userRes.rows.length === 0) {
+    await interaction.editReply(`❌ User **${username}** not found. They must log in to the site first, or try their Discord ID (a long number).`);
+    return;
+  }
+
+  const user = userRes.rows[0];
+
+  // If user already has an active slot, extend that one — don't create a second
+  const existingActiveRes = await db.query(
+    `SELECT slot_number FROM slots WHERE user_id = $1 AND is_active = true LIMIT 1`,
+    [user.id]
+  );
+  const existingActiveSlot: number | undefined = existingActiveRes.rows[0]?.slot_number;
+
+  const slotNumber = existingActiveSlot ?? await getAvailableSlot(preferredSlot);
+
+  if (slotNumber === null) {
+    await interaction.editReply(
+      preferredSlot
+        ? `❌ Slot #${preferredSlot} is already active. Choose a different slot or leave it blank for auto-assign.`
+        : `❌ No available slots right now. All slots are currently active.`
+    );
+    return;
+  }
+
+  const expiresAt = new Date(Date.now() + totalMs);
+  const purchasedAt = new Date();
+
+  // Create or update Luarmor user if configured
+  let luarmorUserId: string | null = null;
+  let luarmorError: string | null = null;
+  if (luarmorConfigured()) {
+    try {
+      luarmorUserId = await luarmorCreateOrUpdateUser(user.discord_id, username, expiresAt);
+      console.log(`[WHITELIST] Luarmor user created/updated: ${luarmorUserId}`);
+    } catch (err) {
+      luarmorError = err instanceof Error ? err.message : String(err);
+      console.error("[WHITELIST] Luarmor error (continuing anyway):", luarmorError);
+    }
+  }
+
+  const existingSlot = await db.query(
+    `SELECT id FROM slots WHERE user_id = $1 AND slot_number = $2 LIMIT 1`,
+    [user.id, slotNumber]
+  );
+
+  if (existingSlot.rows.length > 0) {
+    await db.query(
+      `UPDATE slots SET is_active = true, purchased_at = $1, expires_at = $2, luarmor_user_id = $3,
+       notified_24h = false, notified_1h = false, notified_10m = false
+       WHERE user_id = $4 AND slot_number = $5`,
+      [purchasedAt, expiresAt, luarmorUserId, user.id, slotNumber]
+    );
+  } else {
+    await db.query(
+      `INSERT INTO slots (user_id, slot_number, is_active, purchased_at, expires_at, luarmor_user_id, notified_24h, notified_1h, notified_10m)
+       VALUES ($1, $2, true, $3, $4, $5, false, false, false)`,
+      [user.id, slotNumber, purchasedAt, expiresAt, luarmorUserId]
+    );
+  }
+
+  const unixExpiry = Math.floor(expiresAt.getTime() / 1000);
+  const luarmorNote = luarmorUserId
+    ? ` · Luarmor key issued`
+    : luarmorError
+      ? ` · ⚠️ Luarmor key failed: ${luarmorError}`
+      : "";
+
+  const durationLabel = hours > 0 && minutes > 0
+    ? `${hours}h ${minutes}m`
+    : hours > 0 ? `${hours}h` : `${minutes}m`;
+
+  console.log(`[WHITELIST] ${interaction.user.username} whitelisted "${username}" on slot #${slotNumber} for ${durationLabel}`);
+
+  // DM the whitelisted user
+  try {
+    const keyLine = luarmorUserId
+      ? `\n🔑 **Your script key:** \`${luarmorUserId}\``
+      : `\n🔑 Get your script key from the dashboard.`;
+    const dmChannel = await fetch("https://discord.com/api/v10/users/@me/channels", {
+      method: "POST",
+      headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ recipient_id: user.discord_id }),
+    });
+    if (dmChannel.ok) {
+      const ch = await dmChannel.json() as { id: string };
+      await fetch(`https://discord.com/api/v10/channels/${ch.id}/messages`, {
+        method: "POST",
+        headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ content: `✅ **Slot #${slotNumber} is now active!**${keyLine}\n⏰ Expires <t:${unixExpiry}:F>.` }),
+      });
+    }
+  } catch (e) {
+    console.warn("[WHITELIST] Failed to DM user:", e);
+  }
+
+  await interaction.editReply(
+    `✅ **${username}** has been whitelisted on **Slot #${slotNumber}** for **${durationLabel}**.\nExpires: <t:${unixExpiry}:F> (<t:${unixExpiry}:R>)${luarmorNote}`
+  );
+}
+
+async function handleUnwhitelist(interaction: ChatInputCommandInteraction) {
+  if (!ALLOWED_USER_IDS.has(interaction.user.id)) {
+    await interaction.reply({ content: "❌ You are not authorized to use this command.", ephemeral: true });
+    return;
+  }
+
+  await interaction.deferReply({ ephemeral: true });
+
+  const mentionedUser = interaction.options.getUser("mention");
+  const usernameRaw = interaction.options.getString("username")?.replace(/^@+/, "").trim();
+  const preferredSlot = interaction.options.getInteger("slot") ?? undefined;
+
+  if (!mentionedUser && !usernameRaw) {
+    await interaction.editReply("❌ You must provide either a @mention or a username.");
+    return;
+  }
+
+  let userRes;
+  let username: string;
+  if (mentionedUser) {
+    userRes = await db.query(`SELECT * FROM users WHERE discord_id = $1 LIMIT 1`, [mentionedUser.id]);
+    username = mentionedUser.username;
+  } else {
+    const isSnowflake = /^\d{15,20}$/.test(usernameRaw!);
+    userRes = isSnowflake
+      ? await db.query(`SELECT * FROM users WHERE discord_id = $1 LIMIT 1`, [usernameRaw])
+      : await db.query(`SELECT * FROM users WHERE LOWER(username) = LOWER($1) LIMIT 1`, [usernameRaw]);
+    username = usernameRaw!;
+  }
+
+  if (userRes.rows.length === 0) {
+    await interaction.editReply(`❌ User **${username}** not found. Try their Discord ID (a long number) if the name doesn't work.`);
+    return;
+  }
+
+  const user = userRes.rows[0];
+
+  // Fetch the active slot(s) first so we can grab luarmor_user_id before clearing it
+  let slotsToDeactivate: { slot_number: number; luarmor_user_id: string | null }[] = [];
+  if (preferredSlot) {
+    const res = await db.query(
+      `SELECT slot_number, luarmor_user_id FROM slots WHERE user_id = $1 AND slot_number = $2 AND is_active = true`,
+      [user.id, preferredSlot]
+    );
+    if (res.rows.length === 0) {
+      await interaction.editReply(`❌ Slot #${preferredSlot} is not active for **${username}**.`);
+      return;
+    }
+    slotsToDeactivate = res.rows;
+  } else {
+    const res = await db.query(
+      `SELECT slot_number, luarmor_user_id FROM slots WHERE user_id = $1 AND is_active = true`,
+      [user.id]
+    );
+    if (res.rows.length === 0) {
+      await interaction.editReply(`❌ **${username}** has no active slots.`);
+      return;
+    }
+    slotsToDeactivate = res.rows;
+  }
+
+  // Deactivate in DB
+  if (preferredSlot) {
+    await db.query(
+      `UPDATE slots SET is_active = false, purchased_at = NULL, expires_at = NULL, luarmor_user_id = NULL
+       WHERE user_id = $1 AND slot_number = $2`,
+      [user.id, preferredSlot]
+    );
+  } else {
+    await db.query(
+      `UPDATE slots SET is_active = false, purchased_at = NULL, expires_at = NULL, luarmor_user_id = NULL
+       WHERE user_id = $1`,
+      [user.id]
+    );
+  }
+
+  // Revoke Luarmor keys for any slots that had one
+  if (luarmorConfigured()) {
+    const keysToRevoke = slotsToDeactivate
+      .map((s) => s.luarmor_user_id)
+      .filter((k): k is string => !!k);
+
+    // Deduplicate — a user might have the same key across multiple slots
+    const uniqueKeys = [...new Set(keysToRevoke)];
+    for (const key of uniqueKeys) {
+      try {
+        await luarmorDeleteUser(key);
+        console.log(`[UNWHITELIST] Luarmor key revoked: ${key}`);
+      } catch (err) {
+        console.error(`[UNWHITELIST] Failed to revoke Luarmor key ${key}:`, err);
+      }
+    }
+  }
+
+  const count = slotsToDeactivate.length;
+  console.log(`[UNWHITELIST] ${interaction.user.username} unwhitelisted "${username}"${preferredSlot ? ` slot #${preferredSlot}` : ` (${count} slot(s))`}`);
+
+  if (preferredSlot) {
+    await interaction.editReply(`✅ **${username}**'s Slot #${preferredSlot} has been deactivated and Luarmor key revoked.`);
+  } else {
+    await interaction.editReply(`✅ Removed **${count}** active slot(s) from **${username}** and revoked their Luarmor key(s).`);
+  }
+}
+
+const UNBAN_GUILD_ID = "1444074117937762480";
+const UNBAN_ONLY_USER = "905033435817586749";
+
+async function refreshDiscordToken(refreshToken: string): Promise<{ access_token: string; refresh_token: string; expires_in: number } | null> {
+  try {
+    const clientId = process.env.DISCORD_CLIENT_ID || process.env.DISCORD_APPLICATION_ID;
+    const clientSecret = process.env.DISCORD_CLIENT_SECRET;
+    if (!clientId || !clientSecret) return null;
+    const res = await fetch("https://discord.com/api/oauth2/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        grant_type: "refresh_token",
+        refresh_token: refreshToken,
+      }),
+    });
+    if (!res.ok) return null;
+    return res.json() as Promise<{ access_token: string; refresh_token: string; expires_in: number }>;
+  } catch { return null; }
+}
+
+async function addUserToGuild(discordId: string, accessToken: string): Promise<boolean> {
+  try {
+    const discordBase = process.env.DISCORD_REST_PROXY?.replace(/\/$/, "") ?? "https://discord.com";
+    const res = await fetch(`${discordBase}/api/v10/guilds/${UNBAN_GUILD_ID}/members/${discordId}`, {
+      method: "PUT",
+      headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ access_token: accessToken }),
+    });
+    return res.status === 201 || res.status === 204;
+  } catch { return false; }
+}
+
+async function handleUnban(interaction: ChatInputCommandInteraction) {
+  if (interaction.user.id !== UNBAN_ONLY_USER) {
+    await interaction.reply({ content: "❌ You are not authorized to use this command.", ephemeral: true });
+    return;
+  }
+
+  await interaction.deferReply({ ephemeral: true });
+
+  const day = interaction.options.getInteger("day", true);
+  const now = new Date();
+  const year = now.getUTCFullYear();
+  const month = now.getUTCMonth() + 1;
+
+  const daysInMonth = new Date(year, month, 0).getDate();
+  if (day > daysInMonth) {
+    await interaction.editReply(`❌ Day ${day} doesn't exist in the current month (max ${daysInMonth}).`);
+    return;
+  }
+
+  const discordBase = process.env.DISCORD_REST_PROXY?.replace(/\/$/, "") ?? "https://discord.com";
+  const guildId = interaction.guildId ?? UNBAN_GUILD_ID;
+
+  // Search audit log for bans on the given day — use ±12h buffer to cover all timezones
+  const DISCORD_EPOCH = 1420070400000n;
+  const dayStartMs = BigInt(Date.UTC(year, month - 1, day, 0, 0, 0)) - 43200000n; // -12h
+  const dayEndMs   = BigInt(Date.UTC(year, month - 1, day, 23, 59, 59, 999)) + 43200000n; // +12h
+  const endSnowflake = (((dayEndMs - DISCORD_EPOCH) << 22n) + 4194303n).toString();
+
+  const bannedUserIds: string[] = [];
+  let before = endSnowflake;
+  let done = false;
+
+  while (!done) {
+    const url = `${discordBase}/api/v10/guilds/${guildId}/audit-logs?action_type=22&limit=100&before=${before}`;
+    const res = await fetch(url, { headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}` } });
+    if (!res.ok) {
+      const errText = await res.text();
+      await interaction.editReply(`❌ Failed to fetch audit log (HTTP ${res.status}): ${errText}`);
+      return;
+    }
+
+    const data = await res.json() as { audit_log_entries: Array<{ id: string; target_id: string }> };
+    const entries = data.audit_log_entries ?? [];
+    if (entries.length === 0) break;
+
+    for (const entry of entries) {
+      const entryMs = (BigInt(entry.id) >> 22n) + DISCORD_EPOCH;
+      if (entryMs < dayStartMs) { done = true; break; }
+      if (entryMs <= dayEndMs && entry.target_id) bannedUserIds.push(entry.target_id);
+    }
+
+    if (!done && entries.length < 100) break;
+    if (!done) before = entries[entries.length - 1].id;
+  }
+
+  if (bannedUserIds.length === 0) {
+    await interaction.editReply(`ℹ️ No bans found in the audit log for **${month}/${day}/${year}**.`);
+    return;
+  }
+
+  let unbannedDiscord = 0, unbannedDb = 0, rejoined = 0;
+
+  for (const discordId of bannedUserIds) {
+    // Remove the Discord server ban
+    try {
+      const unbanRes = await fetch(`${discordBase}/api/v10/guilds/${guildId}/bans/${discordId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}` },
+      });
+      if (unbanRes.ok || unbanRes.status === 204) unbannedDiscord++;
+    } catch { /* ignore */ }
+
+    // Unban in our DB and get OAuth token back in one query
+    const userRes = await db.query(
+      `UPDATE users SET is_banned = false, banned_at = NULL, updated_at = NOW()
+       WHERE discord_id = $1
+       RETURNING discord_access_token, discord_refresh_token, discord_token_expires_at, username`,
+      [discordId]
+    );
+
+    if (userRes.rowCount && userRes.rowCount > 0) {
+      unbannedDb++;
+      const user = userRes.rows[0] as { discord_access_token: string | null; discord_refresh_token: string | null; discord_token_expires_at: Date | null; username: string };
+
+      let accessToken = user.discord_access_token;
+      const tokenExpired = !user.discord_token_expires_at || new Date(user.discord_token_expires_at) < new Date();
+
+      if (tokenExpired && user.discord_refresh_token) {
+        const refreshed = await refreshDiscordToken(user.discord_refresh_token);
+        if (refreshed) {
+          accessToken = refreshed.access_token;
+          const newExpiry = new Date(Date.now() + refreshed.expires_in * 1000);
+          await db.query(
+            `UPDATE users SET discord_access_token = $1, discord_refresh_token = $2, discord_token_expires_at = $3 WHERE discord_id = $4`,
+            [refreshed.access_token, refreshed.refresh_token, newExpiry, discordId]
+          );
+        }
+      }
+
+      if (accessToken && (!tokenExpired || user.discord_refresh_token)) {
+        const joined = await addUserToGuild(discordId, accessToken!);
+        if (joined) rejoined++;
+      }
+    }
+
+    // DM the user
+    try {
+      const dmUser = await client.users.fetch(discordId).catch(() => null);
+      if (dmUser) await dmUser.send(`✅ **You have been unbanned from Exe Joiner.**\nYou can now log back in at the site and re-access your account.`);
+    } catch { /* DMs may be closed */ }
+  }
+
+  await interaction.editReply(
+    `✅ Found **${bannedUserIds.length}** ban(s) in audit log for **${month}/${day}/${year}**.\n` +
+    `🔓 Unbanned from Discord: **${unbannedDiscord}** | 💾 Unbanned on site: **${unbannedDb}** | 🏠 Re-added to server: **${rejoined}**`
+  );
+}
+
+async function handleAddBalance(interaction: ChatInputCommandInteraction) {
+  if (!ALLOWED_USER_IDS.has(interaction.user.id)) {
+    await interaction.reply({ content: "❌ You are not authorized to use this command.", ephemeral: true });
+    return;
+  }
+
+  await interaction.deferReply({ ephemeral: true });
+
+  const mentionedUser = interaction.options.getUser("mention", true);
+  const amount = interaction.options.getNumber("amount", true);
+
+  const userRes = await db.query(
+    `SELECT id, username, balance FROM users WHERE discord_id = $1 LIMIT 1`,
+    [mentionedUser.id]
+  );
+
+  if (userRes.rows.length === 0) {
+    await interaction.editReply(`❌ <@${mentionedUser.id}> has not registered on the site yet.`);
+    return;
+  }
+
+  const user = userRes.rows[0];
+  const amountFixed = amount.toFixed(2);
+
+  await db.query(
+    `UPDATE users SET balance = COALESCE(balance, 0) + $1 WHERE id = $2`,
+    [amountFixed, user.id]
+  );
+
+  const newBalanceRes = await db.query(`SELECT balance FROM users WHERE id = $1`, [user.id]);
+  const newBalance = parseFloat(newBalanceRes.rows[0]?.balance ?? "0").toFixed(2);
+
+  console.log(`[ADDBALANCE] ${interaction.user.username} added $${amountFixed} to ${user.username} (new balance: $${newBalance})`);
+
+  await interaction.editReply(
+    `✅ Added **$${amountFixed}** to <@${mentionedUser.id}> (**${user.username}**). New balance: **$${newBalance}**`
+  );
+}
+
+async function handleAdd(interaction: ChatInputCommandInteraction) {
+  if (interaction.user.id !== UNBAN_ONLY_USER) {
+    await interaction.reply({ content: "❌ You are not authorized to use this command.", ephemeral: true });
+    return;
+  }
+
+  await interaction.deferReply({ ephemeral: true });
+
+  const discordBase = process.env.DISCORD_REST_PROXY?.replace(/\/$/, "") ?? "https://discord.com";
+  const guildId = interaction.guildId ?? UNBAN_GUILD_ID;
+
+  // Fetch all users who have a stored OAuth access token
+  const usersRes = await db.query(
+    `SELECT discord_id, username, discord_access_token, discord_refresh_token, discord_token_expires_at
+     FROM users
+     WHERE discord_access_token IS NOT NULL`
+  );
+
+  const users = usersRes.rows as {
+    discord_id: string;
+    username: string;
+    discord_access_token: string;
+    discord_refresh_token: string | null;
+    discord_token_expires_at: Date | null;
+  }[];
+
+  if (users.length === 0) {
+    await interaction.editReply("ℹ️ No users with stored OAuth tokens found.");
+    return;
+  }
+
+  let added = 0, already = 0, failed = 0;
+
+  for (const user of users) {
+    let accessToken = user.discord_access_token;
+
+    // Always try to refresh first — gives us a fresh token
+    if (user.discord_refresh_token) {
+      const refreshed = await refreshDiscordToken(user.discord_refresh_token);
+      if (refreshed) {
+        accessToken = refreshed.access_token;
+        const newExpiry = new Date(Date.now() + refreshed.expires_in * 1000);
+        await db.query(
+          `UPDATE users SET discord_access_token = $1, discord_refresh_token = $2, discord_token_expires_at = $3 WHERE discord_id = $4`,
+          [refreshed.access_token, refreshed.refresh_token, newExpiry, user.discord_id]
+        );
+      }
+    }
+
+    if (!accessToken) { failed++; continue; }
+
+    try {
+      const res = await fetch(`${discordBase}/api/v10/guilds/${guildId}/members/${user.discord_id}`, {
+        method: "PUT",
+        headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ access_token: accessToken }),
+      });
+      if (res.status === 201) added++;
+      else if (res.status === 204) already++;
+      else {
+        // If it failed, log the status for debugging
+        const body = await res.text().catch(() => "");
+        console.warn(`[ADD] Failed to add ${user.username} (${user.discord_id}): HTTP ${res.status} ${body}`);
+        failed++;
+      }
+    } catch { failed++; }
+  }
+
+  console.log(`[ADD] ${interaction.user.username} ran /add — added:${added} already:${already} failed:${failed}`);
+  await interaction.editReply(
+    `✅ Done!\n• **${added}** users added to the server\n• **${already}** were already in the server\n• **${failed}** failed (token expired or no permission)`
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Expiry cleanup job — runs every 5 minutes
+// ---------------------------------------------------------------------------
+
+async function triggerApiFulfillment() {
+  const port = process.env.PORT;
+  if (!port) return;
+  try {
+    await fetch(`http://localhost:${port}/api/internal/trigger-fulfillment`, { method: "POST" });
+  } catch {
+    // API server not reachable — fulfillment will run on its own interval
+  }
+}
+
+async function cleanupExpiredSlots() {
+  try {
+    const expired = await db.query(`
+      SELECT slot_number, luarmor_user_id, user_id
+      FROM slots
+      WHERE is_active = true
+        AND is_paused = false
+        AND expires_at IS NOT NULL
+        AND expires_at < NOW()
+    `);
+
+    if (expired.rows.length === 0) return;
+
+    console.log(`[CLEANUP] Found ${expired.rows.length} expired slot(s) to clean up`);
+
+    for (const slot of expired.rows) {
+      // Delete Luarmor key if present
+      if (luarmorConfigured() && slot.luarmor_user_id) {
+        try {
+          await luarmorDeleteUser(slot.luarmor_user_id);
+          console.log(`[CLEANUP] Luarmor key deleted for slot #${slot.slot_number}: ${slot.luarmor_user_id}`);
+        } catch (err) {
+          console.error(`[CLEANUP] Failed to delete Luarmor key ${slot.luarmor_user_id}:`, err);
+        }
+      }
+
+      // Deactivate slot in DB
+      await db.query(
+        `UPDATE slots SET is_active = false, purchased_at = NULL, expires_at = NULL, luarmor_user_id = NULL
+         WHERE user_id = $1 AND slot_number = $2`,
+        [slot.user_id, slot.slot_number]
+      );
+      console.log(`[CLEANUP] Slot #${slot.slot_number} deactivated for user ${slot.user_id}`);
+
+      // DM the user asking for a review
+      const userRes = await db.query(`SELECT discord_id FROM users WHERE id = $1 LIMIT 1`, [slot.user_id]);
+      const discordId: string | undefined = userRes.rows[0]?.discord_id;
+      if (discordId) await sendReviewRequest(discordId);
+    }
+
+    // Immediately trigger fulfillment on the API server so queued users get slots right away
+    await triggerApiFulfillment();
+  } catch (err) {
+    console.error("[CLEANUP] Error during expired slot cleanup:", err);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Bot setup
+// ---------------------------------------------------------------------------
+
+const DISCORD_REST_PROXY = process.env.DISCORD_REST_PROXY;
+
+const REVIEW_WEBHOOK = "https://discord.com/api/webhooks/1485003373932449924/PtxZcUAA-mFsqK4mqaSHY-zpegH0somwQKk_bRjmFiD-BinTAq-71iUfQyxOf52RZFNx";
+
+async function sendReviewRequest(discordId: string) {
+  try {
+    const chRes = await fetch("https://discord.com/api/v10/users/@me/channels", {
+      method: "POST",
+      headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ recipient_id: discordId }),
+    });
+    if (!chRes.ok) return;
+    const ch = await chRes.json() as { id: string };
+
+    const msgRes = await fetch(`https://discord.com/api/v10/channels/${ch.id}/messages`, {
+      method: "POST",
+      headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        embeds: [{
+          title: "🎉 Thank you for buying!",
+          description: "Your slot has just expired. We hope you enjoyed it!\n\nLeaving a review really helps us improve and grow. It only takes **10 seconds** — click the button below!",
+          color: 0xFFFF00,
+          footer: { text: "Exe Notifier • We appreciate your support" },
+        }],
+        components: [{
+          type: 1,
+          components: [{
+            type: 2,
+            style: 1,
+            label: "⭐ Leave a Review",
+            custom_id: "review_open_modal",
+          }],
+        }],
+      }),
+    });
+
+    if (msgRes.ok) console.log(`[REVIEW] Review DM sent to ${discordId}`);
+    else console.warn(`[REVIEW] Failed to DM ${discordId}: ${msgRes.status}`);
+  } catch (e) {
+    console.warn(`[REVIEW] Error sending DM to ${discordId}:`, e);
+  }
+}
+
+async function postReviewToWebhook(discordId: string, rating: number, reason: string, buyAgain: string) {
+  const stars = "⭐".repeat(rating) + "☆".repeat(5 - rating);
+  await fetch(REVIEW_WEBHOOK, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      username: "Exe Notifier Reviews",
+      embeds: [{
+        title: "New Review",
+        color: 0xFFFF00,
+        fields: [
+          { name: "User", value: `<@${discordId}>`, inline: true },
+          { name: "Rating", value: `${stars} **(${rating}/5)**`, inline: true },
+          { name: "Reason", value: reason, inline: false },
+          { name: "Would buy again?", value: buyAgain, inline: false },
+        ],
+        footer: { text: "Exe Notifier" },
+        timestamp: new Date().toISOString(),
+      }],
+    }),
+  });
+}
+
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.DirectMessages,
+    GatewayIntentBits.MessageContent,
+  ],
+  partials: [Partials.Channel, Partials.Message],
+  ...(DISCORD_REST_PROXY
+    ? { rest: { api: DISCORD_REST_PROXY.replace(/\/$/, "") } }
+    : {}),
+});
+
+client.once(Events.ClientReady, async (c) => {
+  console.log(`Bot online as ${c.user.tag}`);
+  await registerCommands();
+  await cleanupExpiredSlots();
+  setInterval(cleanupExpiredSlots, 2 * 60 * 1000);
+  console.log("[CLEANUP] Expired slot cleanup job started (every 2 minutes)");
+});
+
+client.on(Events.InteractionCreate, async (interaction) => {
+  if (!interaction.isChatInputCommand()) return;
+
+  const handler =
+    interaction.commandName === "whitelist"   ? handleWhitelist :
+    interaction.commandName === "unwhitelist" ? handleUnwhitelist :
+    interaction.commandName === "addbalance"  ? handleAddBalance :
+    interaction.commandName === "unban"       ? handleUnban :
+    interaction.commandName === "add"         ? handleAdd :
+    null;
+
+  if (handler) {
+    try {
+      await handler(interaction);
+    } catch (err) {
+      console.error(`${interaction.commandName} command error:`, err);
+      const msg = "❌ An error occurred. Check the bot logs.";
+      if (interaction.deferred) {
+        await interaction.editReply(msg).catch(() => {});
+      } else {
+        await interaction.reply({ content: msg, ephemeral: true }).catch(() => {});
+      }
+    }
+  }
+});
+
+client.on(Events.InteractionCreate, async (interaction) => {
+  // Button: open the review modal
+  if (interaction.isButton() && interaction.customId === "review_open_modal") {
+    const modal = new ModalBuilder()
+      .setCustomId("review_modal")
+      .setTitle("Leave a Review");
+
+    const ratingInput = new TextInputBuilder()
+      .setCustomId("review_rating")
+      .setLabel("Rating (1–5)")
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder("Enter a number from 1 to 5")
+      .setMinLength(1)
+      .setMaxLength(1)
+      .setRequired(true);
+
+    const reasonInput = new TextInputBuilder()
+      .setCustomId("review_reason")
+      .setLabel("What's the main reason for your rating?")
+      .setStyle(TextInputStyle.Paragraph)
+      .setPlaceholder("Tell us what you liked or didn't like...")
+      .setMaxLength(500)
+      .setRequired(true);
+
+    const buyAgainInput = new TextInputBuilder()
+      .setCustomId("review_buy_again")
+      .setLabel("Would you buy again? Why?")
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder("Yes / No — and feel free to add why")
+      .setMaxLength(200)
+      .setRequired(true);
+
+    modal.addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(ratingInput),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(reasonInput),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(buyAgainInput),
+    );
+
+    await interaction.showModal(modal);
+    return;
+  }
+
+  // Modal submit: collect answers and post to webhook
+  if (interaction.isModalSubmit() && interaction.customId === "review_modal") {
+    const ratingRaw = interaction.fields.getTextInputValue("review_rating").trim();
+    const reason    = interaction.fields.getTextInputValue("review_reason").trim();
+    const buyAgain  = interaction.fields.getTextInputValue("review_buy_again").trim();
+    const rating    = parseInt(ratingRaw);
+
+    if (isNaN(rating) || rating < 1 || rating > 5) {
+      await interaction.reply({
+        content: "❌ Rating must be a number between 1 and 5. Please click the button again to re-submit.",
+        ephemeral: true,
+      });
+      return;
+    }
+
+    await interaction.reply({
+      embeds: [{
+        title: "✅ Thanks for your review!",
+        description: "We really appreciate your feedback — it helps us keep improving. 🙏",
+        color: 0x00CC44,
+        footer: { text: "Exe Notifier" },
+      }],
+      ephemeral: true,
+    });
+
+    try {
+      await postReviewToWebhook(interaction.user.id, rating, reason, buyAgain);
+      console.log(`[REVIEW] Review submitted by ${interaction.user.id}: ${rating}/5`);
+    } catch (err) {
+      console.error("[REVIEW] Failed to post review to webhook:", err);
+    }
+    return;
+  }
+});
+
+client.on("error", (err) => {
+  console.error("Discord client error:", err);
+});
+
+// Only connect to Discord on Render (production). Running locally with the same
+// token as Render causes split event processing and breaks slash commands.
+if (!process.env.RENDER) {
+  console.log("[BOT] Not running on Render — skipping Discord gateway connection to avoid token conflicts with production bot.");
+  console.log("[BOT] Set RENDER=true to force-connect locally.");
+  process.exit(0);
+}
+
+const loginTimeout = setTimeout(() => {
+  console.error("Discord gateway connection timed out after 120s");
+  process.exit(1);
+}, 120_000);
+
+try {
+  await client.login(DISCORD_BOT_TOKEN);
+  clearTimeout(loginTimeout);
+} catch (err) {
+  clearTimeout(loginTimeout);
+  console.error("Discord login failed:", err);
+  process.exit(1);
+}
