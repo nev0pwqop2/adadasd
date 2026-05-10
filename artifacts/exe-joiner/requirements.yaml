@@ -1,0 +1,15 @@
+packages:
+  "framer-motion": "Animations and layout transitions for modal and cards"
+  "qrcode.react": "Rendering crypto payment QR codes"
+  "date-fns": "Formatting dates for slot expiries"
+  "clsx": "Utility for constructing className strings"
+  "tailwind-merge": "Utility for merging tailwind classes safely"
+
+images:
+  - path: "artifacts/exe-joiner/public/images/cyber-bg.png"
+    description: "Dark cyberpunk hacker grid background with subtle yellow glowing nodes and terminal scanlines, high contrast, highly detailed, 8k resolution"
+    aspect_ratio: "16:9"
+
+notes:
+  - "Using API hooks from @workspace/api-client-react"
+  - "Stripe return URL handling is implemented on the dashboard via URL query params"
