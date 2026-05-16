@@ -121,7 +121,7 @@ function isPaymentSuccessful(status: string): boolean {
 function verifyNowPaymentsIpn(parsedBody: Record<string, unknown>, signature: string): boolean {
   const secret = process.env.NOWPAYMENTS_IPN_SECRET;
   // If no IPN secret is configured, skip signature check — the live API double-check below handles security
-  if (!secret) return true;
+  if (!secret) return false;
   if (!signature) return false;
   // NOWPayments signs the body with keys sorted alphabetically
   const sortedBody = JSON.stringify(
@@ -387,7 +387,7 @@ router.post("/stripe-webhook", async (req: Request, res: Response) => {
             if (couponIdToIncrement) {
               await db.update(couponsTable)
                 .set({ usedCount: sql`${couponsTable.usedCount} + 1` })
-                .where(eq(couponsTable.id, couponIdToIncrement))
+                .where(and(eq(couponsTable.id, couponIdToIncrement), sql`(${couponsTable.maxUses} IS NULL OR ${couponsTable.usedCount} < ${couponsTable.maxUses})`))
                 .catch(() => {});
             }
           } else {
@@ -411,7 +411,7 @@ router.post("/stripe-webhook", async (req: Request, res: Response) => {
             if (metaCouponId) {
               await db.update(couponsTable)
                 .set({ usedCount: sql`${couponsTable.usedCount} + 1` })
-                .where(eq(couponsTable.id, parseInt(metaCouponId, 10)))
+                .where(and(eq(couponsTable.id, parseInt(metaCouponId, 10)), sql`(${couponsTable.maxUses} IS NULL OR ${couponsTable.usedCount} < ${couponsTable.maxUses})`))
                 .catch(() => {});
             }
           }
@@ -702,7 +702,7 @@ router.post("/nowpayments-ipn", async (req: Request, res: Response) => {
       if (payment.couponId) {
         await db.update(couponsTable)
           .set({ usedCount: sql`${couponsTable.usedCount} + 1` })
-          .where(eq(couponsTable.id, payment.couponId))
+          .where(and(eq(couponsTable.id, payment.couponId), sql`(${couponsTable.maxUses} IS NULL OR ${couponsTable.usedCount} < ${couponsTable.maxUses})`))
           .catch(() => {});
       }
     }
@@ -760,7 +760,7 @@ router.post("/verify-crypto", requireAuth, async (req: Request, res: Response) =
     if (payment.couponId) {
       await db.update(couponsTable)
         .set({ usedCount: sql`${couponsTable.usedCount} + 1` })
-        .where(eq(couponsTable.id, payment.couponId))
+        .where(and(eq(couponsTable.id, payment.couponId), sql`(${couponsTable.maxUses} IS NULL OR ${couponsTable.usedCount} < ${couponsTable.maxUses})`))
         .catch(() => {});
     }
     res.json({ success: true, message: "Payment verified and slot activated" });

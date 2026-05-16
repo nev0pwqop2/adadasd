@@ -91,6 +91,7 @@ router.get("/discord/callback", async (req, res) => {
   function discordApi(path: string): string {
     const proxy = process.env.DISCORD_TOKEN_PROXY_URL;
     if (proxy) {
+      if (!proxy.startsWith("https://")) throw new Error("DISCORD_TOKEN_PROXY_URL must use HTTPS");
       const base = proxy.replace(/\/$/, "");
       return `${base}${path}`;
     }
