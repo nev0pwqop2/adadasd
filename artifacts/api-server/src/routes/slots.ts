@@ -398,7 +398,7 @@ router.get("/renters", async (req, res) => {
               COUNT(*) OVER (PARTITION BY discord_id) AS count_per_user,
               ROW_NUMBER() OVER (PARTITION BY discord_id ORDER BY CAST(money_per_sec AS NUMERIC) DESC) AS rn
             FROM steals
-            WHERE discord_id = ANY(${sql.raw(`ARRAY[${discordIds.map(id => `'${id.replace(/'/g, "''")}'`).join(',')}]`)})
+            WHERE discord_id = ANY(${discordIds})
           ) t WHERE rn <= 5
         `);
         return rows.rows as Array<{ discord_id: string; brainrot_name: string; money_per_sec: string; image_url: string | null; count_per_user: string }>;
