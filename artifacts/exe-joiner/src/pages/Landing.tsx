@@ -53,7 +53,7 @@ function parseAllBrainrots(all: string, fallbackValue: number): BrainrotEntry[] 
   });
 }
 
-const FEED_DELAY_MS = 3 * 60 * 60 * 1000; // 3 hours
+const FEED_DELAY_MS = 0;
 
 const WS_AUTH_URL = 'https://aj-production-d888.up.railway.app/auth';
 const WS_URL      = 'wss://aj-production-d888.up.railway.app/ws';
@@ -155,10 +155,12 @@ function useLiveFeed() {
             const moneyNum = parseMoneyStr(moneyStr);
             if (moneyNum < 10_000_000) return;
 
+            const cleanName = (data.title as string).replace(/\s+found!?\s*$/i, '').trim();
+
             const group: PendingGroup = {
               id: data.id ? String(data.id) : `${Date.now()}-${Math.random()}`,
               time: new Date(),
-              entries: [{ name: data.title, value: moneyStr || fmtVal(moneyNum) }],
+              entries: [{ name: cleanName, value: moneyStr || fmtVal(moneyNum) }],
               category: getCategory(moneyNum, false),
               topValue: moneyNum,
               displayAt: Date.now() + FEED_DELAY_MS,
