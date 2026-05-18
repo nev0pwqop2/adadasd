@@ -55,6 +55,38 @@ function parseAllBrainrots(all: string, fallbackValue: number): BrainrotEntry[] 
 
 const FEED_DELAY_MS = 3 * 60 * 60 * 1000; // 3 hours
 
+const WS_AUTH_URL = 'https://aj-production-d888.up.railway.app/auth';
+const WS_URL      = 'wss://aj-production-d888.up.railway.app/ws';
+const AUTH_SECRET = '8f3c2d91a7be4f6e92d0c41ab5f8e7cd';
+
+// XOR decrypt — mirrors the Lua decryptMessage logic exactly
+// message is base64-encoded; key is the sessionKey string from auth
+function xorDecrypt(b64: string, sessionKey: string): string | null {
+  try {
+    const raw = atob(b64);
+    const keyBytes = Array.from(sessionKey).map(c => c.charCodeAt(0));
+    if (!keyBytes.length) return null;
+    return Array.from(raw)
+      .map((c, i) => String.fromCharCode(c.charCodeAt(0) ^ keyBytes[i % keyBytes.length]))
+      .join('');
+  } catch {
+    return null;
+  }
+}
+
+// Parse money strings like "$5.2M/s", "$120K/s" → number
+function parseMoneyStr(s: unknown): number {
+  if (!s) return 0;
+  const m = String(s).replace(/[$\s]/g, '').match(/([\d.]+)([KMBkmb]?)/);
+  if (!m) return 0;
+  const n = parseFloat(m[1]);
+  const suffix = m[2].toUpperCase();
+  if (suffix === 'B') return n * 1e9;
+  if (suffix === 'M') return n * 1e6;
+  if (suffix === 'K') return n * 1e3;
+  return n;
+}
+
 type PendingGroup = FeedGroup & { displayAt: number };
 
 function useLiveFeed() {
@@ -64,9 +96,9 @@ function useLiveFeed() {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingRef = useRef<PendingGroup[]>([]);
   const flushRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const sessionKeyRef = useRef<string>('');
 
   useEffect(() => {
-    // Flush pending items that have waited long enough
     flushRef.current = setInterval(() => {
       const now = Date.now();
       const ready: FeedGroup[] = [];
@@ -85,34 +117,67 @@ function useLiveFeed() {
       }
     }, 5000);
 
-    function connect() {
+    async function connect() {
       try {
-        const ws = new WebSocket('wss://gigue.onrender.com');
+        // 1. Authenticate to get token + sessionKey
+        const authRes = await fetch(WS_AUTH_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Auth-Secret': AUTH_SECRET },
+          body: JSON.stringify({ userId: 'web_' + Math.random().toString(36).slice(2, 10) }),
+        });
+        if (!authRes.ok) { timerRef.current = setTimeout(connect, 5000); return; }
+        const { token, sessionKey } = await authRes.json();
+        if (!token || !sessionKey) { timerRef.current = setTimeout(connect, 5000); return; }
+        sessionKeyRef.current = sessionKey;
+
+        // 2. Connect to WS with token
+        const ws = new WebSocket(`${WS_URL}?token=${encodeURIComponent(token)}`);
         wsRef.current = ws;
         ws.onopen = () => setConnected(true);
-        ws.onmessage = (e) => {
+
+        ws.onmessage = (e: MessageEvent) => {
           try {
-            const data = JSON.parse(e.data);
-            if (!data.bestName || data.success || data.info) return;
-            if ((data.bestValue || 0) < 10_000_000) return;
+            const raw: string = e.data;
+
+            // Skip presence updates
+            if (raw.startsWith('PRESENCE:')) return;
+
+            // BATCH = history load, skip for live feed display
+            if (raw.startsWith('BATCH:')) return;
+
+            const decrypted = xorDecrypt(raw, sessionKeyRef.current);
+            if (!decrypted) return;
+
+            const data = JSON.parse(decrypted);
+            if (!data || !data.title) return;
+
+            const moneyStr: string = data['💰 Best Money/s'] || data['💰 Money/s'] || data['Best Money/s'] || data['Money/s'] || '';
+            const moneyNum = parseMoneyStr(moneyStr);
+            if (moneyNum < 10_000_000) return;
+
             const group: PendingGroup = {
-              id: `${Date.now()}-${Math.random()}`,
+              id: data.id ? String(data.id) : `${Date.now()}-${Math.random()}`,
               time: new Date(),
-              entries: parseAllBrainrots(data.allBrainrots || data.bestName, data.bestValue || 0),
-              category: getCategory(data.bestValue || 0, !!data.duel),
-              topValue: data.bestValue || 0,
+              entries: [{ name: data.title, value: moneyStr || fmtVal(moneyNum) }],
+              category: getCategory(moneyNum, false),
+              topValue: moneyNum,
               displayAt: Date.now() + FEED_DELAY_MS,
             };
             pendingRef.current = [...pendingRef.current, group];
           } catch {}
         };
+
         ws.onclose = () => {
           setConnected(false);
+          sessionKeyRef.current = '';
           timerRef.current = setTimeout(connect, 3000);
         };
         ws.onerror = () => ws.close();
-      } catch {}
+      } catch {
+        timerRef.current = setTimeout(connect, 5000);
+      }
     }
+
     connect();
     return () => {
       wsRef.current?.close();
